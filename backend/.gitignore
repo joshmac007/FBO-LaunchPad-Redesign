@@ -1,0 +1,19 @@
+# Environment variables
+.env
+
+# Python virtual environment
+venv/
+*/venv/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Docker
+docker-compose.override.yml
+
+# IDE / Editor specific
+.vscode/
+.idea/
+*.swp

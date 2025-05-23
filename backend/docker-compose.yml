@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./src:/app/src
+      - ./migrations:/app/migrations
+      - ./tests:/app/tests
+    env_file:
+      - .env
+    depends_on:
+      - db
+    environment:
+      - FLASK_APP=src/app.py
+      - FLASK_ENV=development
+    restart: unless-stopped
+
+  db:
+    image: postgres:15
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - POSTGRES_USER=fbo_user
+      - POSTGRES_PASSWORD=fbo_password
+      - POSTGRES_DB=fbo_launchpad_dev
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
+
+volumes:
+  postgres_data: 

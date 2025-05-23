@@ -1,0 +1,192 @@
+---
+description: 
+globs: smart-context-engine.mdc
+alwaysApply: false
+---
+# SMART CONTEXT ENGINE (SCE) - DEEP READ CAPABLE
+
+> **TL;DR:** Hybrid context engine. Phase 1: Hierarchical summarization of foundational files. Phase 2: Query-driven incremental deep-read of supporting files. Includes refactoring safeguards. Workflow visualized in Mermaid graph below.
+
+## ⚙️ ENGINE WORKFLOW (Refer to Mermaid Graph for Flow Detail)
+
+**Invocation:** Via `main-optimized.mdc` or mode transitions.
+
+---
+
+### PHASE 1: FOUNDATIONAL CONTEXT - HIERARCHICAL SUMMARIZATION (Graph Nodes C-C10)
+
+**Objective:** Deep process & summarize core project context. Output to AI working memory & optionally `activeContext.md` (ephemeral section `## Task-Specific Foundational Context Summary`).
+
+**1. Input Files (Node C1):**
+    * `memory-bank/projectbrief.md`
+    * `memory-bank/productContext.md`
+    * `memory-bank/systemPatterns.md`
+    * `memory-bank/techContext.md`
+    * `memory-bank/style-guide.md`
+    * `memory-bank/tasks.md` (Full; focus: current active task)
+    * `memory-bank/activeContext.md` (Current session context)
+    * `memory-bank/progress.md` (Recent updates)
+    * **Cursor Editor: Currently open files.**
+    * **Rules/Modes: Active operational mode rules (e.g., `plan-mode-map.mdc`, `LevelX/planning-....mdc`).**
+
+**2. Protocol per File (Nodes C3-C7):**
+   a.  **Read:** Full content.
+   b.  **Purpose:** Extract 1-sentence main purpose.
+   c.  **KeyInfo:** List 3-5 key concepts/definitions/rules/patterns; 1-2 sentence summary each.
+   d.  **Relevance (Task):** 1 sentence: how file purpose relates to current task (from `tasks.md`). Default: "General project context."
+   e.  **Dependencies:** Note explicit file/component interactions stated in doc.
+
+**3. Output - Structured Summaries (Node C8):**
+   * Format: AI-internal structured data (conceptual example previously shown; prioritize AI working memory).
+   * `activeContext.md` update: Optional, condensed, ephemeral.
+
+---
+
+### PHASE 2: SUPPORTING CONTEXT - QUERY-DRIVEN INCREMENTAL DEEP READING (Graph Nodes E-E8)
+
+**Objective:** On-demand deep-read of other relevant files based on AI-identified knowledge gaps during task execution.
+
+**1. Input - Potentially Relevant Context Sources (PRCS) (Node E1):**
+   * Project files (code, other `.mdc` rules, *selective* `creative-*.md`).
+   * Identified by light-scan heuristics (filename, semantic match, `tasks.md` links).
+   * **Strict Exclusion:** `reflection-*.md`, `archive-*.md` UNLESS:
+       * Explicitly linked in active task.
+       * Direct user query about that specific past task.
+       * Critical unique historical context, not found elsewhere. (If accessed, extract only needed info).
+
+**2. Protocol - Incremental Loop (Nodes E2-E8):**
+   a.  **Attempt Task (Node E2):** Use Phase 1 + existing context.
+   b.  **Identify Gap (Node E3-E4):** If info needed: state gap & target PRCS file. ("Need `[info]` for `[task_aspect]`, potential_source: `[PRCS_file]`").
+   c.  **Access File (Node E5):** System provides full content of *single, targeted PRCS file*.
+   d.  **Targeted Read (Node E6):** Read file *only* for stated missing info.
+   e.  **Extract & Integrate (Node E7):** Concise answer/snippet to working context.
+   f.  **`activeContext.md` Update (Node E8):** Optional, brief note for critical findings (ephemeral `## Ad-hoc Retrieved Context:`).
+   g.  **Loop:** Return to (a).
+
+---
+
+### REFACTORING CONTEXT STRATEGY (RCS) (Graph Nodes G-G9)
+
+**Objective:** Prevent duplicate creation; ensure informed refactoring decisions. Benefits from Phase 1 & 2 context.
+
+**1. Trigger (Node G1):** Task implies new component/function/style OR modification with potential system-wide impact.
+**2. AI Self-Correction (Node G2):** "Potential refactor/duplicate. Must search/assess impact."
+**3. Search & Analyze (Node G3):** Codebase search (names, functionality, patterns).
+    * If matches (Node G4-Yes): Analyze (Node G5) - reuse/extend? Impact? Necessity of new?
+**4. User Confirmation (Node G6):** If overlap or shared code mod:
+    * Present: "Found `[X,Y]` related to request `[Z]`. Options: 1. Refactor/Extend `[X]`. 2. New `[Z]` (similarities). 3. Modifying `[X]` impacts `[deps]`. Confirm?"
+**5. Proceed (Node G7-G8):** Per user feedback.
+**6. Document (Node G9):** Update `systemPatterns.md`, comments if refactored.
+
+---
+
+## ✅ VERIFICATION CHECKLIST
+
+- P1: Foundational files deep-processed & summarized? [Y/N]
+- P1: Summaries in AI working context / `activeContext.md`? [Y/N]
+- P2: Knowledge gaps ID'd & specific files targeted? [Y/N]
+- P2: Archives/Reflections strictly filtered? [Y/N]
+- RCS: Search-before-create & user confirm loop for refactors? [Y/N]
+
+---
+Mermaid graph from previous version follows:
+```mermaid
+graph TD
+    A[Start: Smart Context Engine Invoked] --> B{Hybrid Approach};
+
+    B --> C[Phase 1: Foundational Context];
+    C --> C1[Identify Foundational Files];
+    C1 --> C2{For each Foundational File};
+    C2 -- Yes --> C3[Thorough Read];
+    C3 --> C4[Extract Primary Purpose];
+    C4 --> C5[Extract Key Information (3-5 points + summaries)];
+    C5 --> C6[Assess Relevance to Current Task];
+    C6 --> C7[Identify Explicit Interactions/Dependencies];
+    C7 --> C2;
+    C2 -- No --> C8[Assemble Structured Summaries];
+    C8 --> C9[Prioritize in AI Working Memory];
+    C8 --> C10[Optionally: Update activeContext.md (Ephemeral Section)];
+    C10 --> D{Proceed to Task Attempt / Phase 2};
+    C9 --> D;
+
+    B --> D;
+    D --> E[Phase 2: Task-Specific Supporting Context];
+    E --> E1[Identify Potentially Relevant Context Sources (PRCS) - light scan heuristics];
+    E1 --> E2[Attempt Task with Current (Phase 1) Context];
+    E2 --> E3{Knowledge Gap Identified?};
+    E3 -- Yes --> E4[State Gap & Target PRCS File];
+    E4 --> E5[Access Targeted PRCS File Content];
+    E5 --> E6[Targeted Deep Read for Specific Info];
+    E6 --> E7[Extract & Integrate Information];
+    E7 --> E8[Optional: Update activeContext.md (Ad-hoc findings)];
+    E8 --> E2;
+    E3 -- No --> F[Task Completion / Further Action];
+
+    B --> G[Refactoring Context Strategy - Parallel Process];
+    G --> G1{Task Involves Creation/Modification?};
+    G1 -- Yes --> G2[AI Self-Correction: Potential Refactor/Duplicate];
+    G2 --> G3[Search Codebase for Similar Items];
+    G3 --> G4{Matches Found?};
+    G4 -- Yes --> G5[Analyze Matches: Reuse/Extend/Impact?];
+    G5 --> G6[Present Findings & Options to User];
+    G6 --> G7{User Confirms Approach}; 
+    G7 -- Proceed --> G8[Execute Chosen Approach (Create/Modify)];
+    G8 --> G9[Update Documentation if Refactored];
+    G9 --> F;
+    G4 -- No --> G8;
+    G1 -- No --> F;
+
+    subgraph Phase1 [Phase 1: Foundational Context]
+        direction LR
+        C1
+        C2
+        C3
+        C4
+        C5
+        C6
+        C7
+        C8
+        C9
+        C10
+    end
+
+    subgraph Phase2 [Phase 2: Query-Driven Incremental Deep Reading]
+        direction LR
+        E1
+        E2
+        E3
+        E4
+        E5
+        E6
+        E7
+        E8
+    end
+
+    subgraph Refactoring [Refactoring Context Strategy]
+        direction TB
+        G1
+        G2
+        G3
+        G4
+        G5
+        G6
+        G7
+        G8
+        G9
+    end
+
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#ccf,stroke:#333,stroke-width:2px
+    style F fill:#9cf,stroke:#333,stroke-width:2px
+
+    classDef phase1 fill:#E6FFE6,stroke:#006400,color:#000;
+    classDef phase2 fill:#E6E6FF,stroke:#00008B,color:#000;
+    classDef refactor fill:#FFF0E6,stroke:#A0522D,color:#000;
+    class C,C1,C2,C3,C4,C5,C6,C7,C8,C9,C10 phase1;
+    class E,E1,E2,E3,E4,E5,E6,E7,E8 phase2;
+    class G,G1,G2,G3,G4,G5,G6,G7,G8,G9 refactor;
+
+end
+```
+
+---

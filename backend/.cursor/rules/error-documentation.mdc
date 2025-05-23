@@ -1,0 +1,91 @@
+---
+description: Error documentation
+globs: 
+alwaysApply: false
+---
+# Error Documentation
+
+## Database Transaction Management
+
+### Pattern: SQLAlchemy Session Rollback
+When handling database operations that may fail, always:
+1. Wrap operations in try-except blocks
+2. Catch specific exceptions (IntegrityError, SQLAlchemyError)
+3. Roll back the session on error
+4. Return appropriate error status codes
+
+Example from RoleService:
+```python
+try:
+    # Database operations...
+    db.session.commit()
+except IntegrityError:
+    db.session.rollback()
+    return None, "Role name must be unique", 409
+except SQLAlchemyError as e:
+    db.session.rollback()
+    return None, f"Database error: {str(e)}", 500
+```
+
+### Pattern: Many-to-Many Relationship Management
+When managing many-to-many relationships:
+1. Clear relationships before deletion (e.g., `role.permissions = []`)
+2. Check for existing relationships before adding (e.g., `permission in role.permissions`)
+3. Verify both entities exist before establishing relationship
+4. Handle removal of non-existent relationships gracefully
+
+Example from RoleService:
+```python
+# Before deleting role
+role.permissions = []  # Clear relationships
+db.session.delete(role)
+
+# Before adding relationship
+if permission in role.permissions:
+    return role, "Permission already assigned to role", 200
+```
+
+### Pattern: Cascading Delete Protection
+Before deleting entities that may have dependent relationships:
+1. Check for existing dependencies
+2. Return appropriate error if dependencies exist
+3. Clear relationships if deletion is allowed
+
+Example from RoleService:
+```python
+if role.users.first():
+    return False, "Cannot delete role: Users are currently assigned to this role", 409
+```
+
+## Input Validation
+
+### Pattern: Required Field Validation
+Always validate required fields before database operations:
+```python
+if not data.get('name'):
+    return None, "Role name is required", 400
+```
+
+### Pattern: Uniqueness Validation
+When updating unique fields:
+1. Check for duplicates excluding current entity
+2. Use appropriate filters in query
+3. Handle IntegrityError as backup
+
+Example:
+```python
+existing_role = Role.query.filter(
+    Role.name == data['name'],
+    Role.id != role_id
+).first()
+if existing_role:
+    return None, f"Role with name '{data['name']}' already exists", 409
+```
+
+# PBAC Seeding
+
+- As of 2025-05-14, a dedicated seeding script (`src/seeds.py`) and CLI command (`flask seed run`) must be used after a database reset to populate permissions, roles, role-permission assignments, and a default admin user.
+- The script is idempotent and can be safely re-run.
+- This replaces the previous migration-based seeding logic for PBAC initial data.
+- Failure to run the seeding script after a reset will result in missing PBAC data and inability to log in as admin.
+- **Update (2025-05-14):** Permission names and role mappings in `src/seeds.py` were corrected to match the finalized PBAC list of 21 permissions. This ensures all seeded data is consistent with the system's authorization model and prevents downstream errors.

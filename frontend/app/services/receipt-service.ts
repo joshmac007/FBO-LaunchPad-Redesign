@@ -1,0 +1,522 @@
+import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config"
+import { isOfflineMode } from "./utils"
+
+// Receipt model
+export interface Receipt {
+  id: number
+  receiptNumber: string
+  fuelOrderId: number
+  tailNumber: string
+  customer: string
+  fuelType: string
+  quantity: number
+  amount: number
+  paymentMethod: string
+  status: string
+  createdAt: string
+  updatedAt?: string
+  fuelerName: string
+  location: string
+  notes?: string
+  refundAmount?: number
+  refundReason?: string
+  refundedAt?: string
+}
+
+// Create Receipt Request
+export interface CreateReceiptRequest {
+  fuelOrderId: number
+  tailNumber: string
+  customer: string
+  fuelType: string
+  quantity: number
+  amount: number
+  paymentMethod: string
+  fuelerName: string
+  location: string
+  notes?: string
+}
+
+// Mock receipt data for offline mode
+const mockReceipts: Receipt[] = [
+  {
+    id: 1,
+    receiptNumber: "RCP-2024-001",
+    fuelOrderId: 1,
+    tailNumber: "N123AB",
+    customer: "Delta Airlines",
+    fuelType: "Jet A",
+    quantity: 500,
+    amount: 2750.0,
+    paymentMethod: "Corporate Account",
+    status: "PAID",
+    createdAt: "2024-01-15T10:30:00Z",
+    updatedAt: "2024-01-15T10:35:00Z",
+    fuelerName: "Mike Johnson",
+    location: "Gate A1",
+    notes: "Standard refueling operation",
+  },
+  {
+    id: 2,
+    receiptNumber: "RCP-2024-002",
+    fuelOrderId: 2,
+    tailNumber: "N456CD",
+    customer: "United Airlines",
+    fuelType: "Jet A",
+    quantity: 750,
+    amount: 4125.0,
+    paymentMethod: "Credit Card",
+    status: "PAID",
+    createdAt: "2024-01-15T14:45:00Z",
+    updatedAt: "2024-01-15T14:50:00Z",
+    fuelerName: "Sarah Wilson",
+    location: "Gate B3",
+    notes: "Priority refueling",
+  },
+  {
+    id: 3,
+    receiptNumber: "RCP-2024-003",
+    fuelOrderId: 3,
+    tailNumber: "N789EF",
+    customer: "American Airlines",
+    fuelType: "Jet A",
+    quantity: 300,
+    amount: 1650.0,
+    paymentMethod: "Corporate Account",
+    status: "PENDING",
+    createdAt: "2024-01-16T09:15:00Z",
+    fuelerName: "Tom Davis",
+    location: "Gate C2",
+  },
+  {
+    id: 4,
+    receiptNumber: "RCP-2024-004",
+    fuelOrderId: 4,
+    tailNumber: "N321GH",
+    customer: "Southwest Airlines",
+    fuelType: "Jet A",
+    quantity: 450,
+    amount: 2475.0,
+    paymentMethod: "Credit Card",
+    status: "PAID",
+    createdAt: "2024-01-16T11:20:00Z",
+    updatedAt: "2024-01-16T11:25:00Z",
+    fuelerName: "Lisa Chen",
+    location: "Gate D1",
+    notes: "Quick turnaround required",
+  },
+  {
+    id: 5,
+    receiptNumber: "RCP-2024-005",
+    fuelOrderId: 5,
+    tailNumber: "N654IJ",
+    customer: "JetBlue Airways",
+    fuelType: "Jet A",
+    quantity: 600,
+    amount: 3300.0,
+    paymentMethod: "Corporate Account",
+    status: "REFUNDED",
+    createdAt: "2024-01-17T08:30:00Z",
+    updatedAt: "2024-01-17T16:45:00Z",
+    fuelerName: "Mark Rodriguez",
+    location: "Gate E2",
+    refundAmount: 3300.0,
+    refundReason: "Flight cancelled",
+    refundedAt: "2024-01-17T16:45:00Z",
+  },
+  {
+    id: 6,
+    receiptNumber: "RCP-2024-006",
+    fuelOrderId: 6,
+    tailNumber: "N987KL",
+    customer: "Alaska Airlines",
+    fuelType: "Jet A",
+    quantity: 400,
+    amount: 2200.0,
+    paymentMethod: "Cash",
+    status: "PAID",
+    createdAt: "2024-01-17T13:15:00Z",
+    updatedAt: "2024-01-17T13:20:00Z",
+    fuelerName: "Jennifer Park",
+    location: "Gate F3",
+  },
+  {
+    id: 7,
+    receiptNumber: "RCP-2024-007",
+    fuelOrderId: 7,
+    tailNumber: "N147MN",
+    customer: "Frontier Airlines",
+    fuelType: "Jet A",
+    quantity: 350,
+    amount: 1925.0,
+    paymentMethod: "Check",
+    status: "PENDING",
+    createdAt: "2024-01-18T10:45:00Z",
+    fuelerName: "David Kim",
+    location: "Gate G1",
+    notes: "Waiting for check clearance",
+  },
+  {
+    id: 8,
+    receiptNumber: "RCP-2024-008",
+    fuelOrderId: 8,
+    tailNumber: "N258OP",
+    customer: "Spirit Airlines",
+    fuelType: "Jet A",
+    quantity: 275,
+    amount: 1512.5,
+    paymentMethod: "Credit Card",
+    status: "PAID",
+    createdAt: "2024-01-18T15:30:00Z",
+    updatedAt: "2024-01-18T15:35:00Z",
+    fuelerName: "Amanda Foster",
+    location: "Gate H2",
+  },
+]
+
+// Initialize localStorage with mock data if not present
+function initializeMockData() {
+  if (isOfflineMode() && !localStorage.getItem("fboReceipts")) {
+    localStorage.setItem("fboReceipts", JSON.stringify(mockReceipts))
+  }
+}
+
+// Get all receipts
+export async function getReceipts(): Promise<Receipt[]> {
+  if (isOfflineMode()) {
+    initializeMockData()
+    const storedReceipts = localStorage.getItem("fboReceipts")
+    if (storedReceipts) {
+      return JSON.parse(storedReceipts)
+    }
+    return mockReceipts
+  }
+
+  // Online mode - fetch from API
+  const response = await fetch(`${API_BASE_URL}/receipts`, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  })
+
+  return handleApiResponse<Receipt[]>(response)
+}
+
+// Get receipt by ID
+export async function getReceipt(id: number): Promise<Receipt> {
+  if (isOfflineMode()) {
+    initializeMockData()
+    const storedReceipts = localStorage.getItem("fboReceipts")
+    if (!storedReceipts) {
+      throw new Error("Receipt not found")
+    }
+
+    const receipts = JSON.parse(storedReceipts) as Receipt[]
+    const receipt = receipts.find((r) => r.id === id)
+
+    if (!receipt) {
+      throw new Error("Receipt not found")
+    }
+
+    return receipt
+  }
+
+  // Online mode - fetch from API
+  const response = await fetch(`${API_BASE_URL}/receipts/${id}`, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  })
+
+  return handleApiResponse<Receipt>(response)
+}
+
+// Create a new receipt
+export async function createReceipt(receiptData: CreateReceiptRequest): Promise<Receipt> {
+  if (isOfflineMode()) {
+    initializeMockData()
+    const newReceipt: Receipt = {
+      ...receiptData,
+      id: Date.now(),
+      receiptNumber: `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-3)}`,
+      status: "PENDING",
+      createdAt: new Date().toISOString(),
+    }
+
+    const storedReceipts = localStorage.getItem("fboReceipts")
+    const receipts = storedReceipts ? (JSON.parse(storedReceipts) as Receipt[]) : []
+
+    receipts.push(newReceipt)
+    localStorage.setItem("fboReceipts", JSON.stringify(receipts))
+
+    return newReceipt
+  }
+
+  // Online mode - create via API
+  const response = await fetch(`${API_BASE_URL}/receipts`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(receiptData),
+  })
+
+  return handleApiResponse<Receipt>(response)
+}
+
+// Update a receipt
+export async function updateReceipt(id: number, updates: Partial<Receipt>): Promise<Receipt> {
+  if (isOfflineMode()) {
+    initializeMockData()
+    const storedReceipts = localStorage.getItem("fboReceipts")
+    if (!storedReceipts) {
+      throw new Error("Receipt not found")
+    }
+
+    const receipts = JSON.parse(storedReceipts) as Receipt[]
+    const index = receipts.findIndex((r) => r.id === id)
+
+    if (index === -1) {
+      throw new Error("Receipt not found")
+    }
+
+    const updatedReceipt = {
+      ...receipts[index],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    }
+
+    // If status is changing to REFUNDED, add refunded timestamp
+    if (updates.status === "REFUNDED" && receipts[index].status !== "REFUNDED") {
+      updatedReceipt.refundedAt = new Date().toISOString()
+    }
+
+    receipts[index] = updatedReceipt
+    localStorage.setItem("fboReceipts", JSON.stringify(receipts))
+
+    return updatedReceipt
+  }
+
+  // Online mode - update via API
+  const response = await fetch(`${API_BASE_URL}/receipts/${id}`, {
+    method: "PUT",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(updates),
+  })
+
+  return handleApiResponse<Receipt>(response)
+}
+
+// Delete a receipt
+export async function deleteReceipt(id: number): Promise<boolean> {
+  if (isOfflineMode()) {
+    const storedReceipts = localStorage.getItem("fboReceipts")
+    if (!storedReceipts) {
+      return false
+    }
+
+    const receipts = JSON.parse(storedReceipts) as Receipt[]
+    const updatedReceipts = receipts.filter((r) => r.id !== id)
+
+    if (updatedReceipts.length === receipts.length) {
+      return false // No receipt was removed
+    }
+
+    localStorage.setItem("fboReceipts", JSON.stringify(updatedReceipts))
+    return true
+  }
+
+  // Online mode - delete via API
+  const response = await fetch(`${API_BASE_URL}/receipts/${id}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  })
+
+  return response.ok
+}
+
+// Filter receipts
+export function filterReceipts(
+  receipts: Receipt[],
+  searchTerm?: string,
+  startDate?: string,
+  endDate?: string,
+  status?: string,
+  paymentMethod?: string,
+): Receipt[] {
+  return receipts.filter((receipt) => {
+    // Search term filter
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase()
+      const matchesSearch =
+        receipt.receiptNumber.toLowerCase().includes(searchLower) ||
+        receipt.tailNumber.toLowerCase().includes(searchLower) ||
+        receipt.customer.toLowerCase().includes(searchLower) ||
+        receipt.fuelerName.toLowerCase().includes(searchLower) ||
+        receipt.location.toLowerCase().includes(searchLower)
+
+      if (!matchesSearch) {
+        return false
+      }
+    }
+
+    // Filter by start date
+    if (startDate && new Date(receipt.createdAt) < new Date(startDate)) {
+      return false
+    }
+
+    // Filter by end date
+    if (endDate) {
+      const endDateTime = new Date(endDate)
+      endDateTime.setHours(23, 59, 59, 999) // End of the day
+      if (new Date(receipt.createdAt) > endDateTime) {
+        return false
+      }
+    }
+
+    // Filter by status
+    if (status && status !== "ALL" && receipt.status !== status) {
+      return false
+    }
+
+    // Filter by payment method
+    if (paymentMethod && paymentMethod !== "ALL" && receipt.paymentMethod !== paymentMethod) {
+      return false
+    }
+
+    return true
+  })
+}
+
+// Sort receipts
+export function sortReceipts(receipts: Receipt[], sortBy: string, sortOrder: "asc" | "desc"): Receipt[] {
+  return [...receipts].sort((a, b) => {
+    let aValue: any
+    let bValue: any
+
+    switch (sortBy) {
+      case "receiptNumber":
+        aValue = a.receiptNumber
+        bValue = b.receiptNumber
+        break
+      case "customer":
+        aValue = a.customer
+        bValue = b.customer
+        break
+      case "amount":
+        aValue = a.amount
+        bValue = b.amount
+        break
+      case "createdAt":
+        aValue = new Date(a.createdAt)
+        bValue = new Date(b.createdAt)
+        break
+      case "tailNumber":
+        aValue = a.tailNumber
+        bValue = b.tailNumber
+        break
+      case "status":
+        aValue = a.status
+        bValue = b.status
+        break
+      default:
+        aValue = a.id
+        bValue = b.id
+    }
+
+    if (aValue < bValue) {
+      return sortOrder === "asc" ? -1 : 1
+    }
+    if (aValue > bValue) {
+      return sortOrder === "asc" ? 1 : -1
+    }
+    return 0
+  })
+}
+
+// Convert receipts to CSV
+export function convertReceiptsToCSV(receipts: Receipt[]): string {
+  if (receipts.length === 0) {
+    return ""
+  }
+
+  // Define CSV headers
+  const headers = [
+    "Receipt ID",
+    "Receipt Number",
+    "Fuel Order ID",
+    "Tail Number",
+    "Customer",
+    "Fuel Type",
+    "Quantity (Gallons)",
+    "Amount",
+    "Payment Method",
+    "Status",
+    "Created At",
+    "Updated At",
+    "Fueler Name",
+    "Location",
+    "Notes",
+    "Refund Amount",
+    "Refund Reason",
+    "Refunded At",
+  ]
+
+  // Create CSV content
+  const csvContent = [
+    headers.join(","),
+    ...receipts.map((receipt) =>
+      [
+        receipt.id,
+        receipt.receiptNumber,
+        receipt.fuelOrderId,
+        receipt.tailNumber,
+        receipt.customer,
+        receipt.fuelType,
+        receipt.quantity,
+        receipt.amount,
+        receipt.paymentMethod,
+        receipt.status,
+        receipt.createdAt,
+        receipt.updatedAt || "",
+        receipt.fuelerName,
+        receipt.location,
+        receipt.notes ? `"${receipt.notes.replace(/"/g, '""')}"` : "",
+        receipt.refundAmount || "",
+        receipt.refundReason ? `"${receipt.refundReason.replace(/"/g, '""')}"` : "",
+        receipt.refundedAt || "",
+      ].join(","),
+    ),
+  ].join("\n")
+
+  return csvContent
+}
+
+// Download CSV
+export function downloadReceiptsCSV(csvContent: string, filename: string): void {
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+  const link = document.createElement("a")
+
+  // Create a URL for the blob
+  const url = URL.createObjectURL(blob)
+
+  // Set link properties
+  link.setAttribute("href", url)
+  link.setAttribute("download", filename)
+  link.style.visibility = "hidden"
+
+  // Append to the document, click, and remove
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+// Get receipt statistics
+export function getReceiptStatistics(receipts: Receipt[]) {
+  const stats = {
+    total: receipts.length,
+    paid: receipts.filter((r) => r.status === "PAID").length,
+    pending: receipts.filter((r) => r.status === "PENDING").length,
+    refunded: receipts.filter((r) => r.status === "REFUNDED").length,
+    totalAmount: receipts.reduce((sum, r) => sum + r.amount, 0),
+    totalRefunded: receipts.filter((r) => r.status === "REFUNDED").reduce((sum, r) => sum + (r.refundAmount || 0), 0),
+  }
+
+  return stats
+}
