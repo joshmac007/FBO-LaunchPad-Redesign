@@ -1,515 +1,218 @@
-import { API_BASE_URL, getAuthHeaders } from "./api-config"
-import { isOfflineMode } from "./utils"
+import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config"
 
-// Aircraft model
+// Frontend Aircraft model (kept as is for richness)
 export interface Aircraft {
   id: number
   tailNumber: string
-  type: string
-  model: string
-  owner: string
-  homeBase: string
+  type: string // Corresponds to aircraft_type from backend
+  model: string // Will be 'N/A' or derived if not directly from backend
+  owner: string // Will be 'N/A' or derived if not directly from backend, potentially customer_id
+  homeBase: string // Will be 'N/A' or derived
   lastMaintenance?: string
   nextMaintenance?: string
-  status: "active" | "maintenance" | "inactive"
-  fuelCapacity: number
-  preferredFuelType: string
-  mtow?: number // Maximum Takeoff Weight in pounds
-  lastFaaSyncAt?: string // When the aircraft data was last synced with FAA
-  previousOwner?: string // Previous owner if changed
-  ownershipChangeDate?: string // Date when ownership changed
-  ownershipChangeAcknowledged?: boolean // Whether the ownership change has been acknowledged
-}
-
-// Aircraft validation result
-export interface AircraftValidationResult {
-  isValid: boolean
-  message: string
-  details?: {
-    registration?: {
-      isValid: boolean
-      message: string
-    }
-    airworthiness?: {
-      isValid: boolean
-      message: string
-      expirationDate?: string
-    }
-    insurance?: {
-      isValid: boolean
-      message: string
-      expirationDate?: string
-    }
-  }
-}
-
-// Aircraft lookup result
-export interface AircraftLookupResult {
-  aircraft: Aircraft
-  isOwnershipChanged: boolean
+  status: "active" | "maintenance" | "inactive" // Default to 'active' or derived
+  fuelCapacity: number // Default or derived
+  preferredFuelType: string // Corresponds to fuel_type from backend
+  mtow?: number
+  lastFaaSyncAt?: string
   previousOwner?: string
   ownershipChangeDate?: string
-  isNew: boolean
+  ownershipChangeAcknowledged?: boolean
+  // Potentially add customer_id if needed on frontend representation
+  customer_id?: number
 }
 
-// Initialize aircraft data in localStorage
-export function initializeAircraftData(): void {
-  // Check if aircraft data already exists
-  const existingData = localStorage.getItem("fboAircraft")
-  if (existingData) {
-    return // Data already initialized
-  }
-
-  // Create sample aircraft data
-  const sampleAircraft: Aircraft[] = [
-    {
-      id: 1,
-      tailNumber: "N12345",
-      type: "Jet",
-      model: "Gulfstream G650",
-      owner: "Executive Aviation LLC",
-      homeBase: "KJFK",
-      lastMaintenance: "2023-01-15",
-      nextMaintenance: "2023-07-15",
-      status: "active",
-      fuelCapacity: 6500,
-      preferredFuelType: "Jet A",
-      mtow: 99600,
-      lastFaaSyncAt: "2023-05-01T12:00:00Z",
-    },
-    {
-      id: 2,
-      tailNumber: "N54321",
-      type: "Turboprop",
-      model: "King Air 350",
-      owner: "Charter Solutions Inc.",
-      homeBase: "KBOS",
-      lastMaintenance: "2023-02-20",
-      nextMaintenance: "2023-08-20",
-      status: "active",
-      fuelCapacity: 1800,
-      preferredFuelType: "Jet A",
-      mtow: 15000,
-      lastFaaSyncAt: "2023-05-02T12:00:00Z",
-    },
-    {
-      id: 3,
-      tailNumber: "N98765",
-      type: "Piston",
-      model: "Cessna 172",
-      owner: "Flight School Academy",
-      homeBase: "KPHL",
-      lastMaintenance: "2023-03-10",
-      nextMaintenance: "2023-09-10",
-      status: "maintenance",
-      fuelCapacity: 56,
-      preferredFuelType: "Avgas",
-      mtow: 2450,
-      lastFaaSyncAt: "2023-05-03T12:00:00Z",
-    },
-    {
-      id: 4,
-      tailNumber: "N24680",
-      type: "Jet",
-      model: "Citation X",
-      owner: "Corporate Jets LLC",
-      homeBase: "KLAX",
-      lastMaintenance: "2023-04-05",
-      nextMaintenance: "2023-10-05",
-      status: "active",
-      fuelCapacity: 1900,
-      preferredFuelType: "Jet A+",
-      mtow: 36100,
-      lastFaaSyncAt: "2023-05-04T12:00:00Z",
-    },
-    {
-      id: 5,
-      tailNumber: "N13579",
-      type: "Helicopter",
-      model: "Bell 407",
-      owner: "Helicopter Tours Inc.",
-      homeBase: "KLAS",
-      lastMaintenance: "2023-05-12",
-      nextMaintenance: "2023-11-12",
-      status: "inactive",
-      fuelCapacity: 110,
-      preferredFuelType: "Jet A",
-      mtow: 5250,
-      lastFaaSyncAt: "2023-05-05T12:00:00Z",
-    },
-    // Add an aircraft with ownership change for testing
-    {
-      id: 6,
-      tailNumber: "N78901",
-      type: "Jet",
-      model: "Bombardier Global 6000",
-      owner: "New Aviation Holdings LLC",
-      previousOwner: "Old Aviation Inc.",
-      homeBase: "KDEN",
-      lastMaintenance: "2023-04-20",
-      nextMaintenance: "2023-10-20",
-      status: "active",
-      fuelCapacity: 6500,
-      preferredFuelType: "Jet A",
-      mtow: 94000,
-      lastFaaSyncAt: "2023-05-15T12:00:00Z",
-      ownershipChangeDate: "2023-05-10T00:00:00Z",
-      ownershipChangeAcknowledged: false,
-    },
-  ]
-
-  // Save to localStorage
-  localStorage.setItem("fboAircraft", JSON.stringify(sampleAircraft))
+// Backend API-aligned interfaces
+interface BackendAdminAircraft {
+  id: number
+  tail_number: string
+  aircraft_type: string
+  fuel_type: string
+  customer_id?: number
+  // Add other fields if the backend AdminAircraftSchema provides more that are useful for mapping
 }
 
-// Get all aircraft
-export async function getAircraft(): Promise<Aircraft[]> {
-  if (isOfflineMode()) {
-    // Return mock data from localStorage
-    const storedAircraft = localStorage.getItem("fboAircraft")
-    if (storedAircraft) {
-      return JSON.parse(storedAircraft)
-    }
+interface BackendAircraft {
+  id: number
+  tail_number: string
+  aircraft_type: string
+  fuel_type: string
+  // Add other fields if the backend AircraftResponseSchema provides more that are useful for mapping
+}
 
-    // If no data in localStorage, initialize and return
-    initializeAircraftData()
-    const initialData = localStorage.getItem("fboAircraft")
-    return initialData ? JSON.parse(initialData) : []
+// Request payload interfaces
+export interface AdminAircraftCreateRequest {
+  tail_number: string
+  aircraft_type: string
+  fuel_type: string
+  customer_id?: number
+}
+
+export interface AdminAircraftUpdateRequest {
+  aircraft_type?: string
+  fuel_type?: string
+  customer_id?: number
+}
+
+// Response type for list endpoints
+interface AdminAircraftListResponse {
+  aircraft: BackendAdminAircraft[]
+  message: string
+}
+
+interface AircraftListResponse {
+  aircraft: BackendAircraft[]
+  message: string
+}
+
+// --- Data Mapping Helper Functions ---
+
+function mapBackendAdminToFrontendAircraft(backend: BackendAdminAircraft): Aircraft {
+  return {
+    id: backend.id,
+    tailNumber: backend.tail_number,
+    type: backend.aircraft_type,
+    model: "N/A", // Or derive if possible from aircraft_type or other data
+    owner: backend.customer_id ? `Customer ID: ${backend.customer_id}` : "N/A", // Example mapping
+    homeBase: "N/A",
+    status: "active", // Default status
+    fuelCapacity: 0, // Default, consider if backend can provide this
+    preferredFuelType: backend.fuel_type,
+    customer_id: backend.customer_id,
+    // Initialize other optional fields from Aircraft interface as undefined or default
+    lastMaintenance: undefined,
+    nextMaintenance: undefined,
+    mtow: undefined,
+    lastFaaSyncAt: undefined,
+    previousOwner: undefined,
+    ownershipChangeDate: undefined,
+    ownershipChangeAcknowledged: undefined,
   }
+}
 
-  // Online mode - fetch from API
+function mapBackendToFrontendAircraft(backend: BackendAircraft): Aircraft {
+  return {
+    id: backend.id,
+    tailNumber: backend.tail_number,
+    type: backend.aircraft_type,
+    model: "N/A",
+    owner: "N/A", // General endpoint might not have customer info
+    homeBase: "N/A",
+    status: "active",
+    fuelCapacity: 0,
+    preferredFuelType: backend.fuel_type,
+    // Initialize other optional fields
+    lastMaintenance: undefined,
+    nextMaintenance: undefined,
+    mtow: undefined,
+    lastFaaSyncAt: undefined,
+    previousOwner: undefined,
+    ownershipChangeDate: undefined,
+    ownershipChangeAcknowledged: undefined,
+  }
+}
+
+// --- Admin Aircraft CRUD Functions ---
+
+export async function getAllAdminAircraft(filters?: { customer_id?: number }): Promise<Aircraft[]> {
+  let url = `${API_BASE_URL}/admin/aircraft/`
+  if (filters?.customer_id) {
+    url += `?customer_id=${filters.customer_id}`
+  }
+  const response = await fetch(url, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  })
+  const data = await handleApiResponse<AdminAircraftListResponse>(response)
+  return data.aircraft.map(mapBackendAdminToFrontendAircraft)
+}
+
+export async function getAdminAircraftByTailNumber(tailNumber: string): Promise<Aircraft | null> {
   try {
-    const response = await fetch(`${API_BASE_URL}/aircraft`, {
+    const response = await fetch(`${API_BASE_URL}/admin/aircraft/${encodeURIComponent(tailNumber)}`, {
       method: "GET",
       headers: getAuthHeaders(),
     })
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch aircraft: ${response.statusText}`)
-    }
-
-    const contentType = response.headers.get("content-type")
-    if (contentType && contentType.includes("application/json")) {
-      return await response.json()
-    } else {
-      throw new Error("API returned non-JSON response")
-    }
+    // handleApiResponse will throw for non-ok status, including 404
+    const backendAircraft = await handleApiResponse<BackendAdminAircraft>(response)
+    return mapBackendAdminToFrontendAircraft(backendAircraft)
   } catch (error) {
-    console.error("Error fetching aircraft:", error)
-    return []
+    // Check if the error message indicates a 404 Not Found
+    if (error instanceof Error && error.message.includes("API error (404)")) {
+      return null // Return null for 404s as per requirement
+    }
+    // Re-throw other errors
+    throw error
   }
 }
 
-// Get aircraft by ID
-export async function getAircraftById(id: number): Promise<Aircraft | null> {
-  if (isOfflineMode()) {
-    // Get from localStorage
-    const storedAircraft = localStorage.getItem("fboAircraft")
-    if (!storedAircraft) {
-      return null
-    }
+// Functions to be removed as per subtask description:
+// - getAircraftById(id: number)
+// - validateAircraft(tailNumber: string)
+// - acknowledgeOwnershipChange(aircraftId: number)
+// - getAircraftWithOwnershipChanges()
+// These functions were part of the original file but are not included in the refactored version below this comment block.
+// Their removal will be completed by not re-defining them.
 
-    const aircraft = JSON.parse(storedAircraft) as Aircraft[]
-    return aircraft.find((a) => a.id === id) || null
-  }
-
-  // Online mode - fetch from API
-  try {
-    const response = await fetch(`${API_BASE_URL}/aircraft/${id}`, {
-      method: "GET",
-      headers: getAuthHeaders(),
-    })
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return null
-      }
-      throw new Error(`Failed to fetch aircraft: ${response.statusText}`)
-    }
-
-    const contentType = response.headers.get("content-type")
-    if (contentType && contentType.includes("application/json")) {
-      return await response.json()
-    } else {
-      throw new Error("API returned non-JSON response")
-    }
-  } catch (error) {
-    console.error("Error fetching aircraft by ID:", error)
-    return null
-  }
+export async function createAdminAircraft(aircraftData: AdminAircraftCreateRequest): Promise<Aircraft> {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft/`, {
+    method: "POST",
+    headers: getAuthHeaders(), // Ensure Content-Type: application/json is set by getAuthHeaders
+    body: JSON.stringify(aircraftData),
+  })
+  const backendAircraft = await handleApiResponse<BackendAdminAircraft>(response)
+  return mapBackendAdminToFrontendAircraft(backendAircraft)
 }
 
-// Validate aircraft
-export async function validateAircraft(tailNumber: string): Promise<AircraftValidationResult> {
-  if (isOfflineMode()) {
-    // Simulate validation with mock data
-    // For demo purposes, we'll validate based on the last character of the tail number
-    const lastChar = tailNumber.charAt(tailNumber.length - 1)
-    const lastDigit = Number.parseInt(lastChar)
-
-    if (isNaN(lastDigit)) {
-      // If last character is not a number, consider it valid
-      return {
-        isValid: true,
-        message: "Aircraft validation successful",
-        details: {
-          registration: {
-            isValid: true,
-            message: "Registration is valid",
-          },
-          airworthiness: {
-            isValid: true,
-            message: "Airworthiness certificate is valid",
-            expirationDate: "2024-12-31",
-          },
-          insurance: {
-            isValid: true,
-            message: "Insurance is valid",
-            expirationDate: "2024-06-30",
-          },
-        },
-      }
-    } else if (lastDigit % 3 === 0) {
-      // If last digit is divisible by 3, consider registration invalid
-      return {
-        isValid: false,
-        message: "Aircraft validation failed: Registration issues",
-        details: {
-          registration: {
-            isValid: false,
-            message: "Registration has expired",
-          },
-          airworthiness: {
-            isValid: true,
-            message: "Airworthiness certificate is valid",
-            expirationDate: "2024-12-31",
-          },
-          insurance: {
-            isValid: true,
-            message: "Insurance is valid",
-            expirationDate: "2024-06-30",
-          },
-        },
-      }
-    } else if (lastDigit % 2 === 0) {
-      // If last digit is even, consider airworthiness invalid
-      return {
-        isValid: false,
-        message: "Aircraft validation failed: Airworthiness issues",
-        details: {
-          registration: {
-            isValid: true,
-            message: "Registration is valid",
-          },
-          airworthiness: {
-            isValid: false,
-            message: "Airworthiness certificate has expired",
-            expirationDate: "2023-01-15",
-          },
-          insurance: {
-            isValid: true,
-            message: "Insurance is valid",
-            expirationDate: "2024-06-30",
-          },
-        },
-      }
-    } else {
-      // Otherwise, consider insurance invalid
-      return {
-        isValid: false,
-        message: "Aircraft validation failed: Insurance issues",
-        details: {
-          registration: {
-            isValid: true,
-            message: "Registration is valid",
-          },
-          airworthiness: {
-            isValid: true,
-            message: "Airworthiness certificate is valid",
-            expirationDate: "2024-12-31",
-          },
-          insurance: {
-            isValid: false,
-            message: "Insurance has expired",
-            expirationDate: "2023-03-15",
-          },
-        },
-      }
-    }
-  }
-
-  // Online mode - validate via API
-  try {
-    const response = await fetch(`${API_BASE_URL}/aircraft/validate`, {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ tailNumber }),
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to validate aircraft: ${response.statusText}`)
-    }
-
-    const contentType = response.headers.get("content-type")
-    if (contentType && contentType.includes("application/json")) {
-      return await response.json()
-    } else {
-      throw new Error("API returned non-JSON response")
-    }
-  } catch (error) {
-    console.error("Error validating aircraft:", error)
-    return {
-      isValid: false,
-      message: "Error validating aircraft: " + (error instanceof Error ? error.message : String(error)),
-    }
-  }
+export async function updateAdminAircraft(
+  tailNumber: string,
+  aircraftData: AdminAircraftUpdateRequest,
+): Promise<Aircraft> {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft/${encodeURIComponent(tailNumber)}`, {
+    method: "PATCH",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(aircraftData),
+  })
+  const backendAircraft = await handleApiResponse<BackendAdminAircraft>(response)
+  return mapBackendAdminToFrontendAircraft(backendAircraft)
 }
 
-// Get aircraft by tail number
+export async function deleteAdminAircraft(tailNumber: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft/${encodeURIComponent(tailNumber)}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  })
+  // handleApiResponse will throw if response is not ok (e.g. 204 is ok)
+  // For DELETE 204, response.json() would fail, so we might need a custom check or rely on handleApiResponse
+  // Assuming handleApiResponse correctly handles 204 No Content or similar success statuses for DELETE
+  // If handleApiResponse expects JSON, and DELETE returns no body, this might need adjustment in handleApiResponse
+  // For now, let's assume handleApiResponse can deal with it or throws an error for non-204/non-200.
+  await handleApiResponse<unknown>(response) // Expecting no content, so unknown is fine.
+}
+
+// --- General Aircraft Functions ---
+
+export async function getAircraftList(): Promise<Aircraft[]> {
+  const response = await fetch(`${API_BASE_URL}/aircraft/`, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  })
+  const data = await handleApiResponse<AircraftListResponse>(response)
+  return data.aircraft.map(mapBackendToFrontendAircraft)
+}
+
 export async function getAircraftByTailNumber(tailNumber: string): Promise<Aircraft | null> {
-  if (isOfflineMode()) {
-    // Get from localStorage
-    const storedAircraft = localStorage.getItem("fboAircraft")
-    if (!storedAircraft) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/aircraft/${encodeURIComponent(tailNumber)}`, {
+      method: "GET",
+      headers: getAuthHeaders(),
+    })
+    const backendAircraft = await handleApiResponse<BackendAircraft>(response)
+    return mapBackendToFrontendAircraft(backendAircraft)
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("API error (404)")) {
       return null
     }
-
-    const aircraft = JSON.parse(storedAircraft) as Aircraft[]
-    return aircraft.find((a) => a.tailNumber.toLowerCase() === tailNumber.toLowerCase()) || null
-  }
-
-  // Online mode - fetch from API
-  try {
-    const response = await fetch(`${API_BASE_URL}/aircraft/tail/${encodeURIComponent(tailNumber)}`, {
-      method: "GET",
-      headers: getAuthHeaders(),
-    })
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return null
-      }
-      throw new Error(`Failed to fetch aircraft: ${response.statusText}`)
-    }
-
-    const contentType = response.headers.get("content-type")
-    if (contentType && contentType.includes("application/json")) {
-      return await response.json()
-    } else {
-      throw new Error("API returned non-JSON response")
-    }
-  } catch (error) {
-    console.error("Error fetching aircraft by tail number:", error)
-    return null
-  }
-}
-
-// Acknowledge ownership change
-export async function acknowledgeOwnershipChange(aircraftId: number): Promise<boolean> {
-  if (isOfflineMode()) {
-    // Update in localStorage
-    const storedAircraft = localStorage.getItem("fboAircraft")
-    if (!storedAircraft) {
-      return false
-    }
-
-    const aircraft = JSON.parse(storedAircraft) as Aircraft[]
-    const index = aircraft.findIndex((a) => a.id === aircraftId)
-
-    if (index === -1) {
-      return false
-    }
-
-    // Update the aircraft
-    aircraft[index].ownershipChangeAcknowledged = true
-
-    // Save back to localStorage
-    localStorage.setItem("fboAircraft", JSON.stringify(aircraft))
-
-    return true
-  }
-
-  // Online mode - acknowledge via API
-  try {
-    const response = await fetch(`${API_BASE_URL}/aircraft/${aircraftId}/acknowledge-ownership-change`, {
-      method: "POST",
-      headers: getAuthHeaders(),
-    })
-
-    return response.ok
-  } catch (error) {
-    console.error("Error acknowledging ownership change:", error)
-    return false
-  }
-}
-
-// Get all aircraft with unacknowledged ownership changes
-export async function getAircraftWithOwnershipChanges(): Promise<Aircraft[]> {
-  console.log("getAircraftWithOwnershipChanges called")
-
-  // Check if we're in offline mode
-  const offline = isOfflineMode()
-  console.log("Offline mode:", offline)
-
-  if (offline) {
-    console.log("Using offline mode for ownership changes")
-
-    try {
-      // Initialize data if needed
-      initializeAircraftData()
-      console.log("Aircraft data initialized")
-
-      // Get from localStorage
-      const storedAircraft = localStorage.getItem("fboAircraft")
-      if (!storedAircraft) {
-        console.log("No aircraft data found in localStorage")
-        return []
-      }
-
-      try {
-        // Parse the JSON data
-        const aircraft = JSON.parse(storedAircraft) as Aircraft[]
-        console.log(`Found ${aircraft.length} total aircraft in localStorage`)
-
-        // Filter for aircraft with ownership changes
-        const filteredAircraft = aircraft.filter((a) => a.previousOwner && a.ownershipChangeAcknowledged === false)
-        console.log(`Found ${filteredAircraft.length} aircraft with unacknowledged ownership changes`)
-
-        return filteredAircraft
-      } catch (parseError) {
-        console.error("Error parsing aircraft data from localStorage:", parseError)
-        return []
-      }
-    } catch (error) {
-      console.error("Error in offline mode for ownership changes:", error)
-      return []
-    }
-  }
-
-  // We're in online mode
-  console.log("Using online mode for ownership changes")
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/aircraft/ownership-changes`, {
-      method: "GET",
-      headers: getAuthHeaders(),
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch aircraft with ownership changes: ${response.statusText}`)
-    }
-
-    const contentType = response.headers.get("content-type")
-    if (!contentType || !contentType.includes("application/json")) {
-      throw new Error("API returned non-JSON response")
-    }
-
-    const data = await response.json()
-    console.log(`Retrieved ${data.length} aircraft with ownership changes from API`)
-    return data
-  } catch (error) {
-    console.error("Error fetching aircraft with ownership changes:", error)
-    // Return empty array instead of throwing
-    return []
+    throw error
   }
 }

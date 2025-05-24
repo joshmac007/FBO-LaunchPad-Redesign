@@ -29,8 +29,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [showRoleSelection, setShowRoleSelection] = useState(false)
-  const [selectedRole, setSelectedRole] = useState<"admin" | "member" | "csr" | "fueler">("admin")
 
   useEffect(() => {
     setIsVisible(true)
@@ -39,69 +37,45 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
-
-    // Check if admin credentials
-    if (email === "fbosaas@gmail.com" && password === "b4H6a4JJT2V*ccUCb_69") {
-      setShowRoleSelection(true)
-      return
-    }
-
     setIsLoading(true)
 
     try {
       // Use the login service
-      await login({ email, password })
+      const loginResponse = await login({ email, password })
 
       // Redirect to appropriate dashboard based on role
-      const userData = localStorage.getItem("fboUser")
-      if (userData) {
-        const user = JSON.parse(userData)
-        if (user.role === "admin") {
+      // The user object is directly available from loginResponse.user
+      // and also stored in localStorage by the auth-service
+      const user = loginResponse.user
+      if (user && user.roles) {
+        if (user.roles.includes("admin")) {
           router.push("/admin/dashboard")
-        } else if (user.role === "csr") {
+        } else if (user.roles.includes("csr")) {
           router.push("/csr/dashboard")
-        } else if (user.role === "fueler") {
+        } else if (user.roles.includes("fueler")) {
           router.push("/fueler/dashboard")
-        } else {
+        } else if (user.roles.includes("member")) {
           router.push("/member/dashboard")
+        } else {
+          // Fallback if no specific role dashboard matches
+          router.push("/") // Or handle error appropriately
         }
+      } else {
+        // This case should ideally not happen if login is successful
+        // and backend provides roles.
+        console.error("Login successful but no user data or roles found.")
+        setError("Login failed: User data is missing or incomplete.")
+        router.push("/") // Fallback redirect
       }
     } catch (error) {
       console.error("Login error:", error)
-      setError("Invalid email or password")
+      if (error instanceof Error) {
+        setError(error.message || "Invalid email or password")
+      } else {
+        setError("Invalid email or password")
+      }
     } finally {
       setIsLoading(false)
-    }
-  }
-
-  const handleRoleSelection = () => {
-    setIsLoading(true)
-
-    // Store user session in localStorage with the selected role
-    localStorage.setItem(
-      "fboUser",
-      JSON.stringify({
-        email: "fbosaas@gmail.com",
-        role: selectedRole,
-        name: selectedRole === "admin" ? "Administrator" : "Super User",
-        isLoggedIn: true,
-      }),
-    )
-
-    // Redirect to the appropriate dashboard
-    switch (selectedRole) {
-      case "admin":
-        router.push("/admin/dashboard")
-        break
-      case "member":
-        router.push("/member/dashboard")
-        break
-      case "csr":
-        router.push("/csr/dashboard")
-        break
-      case "fueler":
-        router.push("/fueler/dashboard")
-        break
     }
   }
 
@@ -215,79 +189,6 @@ export default function LoginPage() {
                       )}
                     </Button>
                   </form>
-                  {showRoleSelection && (
-                    <div className="mt-4 pt-4 border-t border-gray-700">
-                      <h3 className="text-white text-sm font-medium mb-3">Select Account Type</h3>
-                      <div className="space-y-3">
-                        <div className="flex items-center">
-                          <input
-                            type="radio"
-                            id="role-admin"
-                            name="role"
-                            className="h-4 w-4 text-primary"
-                            checked={selectedRole === "admin"}
-                            onChange={() => setSelectedRole("admin")}
-                          />
-                          <label htmlFor="role-admin" className="ml-2 text-white">
-                            Administrator
-                          </label>
-                        </div>
-                        <div className="flex items-center">
-                          <input
-                            type="radio"
-                            id="role-member"
-                            name="role"
-                            className="h-4 w-4 text-primary"
-                            checked={selectedRole === "member"}
-                            onChange={() => setSelectedRole("member")}
-                          />
-                          <label htmlFor="role-member" className="ml-2 text-white">
-                            Member
-                          </label>
-                        </div>
-                        <div className="flex items-center">
-                          <input
-                            type="radio"
-                            id="role-csr"
-                            name="role"
-                            className="h-4 w-4 text-primary"
-                            checked={selectedRole === "csr"}
-                            onChange={() => setSelectedRole("csr")}
-                          />
-                          <label htmlFor="role-csr" className="ml-2 text-white">
-                            CSR Representative
-                          </label>
-                        </div>
-                        <div className="flex items-center">
-                          <input
-                            type="radio"
-                            id="role-fueler"
-                            name="role"
-                            className="h-4 w-4 text-primary"
-                            checked={selectedRole === "fueler"}
-                            onChange={() => setSelectedRole("fueler")}
-                          />
-                          <label htmlFor="role-fueler" className="ml-2 text-white">
-                            Fueling Agent
-                          </label>
-                        </div>
-                        <Button
-                          className="w-full bg-primary hover:bg-primary/90 glow-effect mt-2"
-                          onClick={handleRoleSelection}
-                          disabled={isLoading}
-                        >
-                          {isLoading ? (
-                            <>
-                              <span className="mr-2">Logging in</span>
-                              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            </>
-                          ) : (
-                            <span className="flex items-center justify-center">Continue</span>
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
                 </CardContent>
                 <CardFooter className="flex flex-col space-y-4">
                   <div className="text-sm text-gray-300 text-center">

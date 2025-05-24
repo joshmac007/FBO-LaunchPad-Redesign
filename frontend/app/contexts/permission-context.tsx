@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
+import { fetchUserPermissions, getCurrentUser, isAuthenticated } from "@/app/services/auth-service"
 
 interface PermissionContextType {
   userPermissions: string[]
@@ -25,34 +26,33 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Simple permission loading without external dependencies
-    const loadPermissions = () => {
+    const loadPermissions = async () => {
       try {
-        const userData = localStorage.getItem("fboUser")
-        if (userData) {
-          const user = JSON.parse(userData)
-          if (user.isLoggedIn && user.email) {
-            // For admin user, give all permissions
-            if (user.email === "fbosaas@gmail.com") {
-              setUserPermissions([
-                "view_fuel_orders",
-                "create_fuel_order",
-                "update_fuel_order",
-                "delete_fuel_order",
-                "view_aircraft",
-                "create_aircraft",
-                "view_users",
-                "create_user",
-                "manage_roles",
-                "view_fuel_trucks",
-                "view_lst",
-              ])
-              setUserRoles(["Administrator"])
-            }
+        if (isAuthenticated()) {
+          const currentUser = getCurrentUser()
+          if (currentUser && currentUser.roles) {
+            setUserRoles(currentUser.roles)
+          } else {
+            setUserRoles([])
           }
+
+          try {
+            const permissions = await fetchUserPermissions()
+            setUserPermissions(permissions)
+          } catch (error) {
+            console.error("Failed to fetch user permissions:", error)
+            setUserPermissions([])
+          }
+        } else {
+          setUserPermissions([])
+          setUserRoles([])
         }
       } catch (error) {
-        console.error("Error loading permissions:", error)
+        // This catch block is for errors in isAuthenticated or getCurrentUser,
+        // or any other unexpected error within loadPermissions.
+        console.error("Error loading permissions and roles:", error)
+        setUserPermissions([])
+        setUserRoles([])
       } finally {
         setLoading(false)
       }

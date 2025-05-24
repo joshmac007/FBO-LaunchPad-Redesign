@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { getAircraftByTailNumber, type Aircraft, type AircraftLookupResult } from "../services/aircraft-service"
+import { getAircraftByTailNumber, type Aircraft } from "../services/aircraft-service" // Removed AircraftLookupResult
 
 interface AircraftLookupProps {
   onAircraftFound?: (aircraft: Aircraft) => void
@@ -23,7 +23,7 @@ export default function AircraftLookup({
   const [tailNumber, setTailNumber] = useState(initialTailNumber)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [lookupResult, setLookupResult] = useState<AircraftLookupResult | null>(null)
+  const [lookupResult, setLookupResult] = useState<Aircraft | null>(null) // Changed type to Aircraft | null
   const [lookupTriggered, setLookupTriggered] = useState(false)
 
   // Debounce the tail number input
@@ -47,11 +47,11 @@ export default function AircraftLookup({
     setIsLoading(true)
 
     try {
-      const result = await getAircraftByTailNumber(tailNumber.trim())
+      const result = await getAircraftByTailNumber(tailNumber.trim()) // result is Aircraft | null
       setLookupResult(result)
 
-      if (onAircraftFound) {
-        onAircraftFound(result.aircraft)
+      if (result && onAircraftFound) { // Check if result is not null
+        onAircraftFound(result)
       }
     } catch (err) {
       console.error("Aircraft lookup error:", err)
@@ -100,27 +100,22 @@ export default function AircraftLookup({
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    Aircraft Details
-                    {lookupResult.isNew && (
-                      <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200">
-                        New
-                      </Badge>
-                    )}
-                  </CardTitle>
-                  <CardDescription>Information retrieved from FAA registry</CardDescription>
+                  <CardTitle className="text-lg flex items-center gap-2">Aircraft Details</CardTitle>
+                  {/* Removed isNew badge as it's not part of Aircraft model */}
+                  <CardDescription>Information based on available data</CardDescription>
                 </div>
+                {/* Updated status display logic */}
                 <Badge
                   variant="outline"
                   className={
-                    lookupResult.aircraft.status === "active"
+                    lookupResult.status === "active" // Directly use lookupResult.status
                       ? "bg-green-50 text-green-600 border-green-200"
-                      : lookupResult.aircraft.status === "maintenance"
+                      : lookupResult.status === "maintenance" // Keep maintenance for now, though backend might not provide it
                         ? "bg-amber-50 text-amber-600 border-amber-200"
-                        : "bg-red-50 text-red-600 border-red-200"
+                        : "bg-red-50 text-red-600 border-red-200" // Default to inactive
                   }
                 >
-                  {lookupResult.aircraft.status.charAt(0).toUpperCase() + lookupResult.aircraft.status.slice(1)}
+                  {lookupResult.status.charAt(0).toUpperCase() + lookupResult.status.slice(1)}
                 </Badge>
               </div>
             </CardHeader>
@@ -129,37 +124,37 @@ export default function AircraftLookup({
                 <div className="space-y-3">
                   <div>
                     <div className="text-sm font-medium text-gray-500">Tail Number</div>
-                    <div className="font-medium">{lookupResult.aircraft.tailNumber}</div>
+                    <div className="font-medium">{lookupResult.tailNumber}</div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-gray-500">Aircraft Type</div>
-                    <div>{lookupResult.aircraft.type}</div>
+                    <div>{lookupResult.type}</div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-gray-500">Model</div>
-                    <div>{lookupResult.aircraft.model}</div>
+                    <div>{lookupResult.model}</div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-gray-500">Home Base</div>
-                    <div>{lookupResult.aircraft.homeBase}</div>
+                    <div>{lookupResult.homeBase}</div>
                   </div>
                 </div>
                 <div className="space-y-3">
                   <div>
                     <div className="text-sm font-medium text-gray-500">Owner</div>
-                    <div className="font-medium">{lookupResult.aircraft.owner}</div>
+                    <div className="font-medium">{lookupResult.owner}</div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-gray-500">Max Takeoff Weight (MTOW)</div>
-                    <div>{lookupResult.aircraft.mtow?.toLocaleString() || "N/A"} lbs</div>
+                    <div>{lookupResult.mtow?.toLocaleString() || "N/A"} lbs</div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-gray-500">Fuel Capacity</div>
-                    <div>{lookupResult.aircraft.fuelCapacity} gallons</div>
+                    <div>{lookupResult.fuelCapacity} gallons</div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-gray-500">Preferred Fuel Type</div>
-                    <div>{lookupResult.aircraft.preferredFuelType}</div>
+                    <div>{lookupResult.preferredFuelType}</div>
                   </div>
                 </div>
               </div>
@@ -167,9 +162,7 @@ export default function AircraftLookup({
             <CardFooter className="pt-2 text-xs text-gray-500 flex items-center gap-1">
               <Info className="h-3 w-3" />
               Last updated:{" "}
-              {lookupResult.aircraft.lastFaaSyncAt
-                ? new Date(lookupResult.aircraft.lastFaaSyncAt).toLocaleDateString()
-                : "Unknown"}
+              {lookupResult.lastFaaSyncAt ? new Date(lookupResult.lastFaaSyncAt).toLocaleDateString() : "Unknown"}
             </CardFooter>
           </Card>
         )}

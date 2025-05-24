@@ -1,91 +1,69 @@
-import { assignRoleToUser, initializePermissionSystem } from "./permission-service"
+import { API_BASE_URL, handleApiResponse } from "./api-config"
 
 export interface LoginRequest {
   email: string
   password: string
 }
 
+export interface RegistrationRequest {
+  email: string
+  password: string
+  name?: string
+  username?: string
+}
+
 export interface LoginResponse {
-  access_token: string
+  token: string
   user: {
     id: number
     email: string
-    role: string
+    username: string
+    name: string
+    roles: string[]
     is_active: boolean
+    created_at: string
+  }
+}
+
+export interface RegistrationResponse {
+  message: string
+  user: {
+    id: number
+    email: string
+    name?: string
   }
 }
 
 export async function login(credentials: LoginRequest): Promise<LoginResponse> {
   try {
-    // Initialize the permission system
-    initializePermissionSystem()
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(credentials),
+    })
 
-    // For the admin user, use the hardcoded credentials
-    if (credentials.email === "fbosaas@gmail.com" && credentials.password === "b4H6a4JJT2V*ccUCb_69") {
-      // Create a mock response
-      const response: LoginResponse = {
-        access_token: "mock_token_" + Date.now(),
-        user: {
-          id: 1,
-          email: credentials.email,
-          role: "admin",
-          is_active: true,
-        },
-      }
+    const data: LoginResponse = await handleApiResponse(response)
 
-      // Store user data in localStorage
-      localStorage.setItem(
-        "fboUser",
-        JSON.stringify({
-          ...response.user,
-          access_token: response.access_token,
-          isLoggedIn: true,
-        }),
-      )
+    // Store user data in localStorage
+    localStorage.setItem(
+      "fboUser",
+      JSON.stringify({
+        ...data.user,
+        access_token: data.token, // Store JWT as access_token
+        isLoggedIn: true,
+      }),
+    )
 
-      // Assign admin role to the user
-      assignRoleToUser(credentials.email, "admin", "system")
-
-      return response
-    }
-
-    // For other users, check in localStorage
-    const users = JSON.parse(localStorage.getItem("fboUsers") || "[]")
-    const user = users.find((u: any) => u.email === credentials.email && u.password === credentials.password)
-
-    if (user) {
-      // Create a response
-      const response: LoginResponse = {
-        access_token: "mock_token_" + Date.now(),
-        user: {
-          id: Number.parseInt(user.id),
-          email: user.email,
-          role: user.role,
-          is_active: true,
-        },
-      }
-
-      // Store user data in localStorage
-      localStorage.setItem(
-        "fboUser",
-        JSON.stringify({
-          ...response.user,
-          access_token: response.access_token,
-          isLoggedIn: true,
-          name: user.name,
-        }),
-      )
-
-      // Assign appropriate role based on user.role
-      assignRoleToUser(credentials.email, user.role, "system")
-
-      return response
-    }
-
-    throw new Error("Invalid email or password")
+    return data
   } catch (error) {
     console.error("Login error:", error)
-    throw error
+    // Rethrow the error so it can be caught by the calling component
+    if (error instanceof Error) {
+      throw new Error(`Login failed: ${error.message}`)
+    }
+    throw new Error("Login failed: An unknown error occurred")
   }
 }
 
@@ -111,4 +89,42 @@ export function getCurrentUser() {
 export function isAuthenticated() {
   const user = getCurrentUser()
   return !!user && user.isLoggedIn
+}
+
+export async function register(userData: RegistrationRequest): Promise<RegistrationResponse> {
+  const response = await fetch(`${API_BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(userData),
+  });
+  return handleApiResponse<RegistrationResponse>(response);
+}
+
+export interface UserPermissionsResponse {
+  message: string
+  permissions: string[]
+}
+
+export async function fetchUserPermissions(): Promise<string[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/me/permissions`, {
+      method: "GET",
+      headers: getAuthHeaders(), // getAuthHeaders from api-config will add Content-Type and Authorization
+    })
+
+    // Use handleApiResponse for consistent error handling and response parsing
+    const data: UserPermissionsResponse = await handleApiResponse(response)
+    return data.permissions
+  } catch (error) {
+    console.error("Error fetching user permissions:", error)
+    // Depending on how strict the error handling should be,
+    // we can throw the error or return an empty array.
+    // For now, let's rethrow to let the caller decide.
+    if (error instanceof Error) {
+      throw new Error(`Failed to fetch permissions: ${error.message}`)
+    }
+    throw new Error("Failed to fetch permissions: An unknown error occurred")
+  }
 }

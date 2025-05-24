@@ -26,86 +26,69 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { User as ServiceUser, getAllUsers, createUser, updateUser, deleteUser, UserCreateRequest, UserUpdateRequest } from "@/app/services/user-service" // Import service functions
+import { toast } from "sonner" // For notifications
 
-interface User {
-  id: string
-  name: string
-  email: string
-  role: string
-  status: "active" | "inactive"
-  lastLogin: string
-  createdAt: string
+// Temporary role mapping (string to ID)
+// In a real app, these would come from an API (e.g., /admin/roles)
+const roleStringToIdMap: Record<string, number> = {
+  admin: 1,
+  csr: 2,
+  fueler: 3,
+  manager: 4, // Assuming 'manager' role exists with ID 4
+  lst: 5, // Assuming 'lst' (Line Service Technician) role exists with ID 5
+  member: 6, // Assuming 'member' role exists with ID 6
 }
 
+// Removed roleIdToStringMap as it's unused
+
 export default function UserManagement() {
-  const [users, setUsers] = useState<User[]>([])
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
+  const [users, setUsers] = useState<ServiceUser[]>([]) // Use ServiceUser type
+  const [filteredUsers, setFilteredUsers] = useState<ServiceUser[]>([]) // Use ServiceUser type
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all") // Typed status filter
   const [roleFilter, setRoleFilter] = useState("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [selectedUser, setSelectedUser] = useState<ServiceUser | null>(null) // Use ServiceUser type
   const [showPassword, setShowPassword] = useState(false)
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false) // For form submissions
 
   const [newUser, setNewUser] = useState({
     name: "",
     email: "",
     password: "",
-    role: "csr",
-    status: "active" as const,
+    role: "csr", // This will be a string like "csr", to be mapped to role_ids
+    is_active: true, // Changed from status
   })
 
-  const roles = [
+  // This list is for display in dropdowns. The actual role IDs are handled by roleStringToIdMap.
+  const displayRoles = [
     { value: "admin", label: "Administrator" },
     { value: "csr", label: "Customer Service Representative" },
     { value: "fueler", label: "Fueling Agent" },
     { value: "manager", label: "Manager" },
     { value: "lst", label: "Line Service Technician" },
+    { value: "member", label: "Member" },
   ]
 
-  useEffect(() => {
-    // Load users from localStorage
-    const storedUsers = localStorage.getItem("fboUsers")
-    if (storedUsers) {
-      const parsedUsers = JSON.parse(storedUsers)
-      setUsers(parsedUsers)
-      setFilteredUsers(parsedUsers)
-    } else {
-      // Initialize with mock data
-      const mockUsers: User[] = [
-        {
-          id: "1",
-          name: "John Smith",
-          email: "john.smith@fbo.com",
-          role: "admin",
-          status: "active",
-          lastLogin: "2024-01-15T10:30:00Z",
-          createdAt: "2024-01-01T00:00:00Z",
-        },
-        {
-          id: "2",
-          name: "Sarah Johnson",
-          email: "sarah.johnson@fbo.com",
-          role: "csr",
-          status: "active",
-          lastLogin: "2024-01-15T09:15:00Z",
-          createdAt: "2024-01-02T00:00:00Z",
-        },
-        {
-          id: "3",
-          name: "Michael Brown",
-          email: "michael.brown@fbo.com",
-          role: "lst",
-          status: "active",
-          lastLogin: "2024-01-15T08:45:00Z",
-          createdAt: "2024-01-03T00:00:00Z",
-        },
-      ]
-      setUsers(mockUsers)
-      setFilteredUsers(mockUsers)
-      localStorage.setItem("fboUsers", JSON.stringify(mockUsers))
+  const fetchUsers = async () => {
+    setIsLoadingUsers(true)
+    try {
+      const fetchedUsers = await getAllUsers()
+      setUsers(fetchedUsers)
+      setFilteredUsers(fetchedUsers) // Initialize filteredUsers
+    } catch (error) {
+      console.error("Failed to fetch users:", error)
+      toast.error("Failed to load users. Please try again.")
+    } finally {
+      setIsLoadingUsers(false)
     }
+  }
+
+  useEffect(() => {
+    fetchUsers()
   }, [])
 
   useEffect(() => {
@@ -114,66 +97,108 @@ export default function UserManagement() {
     if (searchTerm) {
       filtered = filtered.filter(
         (user) =>
-          user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          user.email.toLowerCase().includes(searchTerm.toLowerCase()),
+          (user.name && user.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (user.username && user.username.toLowerCase().includes(searchTerm.toLowerCase())),
       )
     }
 
     if (statusFilter !== "all") {
-      filtered = filtered.filter((user) => user.status === statusFilter)
+      const isActiveFilter = statusFilter === "active"
+      filtered = filtered.filter((user) => user.is_active === isActiveFilter)
     }
 
     if (roleFilter !== "all") {
-      filtered = filtered.filter((user) => user.role === roleFilter)
+      filtered = filtered.filter((user) => user.roles.includes(roleFilter))
     }
 
     setFilteredUsers(filtered)
   }, [users, searchTerm, statusFilter, roleFilter])
 
-  const handleCreateUser = () => {
-    const user: User = {
-      id: Date.now().toString(),
-      ...newUser,
-      lastLogin: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
+  const handleCreateUser = async () => {
+    setIsSubmitting(true)
+    const roleId = roleStringToIdMap[newUser.role]
+    if (!roleId) {
+      toast.error(`Invalid role selected: ${newUser.role}. Please select a valid role.`)
+      setIsSubmitting(false)
+      return
     }
 
-    const updatedUsers = [...users, user]
-    setUsers(updatedUsers)
-    localStorage.setItem("fboUsers", JSON.stringify(updatedUsers))
+    const payload: UserCreateRequest = {
+      name: newUser.name,
+      email: newUser.email,
+      password: newUser.password,
+      role_ids: [roleId], // Temporary mapping
+      is_active: newUser.is_active,
+    }
 
-    setNewUser({
-      name: "",
-      email: "",
-      password: "",
-      role: "csr",
-      status: "active",
-    })
-    setIsCreateDialogOpen(false)
+    try {
+      await createUser(payload)
+      toast.success("User created successfully!")
+      fetchUsers() // Refresh user list
+      setNewUser({ name: "", email: "", password: "", role: "csr", is_active: true })
+      setIsCreateDialogOpen(false)
+    } catch (error: any) {
+      console.error("Failed to create user:", error)
+      toast.error(`Failed to create user: ${error.message || "Unknown error"}`)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleEditUser = () => {
+  const handleEditUser = async () => {
     if (!selectedUser) return
+    setIsSubmitting(true)
 
-    const updatedUsers = users.map((user) => (user.id === selectedUser.id ? { ...selectedUser } : user))
-    setUsers(updatedUsers)
-    localStorage.setItem("fboUsers", JSON.stringify(updatedUsers))
-    setIsEditDialogOpen(false)
-    setSelectedUser(null)
+    const roleId = roleStringToIdMap[selectedUser.roles[0]] // Assuming roles[0] is the primary role string for editing
+    if (!roleId && selectedUser.roles.length > 0) {
+      // Check if the role string exists in our map
+      toast.error(`Invalid role detected: ${selectedUser.roles[0]}. Please select a valid role.`)
+      setIsSubmitting(false)
+      return
+    }
+
+    const payload: UserUpdateRequest = {
+      name: selectedUser.name,
+      email: selectedUser.email,
+      is_active: selectedUser.is_active,
+      // Only include role_ids if a valid role was found/selected
+      ...(roleId && { role_ids: [roleId] }),
+      // Password update would be handled here if a password field is added to the edit form
+    }
+
+    try {
+      await updateUser(selectedUser.id, payload)
+      toast.success("User updated successfully!")
+      fetchUsers() // Refresh user list
+      setIsEditDialogOpen(false)
+      setSelectedUser(null)
+    } catch (error: any) {
+      console.error("Failed to update user:", error)
+      toast.error(`Failed to update user: ${error.message || "Unknown error"}`)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleDeleteUser = (userId: string) => {
-    const updatedUsers = users.filter((user) => user.id !== userId)
-    setUsers(updatedUsers)
-    localStorage.setItem("fboUsers", JSON.stringify(updatedUsers))
+  const handleDeleteUser = async (userId: number) => {
+    // Optional: Add a confirmation dialog here before deleting
+    try {
+      await deleteUser(userId)
+      toast.success("User deleted successfully!")
+      fetchUsers() // Refresh user list
+    } catch (error: any) {
+      console.error("Failed to delete user:", error)
+      toast.error(`Failed to delete user: ${error.message || "Unknown error"}`)
+    }
   }
 
-  const getRoleLabel = (role: string) => {
-    return roles.find((r) => r.value === role)?.label || role
+  const getRoleLabel = (roleValue: string) => {
+    return displayRoles.find((r) => r.value === roleValue)?.label || roleValue
   }
 
-  const getStatusColor = (status: string) => {
-    return status === "active" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+  const getStatusColor = (isActive: boolean) => {
+    return isActive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
   }
 
   return (
@@ -244,7 +269,7 @@ export default function UserManagement() {
                     <SelectValue placeholder="Select a role" />
                   </SelectTrigger>
                   <SelectContent>
-                    {roles.map((role) => (
+                    {displayRoles.map((role) => (
                       <SelectItem key={role.value} value={role.value}>
                         {role.label}
                       </SelectItem>
@@ -252,13 +277,29 @@ export default function UserManagement() {
                   </SelectContent>
                 </Select>
               </div>
+              {/* Add is_active select for create dialog */}
+              <div className="grid gap-2">
+                <Label htmlFor="status-create">Status</Label>
+                <Select
+                  value={newUser.is_active ? "active" : "inactive"}
+                  onValueChange={(value) => setNewUser({ ...newUser, is_active: value === "active" })}
+                >
+                  <SelectTrigger id="status-create">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isSubmitting}>
                 Cancel
               </Button>
-              <Button type="button" onClick={handleCreateUser}>
-                Create User
+              <Button type="button" onClick={handleCreateUser} disabled={isSubmitting}>
+                {isSubmitting ? "Creating..." : "Create User"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -284,7 +325,7 @@ export default function UserManagement() {
                 className="pl-10"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(value: "all" | "active" | "inactive") => setStatusFilter(value)}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -300,7 +341,7 @@ export default function UserManagement() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Roles</SelectItem>
-                {roles.map((role) => (
+                {displayRoles.map((role) => (
                   <SelectItem key={role.value} value={role.value}>
                     {role.label}
                   </SelectItem>
@@ -325,69 +366,94 @@ export default function UserManagement() {
             <TableHeader>
               <TableRow>
                 <TableHead>User</TableHead>
-                <TableHead>Role</TableHead>
+                <TableHead>Roles</TableHead> {/* Changed from Role */}
                 <TableHead>Status</TableHead>
-                <TableHead>Last Login</TableHead>
-                <TableHead>Created</TableHead>
+                {/* <TableHead>Last Login</TableHead>  Removed as not in new User interface */}
+                <TableHead>Created At</TableHead> {/* Changed from Created */}
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredUsers.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{user.name}</div>
-                      <div className="text-sm text-muted-foreground">{user.email}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{getRoleLabel(user.role)}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={getStatusColor(user.status)}>{user.status}</Badge>
-                  </TableCell>
-                  <TableCell>{new Date(user.lastLogin).toLocaleDateString()}</TableCell>
-                  <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setSelectedUser(user)
-                            setIsEditDialogOpen(true)
-                          }}
-                        >
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Shield className="mr-2 h-4 w-4" />
-                          Manage Roles
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteUser(user.id)}>
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+              {isLoadingUsers ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center">
+                    Loading users...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : filteredUsers.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center">
+                    No users found.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredUsers.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{user.name || user.username || "N/A"}</div>
+                        <div className="text-sm text-muted-foreground">{user.email}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {/* Display multiple roles if available */}
+                      {user.roles.map((roleStr) => (
+                        <Badge key={roleStr} variant="outline" className="mr-1 mb-1">
+                          {getRoleLabel(roleStr)}
+                        </Badge>
+                      ))}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={getStatusColor(user.is_active)}>{user.is_active ? "Active" : "Inactive"}</Badge>
+                    </TableCell>
+                    {/* <TableCell>{user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : "N/A"}</TableCell> */}
+                    <TableCell>{user.created_at ? new Date(user.created_at).toLocaleDateString() : "N/A"}</TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              // For edit, we need to map roles array back to a single string for the Select
+                              // This assumes the first role is the primary one for editing purposes.
+                              const roleForEdit = user.roles.length > 0 ? user.roles[0] : "";
+                              setSelectedUser({ ...user, roles: [roleForEdit] }); // Store as array for consistency, but Select uses first element
+                              setIsEditDialogOpen(true)
+                            }}
+                          >
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Shield className="mr-2 h-4 w-4" />
+                            Manage Roles (Future)
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem className="text-destructive hover:text-destructive-foreground hover:bg-destructive" onClick={() => handleDeleteUser(user.id)}>
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
       {/* Edit User Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <Dialog open={isEditDialogOpen} onOpenChange={(isOpen) => {
+        setIsEditDialogOpen(isOpen);
+        if (!isOpen) setSelectedUser(null); // Clear selected user when dialog closes
+      }}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
@@ -399,7 +465,7 @@ export default function UserManagement() {
                 <Label htmlFor="edit-name">Full Name</Label>
                 <Input
                   id="edit-name"
-                  value={selectedUser.name}
+                  value={selectedUser.name || ""}
                   onChange={(e) => setSelectedUser({ ...selectedUser, name: e.target.value })}
                 />
               </div>
@@ -415,14 +481,14 @@ export default function UserManagement() {
               <div className="grid gap-2">
                 <Label htmlFor="edit-role">Role</Label>
                 <Select
-                  value={selectedUser.role}
-                  onValueChange={(value) => setSelectedUser({ ...selectedUser, role: value })}
+                  value={selectedUser.roles[0] || ""} // Edit form uses the first role string
+                  onValueChange={(value) => setSelectedUser({ ...selectedUser, roles: [value] })}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select a role" />
                   </SelectTrigger>
                   <SelectContent>
-                    {roles.map((role) => (
+                    {displayRoles.map((role) => (
                       <SelectItem key={role.value} value={role.value}>
                         {role.label}
                       </SelectItem>
@@ -433,11 +499,11 @@ export default function UserManagement() {
               <div className="grid gap-2">
                 <Label htmlFor="edit-status">Status</Label>
                 <Select
-                  value={selectedUser.status}
-                  onValueChange={(value: "active" | "inactive") => setSelectedUser({ ...selectedUser, status: value })}
+                  value={selectedUser.is_active ? "active" : "inactive"}
+                  onValueChange={(value) => setSelectedUser({ ...selectedUser, is_active: value === "active" })}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select status" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="active">Active</SelectItem>
@@ -445,14 +511,15 @@ export default function UserManagement() {
                   </SelectContent>
                 </Select>
               </div>
+              {/* Optionally, add password change field here */}
             </div>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="button" onClick={handleEditUser}>
-              Save Changes
+            <Button type="button" onClick={handleEditUser} disabled={isSubmitting}>
+              {isSubmitting ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

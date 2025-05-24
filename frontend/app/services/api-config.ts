@@ -1,16 +1,12 @@
 // Base configuration for API calls
-import { isOfflineMode } from "./utils"
+// Removed: import { isOfflineMode } from "./utils"
 
 // API base URL - we'll use an environment variable
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5001/api"
 
 // Helper function to handle API responses
 export async function handleApiResponse<T>(response: Response): Promise<T> {
-  // If we're in offline mode, don't try to parse the response
-  if (isOfflineMode()) {
-    throw new Error("Cannot parse API response in offline mode")
-  }
-
+  // Removed offline mode check
   if (!response.ok) {
     // Handle HTTP error status
     const errorText = await response.text()
@@ -70,7 +66,10 @@ export async function checkApiHealth(): Promise<boolean> {
 
     return response.ok
   } catch (error) {
-    console.warn("API health check failed:", error)
+    // console.warn("API health check failed:", error) // Removed console.warn
+    // Propagate error or handle as per application strategy, for now, return false.
+    // Consider logging this as an error if health checks failing are critical.
+    // For this cleanup, just removing the warn.
     return false
   }
 }
