@@ -106,11 +106,18 @@ def update_user(user_id):
     else: # Other errors (e.g. 500)
         return jsonify({"error": "User update failed", "details": msg}), status
 
-# @admin_bp.route('/users/<int:user_id>', methods=['GET'])
-# @token_required
-# @require_permission('MANAGE_USERS')
-# def get_user(user_id):
-#     ...
+@admin_bp.route("/users/<int:user_id>", methods=["GET"])
+@token_required
+@require_permission("MANAGE_USERS")
+def get_user(user_id):
+    """Get a user by ID (admin endpoint)."""
+    user, msg, status = UserService.get_user_by_id(user_id)
+    if status == 200:
+        response_schema = UserDetailSchema()
+        return jsonify({"user": response_schema.dump(user), "message": msg}), status
+    else:
+        return jsonify({"error": msg}), status
+
 
 @admin_bp.route('/users/<int:user_id>', methods=['DELETE'])
 @token_required

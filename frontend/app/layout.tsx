@@ -2,6 +2,8 @@ import type React from "react"
 import "./globals.css"
 import type { Metadata } from "next"
 import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/toaster"
+import StagewiseToolbarWrapper from "@/components/stagewise-toolbar"
 
 export const metadata: Metadata = {
   title: "FBO LaunchPad",
@@ -24,9 +26,11 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>
+      <body suppressHydrationWarning={true}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           {children}
+          <Toaster />
+          <StagewiseToolbarWrapper />
         </ThemeProvider>
       </body>
     </html>

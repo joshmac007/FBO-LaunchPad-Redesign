@@ -4,6 +4,11 @@ import { useState } from "react"
 import { AlertTriangle, X, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
+// Props interface for the component
+interface OwnershipChangeAlertProps {
+  specificAircraftId?: number
+}
+
 // Mock data for ownership change
 const MOCK_OWNERSHIP_CHANGE = {
   id: 6,
@@ -13,7 +18,7 @@ const MOCK_OWNERSHIP_CHANGE = {
   changeDate: "2023-05-10T00:00:00Z",
 }
 
-export default function OwnershipChangeAlert() {
+export default function OwnershipChangeAlert({ specificAircraftId }: OwnershipChangeAlertProps) {
   const [dismissed, setDismissed] = useState(false)
   const [acknowledged, setAcknowledged] = useState(false)
 
@@ -21,6 +26,10 @@ export default function OwnershipChangeAlert() {
   if (acknowledged || dismissed) {
     return null
   }
+
+  // If a specific aircraft ID is provided, you could filter/check for ownership changes
+  // For now, we'll use the mock data but this could be enhanced to fetch real data
+  const relevantOwnershipChange = specificAircraftId ? MOCK_OWNERSHIP_CHANGE : MOCK_OWNERSHIP_CHANGE
 
   const handleAcknowledge = () => {
     setAcknowledged(true)
@@ -46,23 +55,23 @@ export default function OwnershipChangeAlert() {
                 </Button>
               </div>
               <p className="text-amber-800 font-medium mt-1">
-                Tail # {MOCK_OWNERSHIP_CHANGE.tailNumber} has a recent ownership change that requires verification
+                Tail # {relevantOwnershipChange.tailNumber} has a recent ownership change that requires verification
               </p>
               <div className="mt-2 bg-white bg-opacity-50 rounded-md p-3 space-y-2">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <div>
                     <span className="text-sm font-medium text-amber-800">Previous Owner:</span>{" "}
-                    <span className="text-amber-900">{MOCK_OWNERSHIP_CHANGE.previousOwner}</span>
+                    <span className="text-amber-900">{relevantOwnershipChange.previousOwner}</span>
                   </div>
                   <div>
                     <span className="text-sm font-medium text-amber-800">Current Owner:</span>{" "}
-                    <span className="text-amber-900">{MOCK_OWNERSHIP_CHANGE.currentOwner}</span>
+                    <span className="text-amber-900">{relevantOwnershipChange.currentOwner}</span>
                   </div>
                 </div>
                 <div>
                   <span className="text-sm font-medium text-amber-800">Change Date:</span>{" "}
                   <span className="text-amber-900">
-                    {new Date(MOCK_OWNERSHIP_CHANGE.changeDate).toLocaleDateString()}
+                    {new Date(relevantOwnershipChange.changeDate).toLocaleDateString()}
                   </span>
                 </div>
               </div>

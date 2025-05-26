@@ -5,6 +5,7 @@ from ..services import FuelTruckService
 from ..schemas import (
     FuelTruckListResponseSchema,
     FuelTruckCreateRequestSchema,
+    FuelTruckUpdateRequestSchema,
     FuelTruckCreateResponseSchema,
     FuelTruckSchema,
     ErrorResponseSchema
@@ -219,7 +220,7 @@ def update_fuel_truck(truck_id):
       required: true
       content:
         application/json:
-          schema: FuelTruckCreateRequestSchema  # Reuse for simplicity
+          schema: FuelTruckUpdateRequestSchema
     responses:
       200:
         description: Fuel truck updated successfully
@@ -252,7 +253,7 @@ def update_fuel_truck(truck_id):
           application/json:
             schema: ErrorResponseSchema
     """
-    schema = FuelTruckCreateRequestSchema(partial=True)
+    schema = FuelTruckUpdateRequestSchema()
     try:
         data = schema.load(request.get_json())
     except Exception as e:

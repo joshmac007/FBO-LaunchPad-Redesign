@@ -28,7 +28,7 @@ class LoginRequestSchema(Schema):
 class LoginSuccessResponseSchema(Schema):
     """Schema for successful login response"""
     token = fields.String(required=True)
-    message = fields.String(required=True)
+    user = fields.Dict(keys=fields.String(), values=fields.Raw(), required=True)
 
 class ErrorResponseSchema(Schema):
     """Schema for error responses"""

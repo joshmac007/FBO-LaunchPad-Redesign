@@ -14,7 +14,8 @@ from .fuel_order_schemas import (
 
 from .fuel_truck_schemas import (
     FuelTruckSchema, FuelTruckListResponseSchema,
-    FuelTruckCreateRequestSchema, FuelTruckCreateResponseSchema
+    FuelTruckCreateRequestSchema, FuelTruckUpdateRequestSchema,
+    FuelTruckCreateResponseSchema
 )
 
 from .admin_schemas import (
@@ -49,7 +50,7 @@ __all__ = [
     'FuelOrderBriefResponseSchema', 'FuelOrderCreateResponseSchema',
     'FuelOrderUpdateResponseSchema', 'PaginationSchema', 'FuelOrderListResponseSchema',
     'FuelTruckSchema', 'FuelTruckListResponseSchema',
-    'FuelTruckCreateRequestSchema',
+    'FuelTruckCreateRequestSchema', 'FuelTruckUpdateRequestSchema',
     'FuelTruckCreateResponseSchema',
     'UserCreateRequestSchema',
     'UserUpdateRequestSchema',

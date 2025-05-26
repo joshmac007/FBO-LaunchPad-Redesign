@@ -1,14 +1,19 @@
 // Base configuration for API calls
 // Removed: import { isOfflineMode } from "./utils"
 
-// API base URL - we'll use an environment variable
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5001/api"
+// API base URL - use Next.js proxy to avoid CORS issues
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api"
 
 // Helper function to handle API responses
 export async function handleApiResponse<T>(response: Response): Promise<T> {
-  // Removed offline mode check
+  // Handle authentication errors specially
+  if (response.status === 401) {
+    const errorText = await response.text()
+    throw new Error(`Authentication required: Please log in to access fuel orders`)
+  }
+  
   if (!response.ok) {
-    // Handle HTTP error status
+    // Handle other HTTP error statuses
     const errorText = await response.text()
     throw new Error(`API error (${response.status}): ${errorText}`)
   }
@@ -28,11 +33,11 @@ export async function handleApiResponse<T>(response: Response): Promise<T> {
 }
 
 // Helper to get auth headers
-export function getAuthHeaders() {
+export function getAuthHeaders(): Record<string, string> {
   // Get token from localStorage
   const userData = localStorage.getItem("fboUser")
   if (!userData) {
-    return {}
+    return { "Content-Type": "application/json" }
   }
 
   try {
@@ -53,23 +58,19 @@ export function getAuthHeaders() {
 // Add a function to check API health
 export async function checkApiHealth(): Promise<boolean> {
   try {
-    const response = await fetch(`${API_BASE_URL}/health`, {
-      method: "GET",
-      signal: AbortSignal.timeout(5000), // 5 second timeout
+    // Use a simple approach: try to reach the API base URL
+    // We'll do a HEAD request to minimize data transfer
+    const response = await fetch(`${API_BASE_URL}/fuel-orders`, {
+      method: "HEAD",
+      signal: AbortSignal.timeout(3000), // 3 second timeout
     })
 
-    // Check if response is JSON
-    const contentType = response.headers.get("content-type")
-    if (!contentType || !contentType.includes("application/json")) {
-      return false
-    }
-
-    return response.ok
+    // Any response (including 401, 403, 404) indicates the backend is running
+    // Only network errors or timeouts indicate the backend is down
+    return true
   } catch (error) {
-    // console.warn("API health check failed:", error) // Removed console.warn
-    // Propagate error or handle as per application strategy, for now, return false.
-    // Consider logging this as an error if health checks failing are critical.
-    // For this cleanup, just removing the warn.
+    // Network error, timeout, or backend is down
+    console.warn("API health check failed - backend may be down:", error)
     return false
   }
 }

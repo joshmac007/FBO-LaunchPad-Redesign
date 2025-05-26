@@ -29,6 +29,72 @@ This document outlines key technical aspects and architectural decisions for the
     *   All backend API interactions for primary data modules (Authentication, Users, Aircraft, Customers, Fuel Trucks) are now centralized in dedicated service files located in `frontend/app/services/`.
     *   These services (`auth-service.ts`, `user-service.ts`, `aircraft-service.ts`, `customer-service.ts`, `fuel-truck-service.ts`) encapsulate API endpoint calls, request/response handling, and data mapping.
     *   Mock data and direct `localStorage` usage for storing primary application data (like lists of users, aircraft, etc.) have been removed from these core services. Data is fetched live from the API.
+
+## Fuel Order Management Architecture (Creative Phase Decisions)
+
+### Service Layer Architecture ✅ DECIDED
+**Pattern:** Functional Service Module with Specialized Functions
+*   **Implementation:** `fuel-order-service.ts` will be refactored to use dedicated functions per backend endpoint
+*   **Structure:**
+    ```typescript
+    // Create operations
+    createFuelOrder(data: FuelOrderCreateRequest): Promise<FuelOrderResponse>
+    
+    // Read operations  
+    getFuelOrders(filters?: FuelOrderFilters): Promise<FuelOrderResponse[]>
+    getFuelOrderById(id: number): Promise<FuelOrderResponse>
+    getFuelOrderStats(): Promise<FuelOrderStats>
+    
+    // Update operations (mapped to specific endpoints)
+    updateFuelOrderStatus(id: number, status: string): Promise<FuelOrderResponse>
+    submitFuelOrderData(id: number, data: LST_CompletionData): Promise<FuelOrderResponse>
+    reviewFuelOrder(id: number, reviewData: CSR_ReviewData): Promise<FuelOrderResponse>
+    
+    // Cancel operation (replaces delete)
+    cancelFuelOrder(id: number): Promise<FuelOrderResponse>
+    ```
+*   **Benefits:** Direct mapping to backend endpoints, consistent error handling, clear function purposes
+
+### Data Synchronization Architecture ✅ DECIDED  
+**Pattern:** Dual Model Architecture with Type-Safe Mapping
+*   **Implementation:** Separate TypeScript interfaces for frontend display and backend communication
+*   **Structure:**
+    ```typescript
+    // Frontend display interface
+    interface FuelOrderDisplay {
+      id: number;
+      aircraft_id: number;        // For UI interactions
+      aircraft_tail_number: string; // Display value
+      quantity: string;           // String for form handling
+      // ... other display-optimized fields
+    }
+    
+    // Backend communication interface  
+    interface FuelOrderBackend {
+      id?: number;
+      tail_number: string;        // Backend requirement
+      requested_amount: number;   // Decimal for API
+      additive_requested?: boolean;
+      location_on_ramp?: string;
+      // ... other backend fields
+    }
+    
+    // Transformation utilities
+    function transformToBackend(display: FuelOrderDisplay): FuelOrderBackend
+    function transformToDisplay(backend: FuelOrderBackend): FuelOrderDisplay
+    ```
+*   **Benefits:** Type safety at compile time, clear data flow, validation at transformation points
+
+### UI Integration Architecture ✅ DECIDED
+**Pattern:** Component Library Enhancement with UX Improvements  
+*   **Implementation:** Enhance existing components while maintaining visual consistency
+*   **Enhancements:**
+    - Form components with new fields (additive_requested, location_on_ramp)
+    - Auto-assign dropdown options for LST/truck selection
+    - Real-time dashboard updates with loading states
+    - Enhanced error handling and user feedback
+    - Mobile-first responsive design with WCAG AA compliance
+*   **Benefits:** Faster implementation, visual consistency, improved user experience
 *   **API Configuration:**
     *   `frontend/app/services/api-config.ts` provides the `API_BASE_URL`, a helper `getAuthHeaders()` to retrieve the JWT token from `localStorage` and prepare authorization headers, and `handleApiResponse()` for consistent response parsing and error handling.
 *   **State Management & Permissions:**

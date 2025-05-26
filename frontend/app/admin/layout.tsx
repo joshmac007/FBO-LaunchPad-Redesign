@@ -27,7 +27,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         const userData = localStorage.getItem("fboUser")
         if (userData) {
           const parsedUser = JSON.parse(userData)
-          if (!parsedUser.isLoggedIn || parsedUser.role !== "admin") {
+          if (!parsedUser.isLoggedIn) {
+            router.push("/login")
+            return
+          }
+          
+          // Check if user has admin role - handle both array and string formats
+          const userRoles = parsedUser.roles || []
+          const hasAdminRole = Array.isArray(userRoles) 
+            ? userRoles.some(role => role.toLowerCase().includes("administrator") || role.toLowerCase().includes("admin"))
+            : false
+            
+          if (!hasAdminRole) {
+            console.log("User does not have admin role, redirecting to login")
             router.push("/login")
             return
           }

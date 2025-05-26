@@ -297,6 +297,7 @@ export default function CustomerManagementPage() {
               <Button onClick={handleCreateCustomerSubmit} disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isSubmitting ? "Creating..." : "Create Customer"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -453,6 +454,7 @@ export default function CustomerManagementPage() {
             <Button onClick={handleEditCustomerSubmit} disabled={isSubmitting || !editCustomerData?.id}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isSubmitting ? "Saving..." : "Save Changes"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -488,6 +490,7 @@ export default function CustomerManagementPage() {
             <Button variant="destructive" onClick={handleConfirmDelete} disabled={isDeletingCustomer}>
               {isDeletingCustomer && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isDeletingCustomer ? "Deleting..." : "Delete Customer"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

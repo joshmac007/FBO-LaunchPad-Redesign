@@ -11,7 +11,20 @@ export interface User {
   created_at?: string // Optional: ISO timestamp
 }
 
-// Response type for endpoints returning a list of users (like /admin/users/ and /users)
+// Role Interface
+export interface Role {
+  id: number
+  name: string
+  description?: string
+}
+
+// Response type for roles endpoint
+export interface RolesResponse {
+  message?: string
+  roles: Role[]
+}
+
+// Response type for endpoints returning a list of users (like /admin/users and /users)
 export interface UsersResponse {
   message: string
   users: User[] // This will be UserDetailSchema[] or UserBriefSchema[] from backend
@@ -80,7 +93,7 @@ export async function getActiveLSTs(): Promise<User[]> {
 // Admin User CRUD Functions
 
 export async function getAllUsers(filters?: { role_ids?: number[]; is_active?: string }): Promise<User[]> {
-  let url = `${API_BASE_URL}/admin/users/`
+  let url = `${API_BASE_URL}/admin/users`
   const queryParams = new URLSearchParams()
 
   if (filters?.is_active !== undefined) {
@@ -103,7 +116,7 @@ export async function getAllUsers(filters?: { role_ids?: number[]; is_active?: s
 }
 
 export async function createUser(userData: UserCreateRequest): Promise<User> {
-  const response = await fetch(`${API_BASE_URL}/admin/users/`, {
+  const response = await fetch(`${API_BASE_URL}/admin/users`, {
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify(userData),
@@ -133,6 +146,26 @@ export async function deleteUser(userId: number): Promise<{ message: string }> {
 
 export async function getUserById(userId: number): Promise<User> {
   const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  })
+  const data = await handleApiResponse<UserResponse>(response)
+  return data.user
+}
+
+// Role Management Functions
+
+export async function getRoles(): Promise<Role[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/roles`, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  })
+  const data = await handleApiResponse<RolesResponse>(response)
+  return data.roles
+}
+
+export async function getAdminUserById(userId: number): Promise<User> {
+  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
     method: "GET",
     headers: getAuthHeaders(),
   })

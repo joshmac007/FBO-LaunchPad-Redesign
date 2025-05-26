@@ -6,12 +6,14 @@ import { motion } from "framer-motion"
 import { BarChart3, Clock, CheckCircle, AlertCircle, FileText, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { getFuelOrders, getFuelOrderStats, type FuelOrderDisplay } from "@/app/services/fuel-order-service"
 
 export default function CSRDashboard() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
-  const [fuelOrders, setFuelOrders] = useState<any[]>([])
+  const [fuelOrders, setFuelOrders] = useState<FuelOrderDisplay[]>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("all")
   const [currentDate, setCurrentDate] = useState<string>("")
   const [recentReceipts, setRecentReceipts] = useState<any[]>([])
@@ -82,82 +84,14 @@ export default function CSRDashboard() {
   const loadFuelOrders = async () => {
     try {
       setOrdersLoading(true)
+      setError(null)
 
-      // Load from localStorage
-      const storedOrders = localStorage.getItem("fboFuelOrders")
-      if (storedOrders) {
-        setFuelOrders(JSON.parse(storedOrders))
-      } else {
-        // If no orders in localStorage, initialize with mock data
-        const mockOrders = [
-          {
-            id: "FO-1001",
-            tailNumber: "N12345",
-            customer: "SkyWay Airlines",
-            fuelType: "Jet A",
-            requestedQuantity: 800,
-            actualQuantity: 795,
-            status: "COMPLETED",
-            completedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-            aircraftType: "Boeing 737",
-            gate: "Gate A-12",
-            fuelerName: "Tyler Johnson",
-            notes: "Standard fueling procedure completed successfully",
-          },
-          {
-            id: "FO-1002",
-            tailNumber: "N54321",
-            customer: "Charter Express",
-            fuelType: "Jet A",
-            requestedQuantity: 500,
-            status: "IN_PROGRESS",
-            aircraftType: "Cessna Citation",
-            gate: "Gate B-3",
-            fuelerName: "Josh Davis",
-            notes: "Currently fueling - estimated completion in 30 minutes",
-          },
-          {
-            id: "FO-1003",
-            tailNumber: "N78901",
-            customer: "Private Owner",
-            fuelType: "Avgas",
-            requestedQuantity: 100,
-            status: "PENDING",
-            aircraftType: "Cirrus SR22",
-            gate: "Gate C-1",
-            notes: "Waiting for aircraft arrival",
-          },
-          {
-            id: "FO-1004",
-            tailNumber: "N45678",
-            customer: "Air Charter Services",
-            fuelType: "Jet A",
-            requestedQuantity: 750,
-            status: "PENDING",
-            aircraftType: "Gulfstream G650",
-            gate: "Gate A-8",
-            notes: "Priority customer - expedite when possible",
-          },
-          {
-            id: "FO-1005",
-            tailNumber: "N98765",
-            customer: "Mountain Air",
-            fuelType: "Jet A",
-            requestedQuantity: 650,
-            actualQuantity: 650,
-            status: "COMPLETED",
-            completedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
-            aircraftType: "Bombardier Global 6000",
-            gate: "Gate B-5",
-            fuelerName: "Josh Davis",
-            notes: "Completed without issues",
-          },
-        ]
-        localStorage.setItem("fboFuelOrders", JSON.stringify(mockOrders))
-        setFuelOrders(mockOrders)
-      }
+      // Load fuel orders from backend API
+      const orders = await getFuelOrders()
+      setFuelOrders(orders)
     } catch (error) {
       console.error("Error loading fuel orders:", error)
+      setError("Failed to load fuel orders. Please try again.")
       setFuelOrders([])
     } finally {
       setOrdersLoading(false)
@@ -190,13 +124,9 @@ export default function CSRDashboard() {
     return { pending, inProgress, completed, total: fuelOrders.length }
   }
 
-  const handleViewFuelOrderDetails = (orderId: string) => {
-    // Store the order details in localStorage for the detail page
-    const order = fuelOrders.find((o) => o.id === orderId)
-    if (order) {
-      localStorage.setItem(`fuelOrder_${orderId}`, JSON.stringify(order))
-      router.push(`/csr/fuel-orders/${orderId}`)
-    }
+  const handleViewFuelOrderDetails = (orderId: number) => {
+    // Navigate to order details page
+    router.push(`/csr/fuel-orders/${orderId}`)
   }
 
   const handleViewReceiptDetails = (receiptId: string) => {
@@ -449,6 +379,11 @@ export default function CSRDashboard() {
           </Button>
         </CardHeader>
         <CardContent>
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4">
+              <p className="text-red-500 text-sm">{error}</p>
+            </div>
+          )}
           {ordersLoading ? (
             <div className="flex justify-center items-center py-8">
               <motion.div
@@ -501,9 +436,9 @@ export default function CSRDashboard() {
                       >
                         <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-foreground">{order.id}</td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">
-                          {order.tailNumber}
+                          {order.aircraft_tail_number}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{order.customer}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{order.customer_name}</td>
                         <td className="px-4 py-3 whitespace-nowrap">{getStatusBadge(order.status)}</td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
                           <Button

@@ -1,243 +1,459 @@
 import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config"
 import { calculateFees, type FeeCalculationResult } from "./fee-service"
-import { isOfflineMode } from "./utils"
 
-// Fuel Order model
-export interface FuelOrder {
+// ===================================================================
+// TYPE DEFINITIONS - DUAL MODEL ARCHITECTURE
+// ===================================================================
+
+// Frontend Display Interface (optimized for UI interactions)
+export interface FuelOrderDisplay {
   id: number
   aircraft_id: number
+  aircraft_tail_number: string
+  aircraft_registration: string
+  quantity: string // String for form handling
+  customer_name: string
   customer_id: number
-  fuel_type: string
-  quantity: string
-  actual_quantity?: string
-  assigned_lst_id: number
-  assigned_truck_id: number
-  notes?: string
-  review_notes?: string
-  status: string
+  status: FuelOrderStatus
+  priority: 'normal' | 'high' | 'urgent'
+  csr_notes: string
+  lst_notes: string
+  additive_requested: boolean
+  location_on_ramp: string
+  assigned_lst_name: string
+  assigned_truck_name: string
   created_at: string
-  updated_at: string
+  estimated_completion: string
   completed_at?: string
   reviewed_at?: string
   fees?: FeeCalculationResult
 }
 
-// Create Fuel Order Request
-export interface CreateFuelOrderRequest {
-  aircraft_id: number
+// Backend Communication Interface (aligned with API contracts)
+export interface FuelOrderBackend {
+  id?: number
+  tail_number: string
+  requested_amount: number // Decimal for API
   customer_id: number
-  fuel_type: string
-  quantity: string
-  assigned_lst_id: number
-  assigned_truck_id: number
-  notes?: string
+  status: string
+  priority?: string
+  csr_notes?: string
+  lst_notes?: string
+  additive_requested?: boolean
+  location_on_ramp?: string
+  assigned_lst_user_id?: number // -1 for auto-assign
+  assigned_truck_id?: number // -1 for auto-assign
+  created_at?: string
+  estimated_completion_time?: string
+  completed_at?: string
+  reviewed_at?: string
 }
 
-// Get all fuel orders
-export async function getFuelOrders(): Promise<FuelOrder[]> {
-  if (isOfflineMode()) {
-    // Return mock data from localStorage
-    const storedOrders = localStorage.getItem("fboFuelOrders")
-    if (storedOrders) {
-      return JSON.parse(storedOrders)
-    }
+// Request interfaces for different operations
+export interface FuelOrderCreateRequest {
+  tail_number: string
+  requested_amount: number
+  customer_id: number
+  priority?: string
+  csr_notes?: string
+  additive_requested?: boolean
+  location_on_ramp?: string
+  assigned_lst_user_id?: number
+  assigned_truck_id?: number
+}
 
-    // If no data in localStorage, return empty array
-    return []
+export interface FuelOrderUpdateStatusRequest {
+  status: string
+  lst_notes?: string
+}
+
+export interface FuelOrderSubmitDataRequest {
+  actual_amount?: number
+  lst_notes?: string
+  completed_at?: string
+}
+
+export interface FuelOrderReviewRequest {
+  approved: boolean
+  review_notes?: string
+}
+
+// Filter options for querying fuel orders
+export interface FuelOrderFilters {
+  status?: string
+  customer_id?: number
+  priority?: string
+  start_date?: string
+  end_date?: string
+  assigned_lst_user_id?: number
+  assigned_truck_id?: number
+}
+
+// Statistics interface
+export interface FuelOrderStats {
+  active_count: number
+  in_progress_count: number
+  completed_today: number
+  pending_count: number
+  avg_completion_time: number
+  total_orders: number
+  status_distribution: Record<string, number>
+}
+
+// Status enumeration
+export type FuelOrderStatus = 
+  | 'PENDING'
+  | 'ASSIGNED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'REVIEWED'
+  | 'CANCELLED'
+
+// Lookup data interfaces for transformations
+export interface Aircraft {
+  id: number
+  registration: string
+  type: string
+}
+
+export interface User {
+  id: number
+  name: string
+}
+
+export interface FuelTruck {
+  id: number
+  name: string
+  capacity: number
+  status: string
+}
+
+// ===================================================================
+// DATA TRANSFORMATION UTILITIES
+// ===================================================================
+
+// Simple cache for lookup data with TTL
+interface CacheEntry<T> {
+  data: T
+  timestamp: number
+  ttl: number
+}
+
+const cache = new Map<string, CacheEntry<any>>()
+
+function getCachedData<T>(key: string, fetcher: () => Promise<T>, ttl: number = 300000): Promise<T> {
+  const entry = cache.get(key)
+  if (entry && (Date.now() - entry.timestamp) < entry.ttl) {
+    return Promise.resolve(entry.data)
+  }
+  
+  return fetcher().then(data => {
+    cache.set(key, { data, timestamp: Date.now(), ttl })
+    return data
+  })
+}
+
+// Aircraft lookup function
+async function getAircraftData(): Promise<Aircraft[]> {
+  return getCachedData('aircraft', async () => {
+    const response = await fetch(`${API_BASE_URL}/aircraft/`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+    const data = await handleApiResponse<{ aircraft: Aircraft[] }>(response)
+    return data.aircraft
+  })
+}
+
+// User lookup function
+async function getUserData(): Promise<User[]> {
+  return getCachedData('users', async () => {
+    const response = await fetch(`${API_BASE_URL}/users?role=LST&is_active=true`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+    const data = await handleApiResponse<{ users: User[] }>(response)
+    return data.users
+  })
+}
+
+// Fuel truck lookup function
+async function getFuelTruckData(): Promise<FuelTruck[]> {
+  return getCachedData('fuel-trucks', async () => {
+    const response = await fetch(`${API_BASE_URL}/fuel-trucks/`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+    const data = await handleApiResponse<{ fuel_trucks: FuelTruck[] }>(response)
+    return data.fuel_trucks
+  })
+}
+
+// Transform backend data to frontend display format
+export async function transformToDisplay(
+  backend: FuelOrderBackend,
+  aircraftData?: Aircraft[],
+  userData?: User[],
+  truckData?: FuelTruck[]
+): Promise<FuelOrderDisplay> {
+  // Get lookup data if not provided
+  const aircraft = aircraftData || await getAircraftData()
+  const users = userData || await getUserData()
+  const trucks = truckData || await getFuelTruckData()
+
+  // Find aircraft by tail number
+  const aircraftInfo = aircraft.find(a => a.registration === backend.tail_number)
+  if (!aircraftInfo) {
+    throw new Error(`Aircraft with tail number ${backend.tail_number} not found`)
   }
 
-  // Online mode - fetch from API
-  const response = await fetch(`${API_BASE_URL}/fuel-orders`, {
-    method: "GET",
-    headers: getAuthHeaders(),
-  })
-
-  return handleApiResponse<FuelOrder[]>(response)
-}
-
-// Get fuel order by ID
-export async function getFuelOrder(id: number): Promise<FuelOrder> {
-  if (isOfflineMode()) {
-    // Get from localStorage
-    const storedOrders = localStorage.getItem("fboFuelOrders")
-    if (!storedOrders) {
-      throw new Error("Fuel order not found")
-    }
-
-    const orders = JSON.parse(storedOrders) as FuelOrder[]
-    const order = orders.find((o) => o.id === id)
-
-    if (!order) {
-      throw new Error("Fuel order not found")
-    }
-
-    return order
+  // Helper functions for assignments
+  const getLSTNameById = (id?: number): string => {
+    if (!id || id === -1) return 'auto-assign'
+    const user = users.find(u => u.id === id)
+    return user ? user.name : `User ID: ${id}`
   }
 
-  // Online mode - fetch from API
-  const response = await fetch(`${API_BASE_URL}/fuel-orders/${id}`, {
-    method: "GET",
-    headers: getAuthHeaders(),
-  })
+  const getTruckNameById = (id?: number): string => {
+    if (!id || id === -1) return 'auto-assign'
+    const truck = trucks.find(t => t.id === id)
+    return truck ? truck.name : `Truck ID: ${id}`
+  }
 
-  return handleApiResponse<FuelOrder>(response)
+  return {
+    id: backend.id!,
+    aircraft_id: aircraftInfo.id,
+    aircraft_tail_number: backend.tail_number,
+    aircraft_registration: aircraftInfo.registration,
+    quantity: backend.requested_amount.toString(),
+    customer_id: backend.customer_id,
+    customer_name: `Customer ${backend.customer_id}`, // Will be enhanced when customer service is available
+    status: backend.status as FuelOrderStatus,
+    priority: (backend.priority as 'normal' | 'high' | 'urgent') || 'normal',
+    csr_notes: backend.csr_notes || '',
+    lst_notes: backend.lst_notes || '',
+    additive_requested: backend.additive_requested || false,
+    location_on_ramp: backend.location_on_ramp || '',
+    assigned_lst_name: getLSTNameById(backend.assigned_lst_user_id),
+    assigned_truck_name: getTruckNameById(backend.assigned_truck_id),
+    created_at: backend.created_at || '',
+    estimated_completion: backend.estimated_completion_time || '',
+    completed_at: backend.completed_at,
+    reviewed_at: backend.reviewed_at,
+  }
 }
+
+// Transform frontend display data to backend format
+export async function transformToBackend(
+  display: Partial<FuelOrderDisplay>,
+  aircraftData?: Aircraft[],
+  userData?: User[],
+  truckData?: FuelTruck[]
+): Promise<Partial<FuelOrderBackend>> {
+  // Get lookup data if not provided
+  const aircraft = aircraftData || await getAircraftData()
+  const users = userData || await getUserData()
+  const trucks = truckData || await getFuelTruckData()
+
+  // Helper functions for reverse lookups
+  const getLSTIdByName = (name: string): number => {
+    if (name === 'auto-assign') return -1
+    const user = users.find(u => u.name === name)
+    if (!user) throw new Error(`LST user with name ${name} not found`)
+    return user.id
+  }
+
+  const getTruckIdByName = (name: string): number => {
+    if (name === 'auto-assign') return -1
+    const truck = trucks.find(t => t.name === name)
+    if (!truck) throw new Error(`Fuel truck with name ${name} not found`)
+    return truck.id
+  }
+
+  const result: Partial<FuelOrderBackend> = {}
+
+  // Handle aircraft lookup if aircraft_id is provided
+  if (display.aircraft_id) {
+    const aircraftInfo = aircraft.find(a => a.id === display.aircraft_id)
+    if (!aircraftInfo) {
+      throw new Error(`Aircraft with ID ${display.aircraft_id} not found`)
+    }
+    result.tail_number = aircraftInfo.registration
+  }
+
+  // Transform other fields
+  if (display.quantity) {
+    const parsed = parseFloat(display.quantity)
+    if (isNaN(parsed) || parsed <= 0) {
+      throw new Error('Invalid quantity: must be a positive number')
+    }
+    result.requested_amount = parsed
+  }
+
+  if (display.customer_id) result.customer_id = display.customer_id
+  if (display.status) result.status = display.status
+  if (display.priority) result.priority = display.priority
+  if (display.csr_notes) result.csr_notes = display.csr_notes
+  if (display.lst_notes) result.lst_notes = display.lst_notes
+  if (display.additive_requested !== undefined) result.additive_requested = display.additive_requested
+  if (display.location_on_ramp) result.location_on_ramp = display.location_on_ramp
+
+  // Handle assignments
+  if (display.assigned_lst_name) {
+    result.assigned_lst_user_id = getLSTIdByName(display.assigned_lst_name)
+  }
+  if (display.assigned_truck_name) {
+    result.assigned_truck_id = getTruckIdByName(display.assigned_truck_name)
+  }
+
+  return result
+}
+
+// ===================================================================
+// SPECIALIZED SERVICE FUNCTIONS
+// ===================================================================
+
+/**
+ * CREATE OPERATIONS
+ */
 
 // Create a new fuel order
-export async function createFuelOrder(orderData: CreateFuelOrderRequest): Promise<FuelOrder> {
-  if (isOfflineMode()) {
-    // Create in localStorage
-    const newOrder: FuelOrder = {
-      ...orderData,
-      id: Date.now(),
-      status: "PENDING",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }
-
-    // Calculate fees
-    try {
-      const fees = await calculateFees({
-        aircraftId: orderData.aircraft_id.toString(),
-        customerId: orderData.customer_id.toString(),
-        fuelType: orderData.fuel_type,
-        quantity: Number.parseFloat(orderData.quantity),
-      })
-
-      newOrder.fees = fees
-    } catch (error) {
-      console.error("Error calculating fees:", error)
-      // Continue without fees if calculation fails
-    }
-
-    const storedOrders = localStorage.getItem("fboFuelOrders")
-    const orders = storedOrders ? (JSON.parse(storedOrders) as FuelOrder[]) : []
-
-    orders.push(newOrder)
-    localStorage.setItem("fboFuelOrders", JSON.stringify(orders))
-
-    return newOrder
-  }
-
-  // Online mode - create via API
+export async function createFuelOrder(data: FuelOrderCreateRequest): Promise<FuelOrderDisplay> {
   const response = await fetch(`${API_BASE_URL}/fuel-orders`, {
-    method: "POST",
+    method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify(orderData),
+    body: JSON.stringify(data),
   })
 
-  return handleApiResponse<FuelOrder>(response)
+  const backendOrder = await handleApiResponse<FuelOrderBackend>(response)
+  return transformToDisplay(backendOrder)
 }
 
-// Update a fuel order
-export async function updateFuelOrder(id: number, updates: Partial<FuelOrder>): Promise<FuelOrder> {
-  if (isOfflineMode()) {
-    // Update in localStorage
-    const storedOrders = localStorage.getItem("fboFuelOrders")
-    if (!storedOrders) {
-      throw new Error("Fuel order not found")
+/**
+ * READ OPERATIONS
+ */
+
+// Get all fuel orders with optional filtering
+export async function getFuelOrders(filters?: FuelOrderFilters): Promise<FuelOrderDisplay[]> {
+  let url = `${API_BASE_URL}/fuel-orders`
+  
+  if (filters) {
+    const params = new URLSearchParams()
+    if (filters.status) params.append('status', filters.status)
+    if (filters.customer_id) params.append('customer_id', filters.customer_id.toString())
+    if (filters.priority) params.append('priority', filters.priority)
+    if (filters.start_date) params.append('start_date', filters.start_date)
+    if (filters.end_date) params.append('end_date', filters.end_date)
+    if (filters.assigned_lst_user_id) params.append('assigned_lst_user_id', filters.assigned_lst_user_id.toString())
+    if (filters.assigned_truck_id) params.append('assigned_truck_id', filters.assigned_truck_id.toString())
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`
     }
-
-    const orders = JSON.parse(storedOrders) as FuelOrder[]
-    const index = orders.findIndex((o) => o.id === id)
-
-    if (index === -1) {
-      throw new Error("Fuel order not found")
-    }
-
-    const updatedOrder = {
-      ...orders[index],
-      ...updates,
-      updated_at: new Date().toISOString(),
-    }
-
-    // If status is changing to COMPLETED, add completed_at timestamp
-    if (updates.status === "COMPLETED" && orders[index].status !== "COMPLETED") {
-      updatedOrder.completed_at = new Date().toISOString()
-
-      // Recalculate fees if actual_quantity is provided
-      if (updates.actual_quantity && updates.actual_quantity !== orders[index].quantity) {
-        try {
-          const fees = await calculateFees({
-            aircraftId: updatedOrder.aircraft_id.toString(),
-            customerId: updatedOrder.customer_id.toString(),
-            fuelType: updatedOrder.fuel_type,
-            quantity: Number.parseFloat(updates.actual_quantity),
-          })
-
-          updatedOrder.fees = fees
-        } catch (error) {
-          console.error("Error recalculating fees:", error)
-          // Continue without updating fees if calculation fails
-        }
-      }
-    }
-
-    // If status is changing to REVIEWED, add reviewed_at timestamp
-    if (updates.status === "REVIEWED" && orders[index].status !== "REVIEWED") {
-      updatedOrder.reviewed_at = new Date().toISOString()
-    }
-
-    orders[index] = updatedOrder
-    localStorage.setItem("fboFuelOrders", JSON.stringify(orders))
-
-    return updatedOrder
   }
 
-  // Online mode - update via API
-  const response = await fetch(`${API_BASE_URL}/fuel-orders/${id}`, {
-    method: "PUT",
+  const response = await fetch(url, {
+    method: 'GET',
     headers: getAuthHeaders(),
-    body: JSON.stringify(updates),
   })
 
-  return handleApiResponse<FuelOrder>(response)
-}
-
-// Review a fuel order
-export async function reviewFuelOrder(id: number, reviewNotes: string): Promise<FuelOrder> {
-  return updateFuelOrder(id, {
-    status: "REVIEWED",
-    review_notes: reviewNotes,
-  })
-}
-
-// Delete a fuel order
-export async function deleteFuelOrder(id: number): Promise<boolean> {
-  if (isOfflineMode()) {
-    // Delete from localStorage
-    const storedOrders = localStorage.getItem("fboFuelOrders")
-    if (!storedOrders) {
-      return false
-    }
-
-    const orders = JSON.parse(storedOrders) as FuelOrder[]
-    const updatedOrders = orders.filter((o) => o.id !== id)
-
-    if (updatedOrders.length === orders.length) {
-      return false // No order was removed
-    }
-
-    localStorage.setItem("fboFuelOrders", JSON.stringify(updatedOrders))
-    return true
+  const data = await handleApiResponse<{ fuel_orders?: FuelOrderBackend[] }>(response)
+  
+  // Handle case where fuel_orders is undefined (e.g., auth error, empty response)
+  if (!data.fuel_orders || !Array.isArray(data.fuel_orders)) {
+    console.warn('No fuel orders returned from API:', data)
+    return []
   }
+  
+  // Transform all orders to display format
+  const transformPromises = data.fuel_orders.map(order => transformToDisplay(order))
+  return Promise.all(transformPromises)
+}
 
-  // Online mode - delete via API
+// Get a specific fuel order by ID
+export async function getFuelOrderById(id: number): Promise<FuelOrderDisplay> {
   const response = await fetch(`${API_BASE_URL}/fuel-orders/${id}`, {
-    method: "DELETE",
+    method: 'GET',
     headers: getAuthHeaders(),
   })
 
-  return response.ok
+  const backendOrder = await handleApiResponse<FuelOrderBackend>(response)
+  return transformToDisplay(backendOrder)
 }
 
-// Filter fuel orders
+// Backward compatibility alias
+export const getFuelOrder = getFuelOrderById
+
+// Get fuel order statistics
+export async function getFuelOrderStats(): Promise<FuelOrderStats> {
+  const response = await fetch(`${API_BASE_URL}/fuel-orders/stats/status-counts`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  })
+
+  return handleApiResponse<FuelOrderStats>(response)
+}
+
+/**
+ * UPDATE OPERATIONS (mapped to specific endpoints)
+ */
+
+// Update fuel order status (LST operations)
+export async function updateFuelOrderStatus(id: number, statusData: FuelOrderUpdateStatusRequest): Promise<FuelOrderDisplay> {
+  const response = await fetch(`${API_BASE_URL}/fuel-orders/${id}/status`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(statusData),
+  })
+
+  const backendOrder = await handleApiResponse<FuelOrderBackend>(response)
+  return transformToDisplay(backendOrder)
+}
+
+// Submit fuel order completion data (LST completion)
+export async function submitFuelOrderData(id: number, completionData: FuelOrderSubmitDataRequest): Promise<FuelOrderDisplay> {
+  const response = await fetch(`${API_BASE_URL}/fuel-orders/${id}/submit-data`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(completionData),
+  })
+
+  const backendOrder = await handleApiResponse<FuelOrderBackend>(response)
+  return transformToDisplay(backendOrder)
+}
+
+// Review fuel order (CSR review)
+export async function reviewFuelOrder(id: number, reviewData: FuelOrderReviewRequest): Promise<FuelOrderDisplay> {
+  const response = await fetch(`${API_BASE_URL}/fuel-orders/${id}/review`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(reviewData),
+  })
+
+  const backendOrder = await handleApiResponse<FuelOrderBackend>(response)
+  return transformToDisplay(backendOrder)
+}
+
+/**
+ * CANCEL OPERATION (replaces delete)
+ */
+
+// Cancel a fuel order (status-based cancellation)
+export async function cancelFuelOrder(id: number): Promise<FuelOrderDisplay> {
+  return updateFuelOrderStatus(id, { status: 'CANCELLED' })
+}
+
+// ===================================================================
+// UTILITY FUNCTIONS
+// ===================================================================
+
+// Filter fuel orders (client-side filtering for already fetched data)
 export function filterFuelOrders(
-  orders: FuelOrder[],
+  orders: FuelOrderDisplay[],
   startDate?: string,
   endDate?: string,
   status?: string,
-): FuelOrder[] {
+): FuelOrderDisplay[] {
   return orders.filter((order) => {
     // Filter by start date
     if (startDate && new Date(order.created_at) < new Date(startDate)) {
@@ -263,7 +479,7 @@ export function filterFuelOrders(
 }
 
 // Convert fuel orders to CSV
-export function convertFuelOrdersToCSV(orders: FuelOrder[]): string {
+export function convertFuelOrdersToCSV(orders: FuelOrderDisplay[]): string {
   if (orders.length === 0) {
     return ""
   }
@@ -271,20 +487,19 @@ export function convertFuelOrdersToCSV(orders: FuelOrder[]): string {
   // Define CSV headers
   const headers = [
     "ID",
-    "Aircraft ID",
-    "Customer ID",
-    "Fuel Type",
-    "Requested Quantity",
-    "Actual Quantity",
+    "Aircraft Registration", 
+    "Customer",
+    "Quantity (Gallons)",
     "Status",
+    "Priority",
+    "Additive Requested",
+    "Location on Ramp",
+    "Assigned LST",
+    "Assigned Truck",
     "Created At",
     "Completed At",
-    "Reviewed At",
-    "Notes",
-    "Review Notes",
-    "Subtotal",
-    "Tax",
-    "Total",
+    "CSR Notes",
+    "LST Notes",
   ]
 
   // Create CSV content
@@ -293,20 +508,19 @@ export function convertFuelOrdersToCSV(orders: FuelOrder[]): string {
     ...orders.map((order) =>
       [
         order.id,
-        order.aircraft_id,
-        order.customer_id,
-        order.fuel_type,
+        order.aircraft_registration,
+        order.customer_name,
         order.quantity,
-        order.actual_quantity || "",
         order.status,
+        order.priority,
+        order.additive_requested ? 'Yes' : 'No',
+        order.location_on_ramp ? `"${order.location_on_ramp.replace(/"/g, '""')}"` : '',
+        order.assigned_lst_name,
+        order.assigned_truck_name,
         order.created_at,
         order.completed_at || "",
-        order.reviewed_at || "",
-        order.notes ? `"${order.notes.replace(/"/g, '""')}"` : "",
-        order.review_notes ? `"${order.review_notes.replace(/"/g, '""')}"` : "",
-        order.fees?.subtotal || "",
-        order.fees?.taxAmount || "",
-        order.fees?.total || "",
+        order.csr_notes ? `"${order.csr_notes.replace(/"/g, '""')}"` : "",
+        order.lst_notes ? `"${order.lst_notes.replace(/"/g, '""')}"` : "",
       ].join(","),
     ),
   ].join("\n")
@@ -333,7 +547,7 @@ export function downloadCSV(csvContent: string, filename: string): void {
   document.body.removeChild(link)
 }
 
-// Get export URL
+// Get export URL for server-side CSV generation
 export function exportFuelOrdersUrl(startDate?: string, endDate?: string, status?: string): string {
   let url = `${API_BASE_URL}/fuel-orders/export`
   const params = new URLSearchParams()
@@ -355,4 +569,9 @@ export function exportFuelOrdersUrl(startDate?: string, endDate?: string, status
   }
 
   return url
+}
+
+// Clear cached lookup data (useful for refreshing data)
+export function clearFuelOrderCache(): void {
+  cache.clear()
 }

@@ -26,21 +26,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { User as ServiceUser, getAllUsers, createUser, updateUser, deleteUser, UserCreateRequest, UserUpdateRequest } from "@/app/services/user-service" // Import service functions
+import { User as ServiceUser, getAllUsers, createUser, updateUser, deleteUser, UserCreateRequest, UserUpdateRequest, Role, getRoles, getAdminUserById } from "@/app/services/user-service" // Import service functions
 import { toast } from "sonner" // For notifications
-
-// Temporary role mapping (string to ID)
-// In a real app, these would come from an API (e.g., /admin/roles)
-const roleStringToIdMap: Record<string, number> = {
-  admin: 1,
-  csr: 2,
-  fueler: 3,
-  manager: 4, // Assuming 'manager' role exists with ID 4
-  lst: 5, // Assuming 'lst' (Line Service Technician) role exists with ID 5
-  member: 6, // Assuming 'member' role exists with ID 6
-}
-
-// Removed roleIdToStringMap as it's unused
 
 export default function UserManagement() {
   const [users, setUsers] = useState<ServiceUser[]>([]) // Use ServiceUser type
@@ -54,24 +41,40 @@ export default function UserManagement() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoadingUsers, setIsLoadingUsers] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false) // For form submissions
+  
+  // Dynamic role management
+  const [roles, setRoles] = useState<Role[]>([])
+  const [isLoadingRoles, setIsLoadingRoles] = useState(true)
+  const [roleStringToIdMap, setRoleStringToIdMap] = useState<Record<string, number>>({})
 
   const [newUser, setNewUser] = useState({
     name: "",
     email: "",
     password: "",
-    role: "csr", // This will be a string like "csr", to be mapped to role_ids
+    role: "", // This will be a role name string, to be mapped to role_ids
     is_active: true, // Changed from status
   })
 
-  // This list is for display in dropdowns. The actual role IDs are handled by roleStringToIdMap.
-  const displayRoles = [
-    { value: "admin", label: "Administrator" },
-    { value: "csr", label: "Customer Service Representative" },
-    { value: "fueler", label: "Fueling Agent" },
-    { value: "manager", label: "Manager" },
-    { value: "lst", label: "Line Service Technician" },
-    { value: "member", label: "Member" },
-  ]
+  // Fetch roles from API and create mapping
+  const fetchRoles = async () => {
+    setIsLoadingRoles(true)
+    try {
+      const fetchedRoles = await getRoles()
+      setRoles(fetchedRoles)
+      
+      // Create mapping from role name to ID
+      const mapping: Record<string, number> = {}
+      fetchedRoles.forEach((role) => {
+        mapping[role.name.toLowerCase()] = role.id
+      })
+      setRoleStringToIdMap(mapping)
+    } catch (error) {
+      console.error("Failed to fetch roles:", error)
+      toast.error("Failed to load roles. Please try again.")
+    } finally {
+      setIsLoadingRoles(false)
+    }
+  }
 
   const fetchUsers = async () => {
     setIsLoadingUsers(true)
@@ -88,6 +91,7 @@ export default function UserManagement() {
   }
 
   useEffect(() => {
+    fetchRoles()
     fetchUsers()
   }, [])
 
@@ -109,7 +113,13 @@ export default function UserManagement() {
     }
 
     if (roleFilter !== "all") {
-      filtered = filtered.filter((user) => user.roles.includes(roleFilter))
+      filtered = filtered.filter((user) => 
+        user.roles.some(role => {
+          // Handle both string roles and role objects
+          const roleStr = typeof role === 'string' ? role : (role as any)?.name || String(role)
+          return roleStr.toLowerCase() === roleFilter.toLowerCase()
+        })
+      )
     }
 
     setFilteredUsers(filtered)
@@ -117,7 +127,7 @@ export default function UserManagement() {
 
   const handleCreateUser = async () => {
     setIsSubmitting(true)
-    const roleId = roleStringToIdMap[newUser.role]
+    const roleId = roleStringToIdMap[newUser.role.toLowerCase()]
     if (!roleId) {
       toast.error(`Invalid role selected: ${newUser.role}. Please select a valid role.`)
       setIsSubmitting(false)
@@ -128,7 +138,7 @@ export default function UserManagement() {
       name: newUser.name,
       email: newUser.email,
       password: newUser.password,
-      role_ids: [roleId], // Temporary mapping
+      role_ids: [roleId], // Use dynamic mapping
       is_active: newUser.is_active,
     }
 
@@ -136,7 +146,7 @@ export default function UserManagement() {
       await createUser(payload)
       toast.success("User created successfully!")
       fetchUsers() // Refresh user list
-      setNewUser({ name: "", email: "", password: "", role: "csr", is_active: true })
+      setNewUser({ name: "", email: "", password: "", role: "", is_active: true })
       setIsCreateDialogOpen(false)
     } catch (error: any) {
       console.error("Failed to create user:", error)
@@ -150,10 +160,14 @@ export default function UserManagement() {
     if (!selectedUser) return
     setIsSubmitting(true)
 
-    const roleId = roleStringToIdMap[selectedUser.roles[0]] // Assuming roles[0] is the primary role string for editing
+    // Extract role string from either string or object format
+    const firstRole = selectedUser.roles[0]
+    const roleString = typeof firstRole === 'string' ? firstRole : (firstRole as any)?.name || ""
+    const roleId = roleStringToIdMap[roleString.toLowerCase()]
+    
     if (!roleId && selectedUser.roles.length > 0) {
       // Check if the role string exists in our map
-      toast.error(`Invalid role detected: ${selectedUser.roles[0]}. Please select a valid role.`)
+      toast.error(`Invalid role detected: ${roleString}. Please select a valid role.`)
       setIsSubmitting(false)
       return
     }
@@ -164,7 +178,6 @@ export default function UserManagement() {
       is_active: selectedUser.is_active,
       // Only include role_ids if a valid role was found/selected
       ...(roleId && { role_ids: [roleId] }),
-      // Password update would be handled here if a password field is added to the edit form
     }
 
     try {
@@ -182,10 +195,18 @@ export default function UserManagement() {
   }
 
   const handleDeleteUser = async (userId: number) => {
-    // Optional: Add a confirmation dialog here before deleting
+    // Add confirmation dialog before deleting
+    const isConfirmed = window.confirm(
+      "Are you sure you want to delete this user? The user will be deactivated for data integrity."
+    )
+    
+    if (!isConfirmed) {
+      return
+    }
+
     try {
       await deleteUser(userId)
-      toast.success("User deleted successfully!")
+      toast.success("User has been deactivated successfully!")
       fetchUsers() // Refresh user list
     } catch (error: any) {
       console.error("Failed to delete user:", error)
@@ -193,8 +214,23 @@ export default function UserManagement() {
     }
   }
 
-  const getRoleLabel = (roleValue: string) => {
-    return displayRoles.find((r) => r.value === roleValue)?.label || roleValue
+  const getRoleDisplayName = (roleName: string) => {
+    // Handle cases where roleName is null, undefined, or empty
+    if (!roleName) {
+      return 'No Role'
+    }
+    
+    // Convert to string if it's not already (in case it's a number or other type)
+    const roleString = String(roleName)
+    
+    // If we don't have roles loaded yet, just return the role string
+    if (roles.length === 0) {
+      return roleString
+    }
+    
+    // Try to find the role in our loaded roles
+    const role = roles.find((r) => r.name.toLowerCase() === roleString.toLowerCase())
+    return role ? role.name : roleString
   }
 
   const getStatusColor = (isActive: boolean) => {
@@ -211,7 +247,7 @@ export default function UserManagement() {
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2" disabled={isLoadingRoles}>
               <UserPlus className="h-4 w-4" />
               Add User
             </Button>
@@ -264,14 +300,15 @@ export default function UserManagement() {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="role">Role</Label>
-                <Select value={newUser.role} onValueChange={(value) => setNewUser({ ...newUser, role: value })}>
+                <Select value={newUser.role} onValueChange={(value) => setNewUser({ ...newUser, role: value })} disabled={isLoadingRoles}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a role" />
+                    <SelectValue placeholder={isLoadingRoles ? "Loading roles..." : "Select a role"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {displayRoles.map((role) => (
-                      <SelectItem key={role.value} value={role.value}>
-                        {role.label}
+                    {roles.map((role) => (
+                      <SelectItem key={role.id} value={role.name}>
+                        {role.name}
+                        {role.description && <span className="text-muted-foreground text-sm"> - {role.description}</span>}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -298,7 +335,7 @@ export default function UserManagement() {
               <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isSubmitting}>
                 Cancel
               </Button>
-              <Button type="button" onClick={handleCreateUser} disabled={isSubmitting}>
+              <Button type="button" onClick={handleCreateUser} disabled={isSubmitting || isLoadingRoles}>
                 {isSubmitting ? "Creating..." : "Create User"}
               </Button>
             </DialogFooter>
@@ -335,15 +372,15 @@ export default function UserManagement() {
                 <SelectItem value="inactive">Inactive</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <Select value={roleFilter} onValueChange={setRoleFilter} disabled={isLoadingRoles}>
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by role" />
+                <SelectValue placeholder={isLoadingRoles ? "Loading..." : "Filter by role"} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Roles</SelectItem>
-                {displayRoles.map((role) => (
-                  <SelectItem key={role.value} value={role.value}>
-                    {role.label}
+                {roles.map((role) => (
+                  <SelectItem key={role.id} value={role.name}>
+                    {role.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -366,10 +403,9 @@ export default function UserManagement() {
             <TableHeader>
               <TableRow>
                 <TableHead>User</TableHead>
-                <TableHead>Roles</TableHead> {/* Changed from Role */}
+                <TableHead>Roles</TableHead>
                 <TableHead>Status</TableHead>
-                {/* <TableHead>Last Login</TableHead>  Removed as not in new User interface */}
-                <TableHead>Created At</TableHead> {/* Changed from Created */}
+                <TableHead>Created At</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -396,17 +432,19 @@ export default function UserManagement() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {/* Display multiple roles if available */}
-                      {user.roles.map((roleStr) => (
-                        <Badge key={roleStr} variant="outline" className="mr-1 mb-1">
-                          {getRoleLabel(roleStr)}
-                        </Badge>
-                      ))}
+                      {user.roles.map((role, index) => {
+                        // Handle both string roles and role objects
+                        const roleStr = typeof role === 'string' ? role : (role as any)?.name || String(role)
+                        return (
+                          <Badge key={roleStr || index} variant="outline" className="mr-1 mb-1">
+                            {getRoleDisplayName(roleStr)}
+                          </Badge>
+                        )
+                      })}
                     </TableCell>
                     <TableCell>
                       <Badge className={getStatusColor(user.is_active)}>{user.is_active ? "Active" : "Inactive"}</Badge>
                     </TableCell>
-                    {/* <TableCell>{user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : "N/A"}</TableCell> */}
                     <TableCell>{user.created_at ? new Date(user.created_at).toLocaleDateString() : "N/A"}</TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -418,12 +456,16 @@ export default function UserManagement() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuItem
-                            onClick={() => {
-                              // For edit, we need to map roles array back to a single string for the Select
-                              // This assumes the first role is the primary one for editing purposes.
-                              const roleForEdit = user.roles.length > 0 ? user.roles[0] : "";
-                              setSelectedUser({ ...user, roles: [roleForEdit] }); // Store as array for consistency, but Select uses first element
-                              setIsEditDialogOpen(true)
+                            onClick={async () => {
+                              try {
+                                // Use admin endpoint to get full user details
+                                const fullUserData = await getAdminUserById(user.id)
+                                setSelectedUser(fullUserData)
+                                setIsEditDialogOpen(true)
+                              } catch (error) {
+                                console.error("Failed to fetch user details:", error)
+                                toast.error("Failed to load user details for editing")
+                              }
                             }}
                           >
                             <Edit className="mr-2 h-4 w-4" />
@@ -481,16 +523,22 @@ export default function UserManagement() {
               <div className="grid gap-2">
                 <Label htmlFor="edit-role">Role</Label>
                 <Select
-                  value={selectedUser.roles[0] || ""} // Edit form uses the first role string
+                  value={(() => {
+                    // Handle both string roles and role objects
+                    const firstRole = selectedUser.roles[0]
+                    return typeof firstRole === 'string' ? firstRole : (firstRole as any)?.name || ""
+                  })()}
                   onValueChange={(value) => setSelectedUser({ ...selectedUser, roles: [value] })}
+                  disabled={isLoadingRoles}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a role" />
+                    <SelectValue placeholder={isLoadingRoles ? "Loading roles..." : "Select a role"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {displayRoles.map((role) => (
-                      <SelectItem key={role.value} value={role.value}>
-                        {role.label}
+                    {roles.map((role) => (
+                      <SelectItem key={role.id} value={role.name}>
+                        {role.name}
+                        {role.description && <span className="text-muted-foreground text-sm"> - {role.description}</span>}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -511,14 +559,13 @@ export default function UserManagement() {
                   </SelectContent>
                 </Select>
               </div>
-              {/* Optionally, add password change field here */}
             </div>
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="button" onClick={handleEditUser} disabled={isSubmitting}>
+            <Button type="button" onClick={handleEditUser} disabled={isSubmitting || isLoadingRoles}>
               {isSubmitting ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>

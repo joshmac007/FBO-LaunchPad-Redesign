@@ -52,6 +52,15 @@ import { toast } from "sonner"
 
 const FUEL_TYPES = ["Jet A", "Jet A-1", "Avgas 100LL", "Diesel"]
 
+type EditTruckData = {
+  id: number
+  truck_number?: string
+  fuel_type?: string
+  capacity?: number
+  current_meter_reading?: number
+  is_active?: boolean
+}
+
 export default function FuelTruckManagementPage() {
   const [trucks, setTrucks] = useState<FuelTruck[]>([])
   const [filteredTrucks, setFilteredTrucks] = useState<FuelTruck[]>([])
@@ -77,7 +86,7 @@ export default function FuelTruckManagementPage() {
     current_meter_reading: 0,
   })
 
-  const [editTruckData, setEditTruckData] = useState<Partial<FuelTruckUpdateRequest> & { id?: number }>({})
+  const [editTruckData, setEditTruckData] = useState<Partial<EditTruckData>>({})
 
   const fetchTrucks = async () => {
     setIsLoadingPage(true)
@@ -155,8 +164,7 @@ export default function FuelTruckManagementPage() {
 
     setIsSubmitting(true)
     try {
-      const payload: FuelTruckUpdateRequest = { ...editTruckData }
-      delete payload.id // Not needed for update request body
+      const { id, ...payload } = editTruckData as EditTruckData
       await updateFuelTruck(selectedTruck.id, payload)
       toast.success("Fuel truck updated successfully!")
       await fetchTrucks()
@@ -347,7 +355,19 @@ export default function FuelTruckManagementPage() {
                         <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => { setSelectedTruck(truck); setEditTruckData({ ...truck }); setIsEditDialogOpen(true); setFormError(null);}}>
+                          <DropdownMenuItem onClick={() => { 
+                            setSelectedTruck(truck); 
+                            setEditTruckData({ 
+                              id: truck.id,
+                              truck_number: truck.truck_number,
+                              fuel_type: truck.fuel_type,
+                              capacity: truck.capacity,
+                              current_meter_reading: truck.current_meter_reading,
+                              is_active: truck.is_active
+                            }); 
+                            setIsEditDialogOpen(true); 
+                            setFormError(null);
+                          }}>
                             <Edit className="mr-2 h-4 w-4" />Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem className="text-destructive hover:!text-destructive-foreground hover:!bg-destructive" onClick={() => { setSelectedTruck(truck); setIsDeleteDialogOpen(true); setFormError(null);}}>

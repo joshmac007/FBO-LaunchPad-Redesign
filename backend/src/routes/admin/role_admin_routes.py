@@ -198,15 +198,15 @@ def get_role_permissions(role_id):
           description: List of permissions assigned to the role
           content:
             application/json:
-              schema: RoleSchema
+              schema: PermissionSchema
         404:
           description: Role not found
     """
-    role, msg, status = RoleService.get_role_by_id(role_id)
-    if not role:
+    permissions, msg, status = RoleService.get_role_permissions(role_id)
+    if status != 200:
         return jsonify({"error": msg}), status
-    schema = RoleSchema()
-    return jsonify(schema.dump(role)), status
+    schema = PermissionSchema(many=True)
+    return jsonify(schema.dump(permissions)), status
 
 @admin_bp.route('/roles/<int:role_id>/permissions', methods=['POST'])
 @token_required

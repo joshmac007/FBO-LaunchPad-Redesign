@@ -108,11 +108,12 @@ class RoleService:
     def get_role_permissions(cls, role_id: int) -> Tuple[List[Permission], str, int]:
         """Get all permissions assigned to a role."""
         try:
-            role = Role.query.options(db.joinedload(Role.permissions)).get(role_id)
+            role = Role.query.get(role_id)
             if not role:
                 return [], f"Role with ID {role_id} not found", 404
             
-            permissions = list(role.permissions)
+            # Since permissions is a dynamic relationship, we need to call .all() to get the actual list
+            permissions = list(role.permissions.all())
             return permissions, "Permissions retrieved successfully", 200
         except SQLAlchemyError as e:
             return [], f"Database error: {str(e)}", 500

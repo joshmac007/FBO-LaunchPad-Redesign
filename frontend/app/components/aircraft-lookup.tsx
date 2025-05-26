@@ -11,12 +11,14 @@ import { getAircraftByTailNumber, type Aircraft } from "../services/aircraft-ser
 
 interface AircraftLookupProps {
   onAircraftFound?: (aircraft: Aircraft) => void
+  onAircraftNotFound?: (tailNumber: string) => void
   initialTailNumber?: string
   className?: string
 }
 
 export default function AircraftLookup({
   onAircraftFound,
+  onAircraftNotFound,
   initialTailNumber = "",
   className = "",
 }: AircraftLookupProps) {
@@ -52,11 +54,20 @@ export default function AircraftLookup({
 
       if (result && onAircraftFound) { // Check if result is not null
         onAircraftFound(result)
+      } else if (!result) {
+        // Aircraft not found
+        setError(`Aircraft with tail number "${tailNumber.trim()}" not found. Please verify the tail number.`)
+        if (onAircraftNotFound) {
+          onAircraftNotFound(tailNumber.trim())
+        }
       }
     } catch (err) {
       console.error("Aircraft lookup error:", err)
-      setError("Failed to find aircraft. Please verify the tail number or enter details manually.")
+      setError("Failed to find aircraft. Please verify the tail number or try again.")
       setLookupResult(null)
+      if (onAircraftNotFound) {
+        onAircraftNotFound(tailNumber.trim())
+      }
     } finally {
       setIsLoading(false)
     }

@@ -13,6 +13,7 @@ import {
   Clock,
   TrendingUp,
   Star,
+  Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,21 +39,17 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-
-interface LST {
-  id: string
-  name: string
-  email: string
-  employeeId: string
-  status: "active" | "inactive" | "on_leave"
-  shift: "day" | "night" | "swing"
-  certifications: string[]
-  performanceRating: number
-  ordersCompleted: number
-  averageTime: number // in minutes
-  lastActive: string
-  hireDate: string
-}
+import { useToast } from "@/hooks/use-toast"
+import { 
+  LST,
+  getAllLSTs,
+  createLST,
+  updateLST,
+  deleteLST,
+  getLSTStats,
+  LSTCreateRequest,
+  LSTUpdateRequest
+} from "@/app/services/lst-service"
 
 export default function LSTManagement() {
   const [lsts, setLsts] = useState<LST[]>([])
@@ -63,14 +60,24 @@ export default function LSTManagement() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [selectedLst, setSelectedLst] = useState<LST | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [stats, setStats] = useState({
+    total_lsts: 0,
+    active_lsts: 0,
+    average_performance: 0,
+    average_completion_time: 0,
+  })
 
-  const [newLst, setNewLst] = useState({
+  const { toast } = useToast()
+
+  const [newLst, setNewLst] = useState<LSTCreateRequest>({
     name: "",
     email: "",
-    employeeId: "",
-    status: "active" as const,
-    shift: "day" as const,
-    certifications: [] as string[],
+    employee_id: "",
+    shift: "day",
+    certifications: [],
+    password: "",
   })
 
   const shifts = [
@@ -90,63 +97,31 @@ export default function LSTManagement() {
     "Environmental Safety",
   ]
 
-  useEffect(() => {
-    // Load LSTs from localStorage
-    const storedLsts = localStorage.getItem("fboLSTs")
-    if (storedLsts) {
-      const parsedLsts = JSON.parse(storedLsts)
-      setLsts(parsedLsts)
-      setFilteredLsts(parsedLsts)
-    } else {
-      // Initialize with mock data
-      const mockLsts: LST[] = [
-        {
-          id: "1",
-          name: "John Smith",
-          email: "john.smith@fbo.com",
-          employeeId: "LST001",
-          status: "active",
-          shift: "day",
-          certifications: ["Fuel Safety", "Aircraft Ground Support", "First Aid/CPR"],
-          performanceRating: 4.8,
-          ordersCompleted: 156,
-          averageTime: 18,
-          lastActive: "2024-01-15T10:30:00Z",
-          hireDate: "2023-06-01T00:00:00Z",
-        },
-        {
-          id: "2",
-          name: "Sarah Johnson",
-          email: "sarah.johnson@fbo.com",
-          employeeId: "LST002",
-          status: "active",
-          shift: "swing",
-          certifications: ["Fuel Safety", "Hazmat Handling", "Equipment Operation"],
-          performanceRating: 4.6,
-          ordersCompleted: 142,
-          averageTime: 20,
-          lastActive: "2024-01-15T09:15:00Z",
-          hireDate: "2023-08-15T00:00:00Z",
-        },
-        {
-          id: "3",
-          name: "Michael Brown",
-          email: "michael.brown@fbo.com",
-          employeeId: "LST003",
-          status: "active",
-          shift: "night",
-          certifications: ["Fuel Safety", "Fire Safety", "Quality Control"],
-          performanceRating: 4.9,
-          ordersCompleted: 98,
-          averageTime: 16,
-          lastActive: "2024-01-15T08:45:00Z",
-          hireDate: "2023-04-10T00:00:00Z",
-        },
-      ]
-      setLsts(mockLsts)
-      setFilteredLsts(mockLsts)
-      localStorage.setItem("fboLSTs", JSON.stringify(mockLsts))
+  // Load LSTs and stats from backend
+  const loadData = async () => {
+    try {
+      setIsLoading(true)
+      const [lstsData, statsData] = await Promise.all([
+        getAllLSTs(),
+        getLSTStats(),
+      ])
+      setLsts(lstsData)
+      setFilteredLsts(lstsData)
+      setStats(statsData)
+    } catch (error) {
+      console.error("Error loading LST data:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load LST data. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
     }
+  }
+
+  useEffect(() => {
+    loadData()
   }, [])
 
   useEffect(() => {
@@ -172,46 +147,98 @@ export default function LSTManagement() {
     setFilteredLsts(filtered)
   }, [lsts, searchTerm, statusFilter, shiftFilter])
 
-  const handleCreateLst = () => {
-    const lst: LST = {
-      id: Date.now().toString(),
-      ...newLst,
-      performanceRating: 0,
-      ordersCompleted: 0,
-      averageTime: 0,
-      lastActive: new Date().toISOString(),
-      hireDate: new Date().toISOString(),
+  const handleCreateLst = async () => {
+    try {
+      setIsSaving(true)
+      const createdLst = await createLST(newLst)
+      
+      // Refresh the data after creation
+      await loadData()
+
+      setNewLst({
+        name: "",
+        email: "",
+        employee_id: "",
+        shift: "day",
+        certifications: [],
+        password: "",
+      })
+      setIsCreateDialogOpen(false)
+      
+      toast({
+        title: "Success",
+        description: "LST created successfully.",
+      })
+    } catch (error) {
+      console.error("Error creating LST:", error)
+      toast({
+        title: "Error",
+        description: "Failed to create LST. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
     }
-
-    const updatedLsts = [...lsts, lst]
-    setLsts(updatedLsts)
-    localStorage.setItem("fboLSTs", JSON.stringify(updatedLsts))
-
-    setNewLst({
-      name: "",
-      email: "",
-      employeeId: "",
-      status: "active",
-      shift: "day",
-      certifications: [],
-    })
-    setIsCreateDialogOpen(false)
   }
 
-  const handleEditLst = () => {
+  const handleEditLst = async () => {
     if (!selectedLst) return
 
-    const updatedLsts = lsts.map((lst) => (lst.id === selectedLst.id ? { ...selectedLst } : lst))
-    setLsts(updatedLsts)
-    localStorage.setItem("fboLSTs", JSON.stringify(updatedLsts))
-    setIsEditDialogOpen(false)
-    setSelectedLst(null)
+    try {
+      setIsSaving(true)
+      
+      const updateData: LSTUpdateRequest = {
+        name: selectedLst.name,
+        email: selectedLst.email,
+        employee_id: selectedLst.employeeId,
+        status: selectedLst.status,
+        shift: selectedLst.shift,
+        certifications: selectedLst.certifications,
+      }
+      
+      await updateLST(selectedLst.id, updateData)
+      
+      // Refresh the data after update
+      await loadData()
+      
+      setIsEditDialogOpen(false)
+      setSelectedLst(null)
+      
+      toast({
+        title: "Success",
+        description: "LST updated successfully.",
+      })
+    } catch (error) {
+      console.error("Error updating LST:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update LST. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const handleDeleteLst = (lstId: string) => {
-    const updatedLsts = lsts.filter((lst) => lst.id !== lstId)
-    setLsts(updatedLsts)
-    localStorage.setItem("fboLSTs", JSON.stringify(updatedLsts))
+  const handleDeleteLst = async (lstId: string) => {
+    try {
+      await deleteLST(lstId)
+      
+      // Refresh the data after deletion
+      await loadData()
+      
+      toast({
+        title: "Success",
+        description: "LST deleted successfully.",
+      })
+    } catch (error) {
+      console.error("Error deleting LST:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete LST. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   const getStatusColor = (status: string) => {
@@ -240,7 +267,8 @@ export default function LSTManagement() {
     }
   }
 
-  const getPerformanceColor = (rating: number) => {
+  const getPerformanceColor = (rating: number | undefined | null) => {
+    if (!rating || typeof rating !== 'number') return "text-gray-400"
     if (rating >= 4.5) return "text-green-600"
     if (rating >= 4.0) return "text-yellow-600"
     return "text-red-600"
@@ -287,11 +315,21 @@ export default function LSTManagement() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="employeeId">Employee ID</Label>
+                <Label htmlFor="password">Password</Label>
                 <Input
-                  id="employeeId"
-                  value={newLst.employeeId}
-                  onChange={(e) => setNewLst({ ...newLst, employeeId: e.target.value })}
+                  id="password"
+                  type="password"
+                  value={newLst.password || ""}
+                  onChange={(e) => setNewLst({ ...newLst, password: e.target.value })}
+                  placeholder="Enter password for the LST account"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="employee_id">Employee ID</Label>
+                <Input
+                  id="employee_id"
+                  value={newLst.employee_id}
+                  onChange={(e) => setNewLst({ ...newLst, employee_id: e.target.value })}
                   placeholder="LST001"
                 />
               </div>
@@ -318,7 +356,8 @@ export default function LSTManagement() {
               <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button type="button" onClick={handleCreateLst}>
+              <Button type="button" onClick={handleCreateLst} disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 Add LST
               </Button>
             </DialogFooter>
@@ -334,7 +373,9 @@ export default function LSTManagement() {
             <UserCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{lsts.length}</div>
+            <div className="text-2xl font-bold">
+              {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : stats.total_lsts ?? 0}
+            </div>
           </CardContent>
         </Card>
 
@@ -344,7 +385,9 @@ export default function LSTManagement() {
             <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{lsts.filter((lst) => lst.status === "active").length}</div>
+            <div className="text-2xl font-bold">
+              {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : stats.active_lsts ?? 0}
+            </div>
           </CardContent>
         </Card>
 
@@ -355,9 +398,7 @@ export default function LSTManagement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {lsts.length > 0
-                ? (lsts.reduce((acc, lst) => acc + lst.performanceRating, 0) / lsts.length).toFixed(1)
-                : "0.0"}
+              {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : (stats.average_performance ?? 0).toFixed(1)}
             </div>
           </CardContent>
         </Card>
@@ -369,7 +410,7 @@ export default function LSTManagement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {lsts.length > 0 ? Math.round(lsts.reduce((acc, lst) => acc + lst.averageTime, 0) / lsts.length) : 0}m
+              {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : Math.round(stats.average_completion_time ?? 0)}m
             </div>
           </CardContent>
         </Card>
@@ -444,7 +485,21 @@ export default function LSTManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredLsts.map((lst) => (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                    <p className="mt-2 text-muted-foreground">Loading LSTs...</p>
+                  </TableCell>
+                </TableRow>
+              ) : filteredLsts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8">
+                    <p className="text-muted-foreground">No LSTs found</p>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredLsts.map((lst) => (
                 <TableRow key={lst.id}>
                   <TableCell>
                     <div>
@@ -462,12 +517,12 @@ export default function LSTManagement() {
                     <div className="flex items-center gap-2">
                       <Star className={`h-4 w-4 ${getPerformanceColor(lst.performanceRating)}`} />
                       <span className={getPerformanceColor(lst.performanceRating)}>
-                        {lst.performanceRating.toFixed(1)}
+                        {lst.performanceRating ? lst.performanceRating.toFixed(1) : 'N/A'}
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell>{lst.ordersCompleted}</TableCell>
-                  <TableCell>{lst.averageTime}m</TableCell>
+                  <TableCell>{lst.ordersCompleted ?? 0}</TableCell>
+                  <TableCell>{lst.averageTime ?? 0}m</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {lst.certifications.slice(0, 2).map((cert) => (
@@ -517,7 +572,8 @@ export default function LSTManagement() {
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -599,7 +655,8 @@ export default function LSTManagement() {
             <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" onClick={handleEditLst}>
+            <Button type="button" onClick={handleEditLst} disabled={isSaving}>
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Save Changes
             </Button>
           </DialogFooter>

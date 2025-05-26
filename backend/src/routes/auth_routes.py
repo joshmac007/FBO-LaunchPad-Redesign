@@ -174,10 +174,21 @@ def login():
             }
         )
         
-        # Generate response
+        # Construct user payload for the response, ensuring roles is a list of strings
+        # and created_at is an ISO formatted string, to match frontend expectations.
+        user_payload_for_response = {
+            'id': user.id,
+            'email': user.email,
+            'username': user.username,
+            'name': user.name,
+            'roles': [role.name for role in user.roles], # Ensure roles is a list of strings
+            'is_active': user.is_active,
+            'created_at': user.created_at.isoformat() if user.created_at else None
+        }
+        
         response_schema = LoginSuccessResponseSchema()
         return response_schema.dump({
-            'user': user.to_dict(),
+            'user': user_payload_for_response,
             'token': access_token
         }), 200
         

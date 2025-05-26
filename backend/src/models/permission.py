@@ -8,6 +8,7 @@ class Permission(db.Model):
     id = db.Column(Integer, primary_key=True)
     name = db.Column(String(100), unique=True, nullable=False, index=True)
     description = db.Column(Text, nullable=True)
+    category = db.Column(String(50), nullable=True, default='system')
     created_at = db.Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

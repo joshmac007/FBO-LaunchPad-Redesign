@@ -5,33 +5,45 @@ from sqlalchemy import text
 
 # --- Data Definitions ---
 all_permissions = [
-    {'name': 'CREATE_ORDER', 'description': 'Allows creating new fuel orders'},
-    {'name': 'VIEW_ASSIGNED_ORDERS', 'description': 'Allows viewing orders assigned to self'},
-    {'name': 'VIEW_ALL_ORDERS', 'description': 'Allows viewing all fuel orders'},
-    {'name': 'UPDATE_OWN_ORDER_STATUS', 'description': 'Allows LST to update status of own orders'},
-    {'name': 'COMPLETE_OWN_ORDER', 'description': 'Allows LST to complete own orders'},
-    {'name': 'REVIEW_ORDERS', 'description': 'Allows CSR/Admin to mark orders as reviewed'},
-    {'name': 'EXPORT_ORDERS_CSV', 'description': 'Allows exporting order data to CSV'},
-    {'name': 'VIEW_ORDER_STATS', 'description': 'Allows viewing order statistics'},
-    {'name': 'EDIT_FUEL_ORDER', 'description': 'Allows editing fuel order details'},
-    {'name': 'DELETE_FUEL_ORDER', 'description': 'Allows deleting fuel orders'},
-    {'name': 'VIEW_USERS', 'description': 'Allows viewing user list'},
-    {'name': 'MANAGE_USERS', 'description': 'Allows creating, updating, deleting users and assigning roles'},
-    {'name': 'VIEW_TRUCKS', 'description': 'Allows viewing fuel truck list'},
-    {'name': 'MANAGE_TRUCKS', 'description': 'Allows creating, updating, deleting fuel trucks'},
-    {'name': 'VIEW_AIRCRAFT', 'description': 'Allows viewing aircraft list'},
-    {'name': 'MANAGE_AIRCRAFT', 'description': 'Allows creating, updating, deleting aircraft'},
-    {'name': 'VIEW_CUSTOMERS', 'description': 'Allows viewing customer list'},
-    {'name': 'MANAGE_CUSTOMERS', 'description': 'Allows creating, updating, deleting customers'},
-    {'name': 'MANAGE_ROLES', 'description': 'Allows managing roles and their permissions'},
-    {'name': 'VIEW_PERMISSIONS', 'description': 'Allows viewing available system permissions'},
-    {'name': 'MANAGE_SETTINGS', 'description': 'Allows managing global application settings'},
+    # Fuel Orders
+    {'name': 'CREATE_ORDER', 'description': 'Allows creating new fuel orders', 'category': 'fuel_orders'},
+    {'name': 'VIEW_ASSIGNED_ORDERS', 'description': 'Allows viewing orders assigned to self', 'category': 'fuel_orders'},
+    {'name': 'VIEW_ALL_ORDERS', 'description': 'Allows viewing all fuel orders', 'category': 'fuel_orders'},
+    {'name': 'UPDATE_OWN_ORDER_STATUS', 'description': 'Allows LST to update status of own orders', 'category': 'fuel_orders'},
+    {'name': 'COMPLETE_OWN_ORDER', 'description': 'Allows LST to complete own orders', 'category': 'fuel_orders'},
+    {'name': 'REVIEW_ORDERS', 'description': 'Allows CSR/Admin to mark orders as reviewed', 'category': 'fuel_orders'},
+    {'name': 'EXPORT_ORDERS_CSV', 'description': 'Allows exporting order data to CSV', 'category': 'fuel_orders'},
+    {'name': 'VIEW_ORDER_STATS', 'description': 'Allows viewing order statistics', 'category': 'fuel_orders'},
+    {'name': 'EDIT_FUEL_ORDER', 'description': 'Allows editing fuel order details', 'category': 'fuel_orders'},
+    {'name': 'DELETE_FUEL_ORDER', 'description': 'Allows deleting fuel orders', 'category': 'fuel_orders'},
+    
+    # Users
+    {'name': 'VIEW_USERS', 'description': 'Allows viewing user list', 'category': 'users'},
+    {'name': 'MANAGE_USERS', 'description': 'Allows creating, updating, deleting users and assigning roles', 'category': 'users'},
+    
+    # Fuel Trucks
+    {'name': 'VIEW_TRUCKS', 'description': 'Allows viewing fuel truck list', 'category': 'fuel_trucks'},
+    {'name': 'MANAGE_TRUCKS', 'description': 'Allows creating, updating, deleting fuel trucks', 'category': 'fuel_trucks'},
+    
+    # Aircraft
+    {'name': 'VIEW_AIRCRAFT', 'description': 'Allows viewing aircraft list', 'category': 'aircraft'},
+    {'name': 'MANAGE_AIRCRAFT', 'description': 'Allows creating, updating, deleting aircraft', 'category': 'aircraft'},
+    
+    # Customers
+    {'name': 'VIEW_CUSTOMERS', 'description': 'Allows viewing customer list', 'category': 'customers'},
+    {'name': 'MANAGE_CUSTOMERS', 'description': 'Allows creating, updating, deleting customers', 'category': 'customers'},
+    
+    # System
+    {'name': 'MANAGE_ROLES', 'description': 'Allows managing roles and their permissions', 'category': 'system'},
+    {'name': 'VIEW_PERMISSIONS', 'description': 'Allows viewing available system permissions', 'category': 'system'},
+    {'name': 'MANAGE_SETTINGS', 'description': 'Allows managing global application settings', 'category': 'system'},
 ]
 
 default_roles = [
     {"name": "System Administrator", "description": "Full system access"},
     {"name": "Customer Service Representative", "description": "Handles customer orders and assignments"},
     {"name": "Line Service Technician", "description": "Executes fuel orders and updates status"},
+    {"name": "Member", "description": "Basic member with limited view access"},
 ]
 
 role_permission_mapping = {
@@ -47,6 +59,9 @@ role_permission_mapping = {
         'CREATE_ORDER',
         'VIEW_ASSIGNED_ORDERS', 'UPDATE_OWN_ORDER_STATUS', 'COMPLETE_OWN_ORDER',
         'VIEW_ORDER_STATS'
+    ],
+    'Member': [
+        'VIEW_ORDER_STATS', 'VIEW_CUSTOMERS', 'VIEW_AIRCRAFT'
     ]
 }
 
@@ -66,7 +81,7 @@ def seed_data():
 
         # Seed Permissions
         print("Seeding Permissions...")
-        permission_objects = [Permission(name=p['name'], description=p.get('description')) for p in all_permissions]
+        permission_objects = [Permission(name=p['name'], description=p.get('description'), category=p.get('category', 'system')) for p in all_permissions]
         db.session.add_all(permission_objects)
         db.session.commit()
         print(f"Seeded {len(permission_objects)} permissions.")
@@ -94,28 +109,63 @@ def seed_data():
         db.session.commit()
         print(f"Assigned {assignments_count} permissions to roles.")
 
-        # Create Default Admin User
-        print("Creating Default Admin User...")
-        admin_email = 'admin@fbolaunchpad.com'
-        admin_pass = 'Admin123!'
-        if not User.query.filter_by(email=admin_email).first():
-            admin_role = role_map.get('System Administrator')
-            if admin_role:
-                admin_user = User(
-                    email=admin_email,
-                    username='admin',
-                    name='Admin User',
-                    is_active=True
-                )
-                admin_user.set_password(admin_pass)
-                admin_user.roles.append(admin_role)
-                db.session.add(admin_user)
-                db.session.commit()
-                print(f"Default Admin User '{admin_email}' created.")
+        # Create Default Users
+        print("Creating Default Users...")
+        default_users = [
+            {
+                'email': 'admin@fbolaunchpad.com',
+                'username': 'admin',
+                'name': 'Admin User',
+                'password': 'Admin123!',
+                'role': 'System Administrator'
+            },
+            {
+                'email': 'csr@fbolaunchpad.com',
+                'username': 'csr',
+                'name': 'CSR User',
+                'password': 'CSR123!',
+                'role': 'Customer Service Representative'
+            },
+            {
+                'email': 'fueler@fbolaunchpad.com',
+                'username': 'fueler',
+                'name': 'Fueler User',
+                'password': 'Fueler123!',
+                'role': 'Line Service Technician'
+            },
+            {
+                'email': 'member@fbolaunchpad.com',
+                'username': 'member',
+                'name': 'Member User',
+                'password': 'Member123!',
+                'role': 'Member'
+            }
+        ]
+
+        users_created = 0
+        for user_data in default_users:
+            if not User.query.filter_by(email=user_data['email']).first():
+                user_role = role_map.get(user_data['role'])
+                if user_role:
+                    user = User(
+                        email=user_data['email'],
+                        username=user_data['username'],
+                        name=user_data['name'],
+                        is_active=True
+                    )
+                    user.set_password(user_data['password'])
+                    user.roles.append(user_role)
+                    db.session.add(user)
+                    users_created += 1
+                    print(f"Default User '{user_data['email']}' with role '{user_data['role']}' created.")
+                else:
+                    print(f"ERROR: '{user_data['role']}' role not found. Cannot create user '{user_data['email']}'.")
             else:
-                print("ERROR: 'System Administrator' role not found. Cannot create admin user.")
-        else:
-            print(f"Admin user '{admin_email}' already exists.")
+                print(f"User '{user_data['email']}' already exists.")
+
+        if users_created > 0:
+            db.session.commit()
+            print(f"Successfully created {users_created} default users.")
 
         print("Database seeding completed successfully.")
     except Exception as e:

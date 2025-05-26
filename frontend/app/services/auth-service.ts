@@ -1,4 +1,4 @@
-import { API_BASE_URL, handleApiResponse } from "./api-config"
+import { API_BASE_URL, handleApiResponse, getAuthHeaders } from "./api-config"
 
 export interface LoginRequest {
   email: string

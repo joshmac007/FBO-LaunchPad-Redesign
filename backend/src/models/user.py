@@ -30,6 +30,17 @@ class User(db.Model):
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # LST-specific fields
+    employee_id = db.Column(db.String(20), nullable=True, unique=True, index=True)
+    status = db.Column(db.String(20), nullable=True, default='active', index=True)
+    shift = db.Column(db.String(20), nullable=True)
+    certifications = db.Column(db.JSON, nullable=True)
+    performance_rating = db.Column(db.Float, nullable=True)
+    orders_completed = db.Column(db.Integer, nullable=True, default=0)
+    average_time = db.Column(db.Float, nullable=True)
+    last_active = db.Column(db.DateTime, nullable=True)
+    hire_date = db.Column(db.DateTime, nullable=True)
     roles = db.relationship(
         'Role',
         secondary=user_roles,
@@ -45,7 +56,7 @@ class User(db.Model):
 
     def to_dict(self):
         """Convert user object to dictionary."""
-        return {
+        result = {
             'id': self.id,
             'username': self.username,
             'email': self.email,
@@ -54,6 +65,28 @@ class User(db.Model):
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat()
         }
+        
+        # Add LST-specific fields if they exist
+        if self.employee_id is not None:
+            result['employee_id'] = self.employee_id
+        if self.status is not None:
+            result['status'] = self.status
+        if self.shift is not None:
+            result['shift'] = self.shift
+        if self.certifications is not None:
+            result['certifications'] = self.certifications
+        if self.performance_rating is not None:
+            result['performance_rating'] = self.performance_rating
+        if self.orders_completed is not None:
+            result['orders_completed'] = self.orders_completed
+        if self.average_time is not None:
+            result['average_time'] = self.average_time
+        if self.last_active is not None:
+            result['last_active'] = self.last_active.isoformat()
+        if self.hire_date is not None:
+            result['hire_date'] = self.hire_date.isoformat()
+            
+        return result
 
     @property
     def role_list(self):

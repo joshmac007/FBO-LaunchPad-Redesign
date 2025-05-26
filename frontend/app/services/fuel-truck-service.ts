@@ -100,3 +100,8 @@ export async function deleteFuelTruck(truckId: number): Promise<{ message: strin
   })
   return handleApiResponse<{ message: string }>(response)
 }
+
+// Get only active fuel trucks
+export async function getActiveFuelTrucks(): Promise<FuelTruck[]> {
+  return getAllFuelTrucks({ is_active: 'true' })
+}
