@@ -1,21 +1,30 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 import csv
 import io
+from typing import List, Dict, Any, Optional, Tuple
+from sqlalchemy import and_, or_, desc, asc
+from sqlalchemy.orm import joinedload
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from src.models import (
-    FuelOrder,
-    FuelOrderStatus,
-    Aircraft,
+    FuelOrder, 
+    FuelOrderStatus, 
+    Aircraft, 
     User,
-    UserRole,
     FuelTruck,
-    Customer
+    Customer,
+    Permission,
+    PermissionGroup,
+    UserPermission
 )
+from src.models.user_permission_group import UserPermissionGroup
 from src.extensions import db
+from src.services.aircraft_service import AircraftService
 from flask import current_app
-from typing import Optional, Tuple, List, Dict, Any, Union
 import logging
 import traceback
+
+logger = logging.getLogger(__name__)
 
 class FuelOrderService:
     @classmethod
@@ -116,7 +125,7 @@ class FuelOrderService:
 
         # --- LST Assignment Logic ---
         if assigned_lst_user_id == -1:
-            active_lsts = User.query.filter(User.role == UserRole.LST, User.is_active == True).all()
+            active_lsts = FuelOrderService.get_active_lsts()
             if not active_lsts:
                 return None, "No available LST found for auto-assignment.", 400, aircraft_created_this_request
             min_count = None
@@ -141,9 +150,9 @@ class FuelOrderService:
             assigned_lst_user_id = chosen_lst.id
             # order_data['assigned_lst_user_id'] = assigned_lst_user_id # Not needed if using var directly
         else:
-            lst_user = User.query.filter_by(id=assigned_lst_user_id, role=UserRole.LST, is_active=True).first()
+            lst_user, error = FuelOrderService.validate_lst_assignment(assigned_lst_user_id)
             if not lst_user:
-                return None, f"Assigned LST user {assigned_lst_user_id} does not exist, is not active, or is not an LST.", 400, aircraft_created_this_request
+                return None, error, 400, aircraft_created_this_request
 
         # --- Truck Validation ---
         # Assuming truck validation logic exists here or is part of route handler.
@@ -204,11 +213,17 @@ class FuelOrderService:
         """
         Retrieve paginated fuel orders based on user PBAC and optional filters.
         PBAC: If user lacks 'VIEW_ALL_ORDERS', only show orders assigned to them.
+        Optimized with eager loading for denormalized fields.
         """
         logger = logging.getLogger(__name__)
         try:
             logger.info(f"[FuelOrderService.get_fuel_orders] User: {getattr(current_user, 'id', None)} | Filters: {filters}")
-            query = FuelOrder.query
+            
+            # Use eager loading for optimization of denormalized fields
+            query = FuelOrder.query.options(
+                joinedload(FuelOrder.assigned_lst_user),
+                joinedload(FuelOrder.assigned_truck)
+            )
 
             # PBAC: Only show all orders if user has permission
             if not current_user.has_permission('VIEW_ALL_ORDERS'):
@@ -224,11 +239,54 @@ class FuelOrderService:
                         query = query.filter(FuelOrder.status == status_enum)
                     except KeyError:
                         return None, f"Invalid status value provided: {status_filter}"
-                # TODO: Add other filters here
+                
+                # Add additional filter implementations
+                customer_id = filters.get('customer_id')
+                if customer_id:
+                    try:
+                        query = query.filter(FuelOrder.customer_id == int(customer_id))
+                    except (ValueError, TypeError):
+                        return None, f"Invalid customer_id value provided: {customer_id}"
+                
+                priority = filters.get('priority')
+                if priority:
+                    # Note: Priority field would need to be added to FuelOrder model
+                    # For now, skip this filter
+                    pass
+                
+                start_date = filters.get('start_date')
+                if start_date:
+                    try:
+                        start_datetime = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                        query = query.filter(FuelOrder.created_at >= start_datetime)
+                    except ValueError:
+                        return None, f"Invalid start_date format provided: {start_date}"
+                
+                end_date = filters.get('end_date')
+                if end_date:
+                    try:
+                        end_datetime = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                        query = query.filter(FuelOrder.created_at <= end_datetime)
+                    except ValueError:
+                        return None, f"Invalid end_date format provided: {end_date}"
+                
+                assigned_lst_user_id = filters.get('assigned_lst_user_id')
+                if assigned_lst_user_id:
+                    try:
+                        query = query.filter(FuelOrder.assigned_lst_user_id == int(assigned_lst_user_id))
+                    except (ValueError, TypeError):
+                        return None, f"Invalid assigned_lst_user_id value provided: {assigned_lst_user_id}"
+                
+                assigned_truck_id = filters.get('assigned_truck_id')
+                if assigned_truck_id:
+                    try:
+                        query = query.filter(FuelOrder.assigned_truck_id == int(assigned_truck_id))
+                    except (ValueError, TypeError):
+                        return None, f"Invalid assigned_truck_id value provided: {assigned_truck_id}"
 
             try:
-                page = int(filters.get('page', 1))
-                per_page = int(filters.get('per_page', 20))
+                page = int(filters.get('page', 1)) if filters else 1
+                per_page = int(filters.get('per_page', 20)) if filters else 20
                 if page < 1:
                     page = 1
                 if per_page < 1:
@@ -261,6 +319,7 @@ class FuelOrderService:
     ) -> Tuple[Optional[FuelOrder], str, int]:
         """
         Retrieve a specific fuel order by ID after performing authorization checks.
+        Optimized with eager loading for denormalized fields.
         
         Args:
             order_id (int): The ID of the order to retrieve
@@ -272,22 +331,18 @@ class FuelOrderService:
                 - A success/error message
                 - HTTP status code (200, 403, 404)
         """
-        # Basic fetch for now. Add joinedload/selectinload options later for optimization if needed.
-        order = FuelOrder.query.get(order_id)
+        # Use eager loading for optimization of denormalized fields
+        order = FuelOrder.query.options(
+            joinedload(FuelOrder.assigned_lst_user),
+            joinedload(FuelOrder.assigned_truck)
+        ).get(order_id)
+        
         if not order:
             return None, f"Fuel order with ID {order_id} not found.", 404  # Not Found
 
         # Perform Authorization Check
-        if current_user.role == UserRole.LST:
-            # LST can only view orders assigned to them
-            if order.assigned_lst_user_id != current_user.id:
-                return None, "Forbidden: You are not assigned to this fuel order.", 403  # Forbidden
-        elif current_user.role in [UserRole.CSR, UserRole.ADMIN]:
-            # CSRs and Admins can view any order
-            pass  # No additional check needed for these roles
-        else:
-            # Should not happen due to auth middleware, but let's be thorough
-            return None, "Forbidden: Invalid user role.", 403
+        if not FuelOrderService.can_user_modify_order(current_user, order):
+            return None, "Forbidden: You do not have permission to view this fuel order.", 403  # Forbidden
 
         # Return the order object
         return order, "Fuel order retrieved successfully.", 200  # OK
@@ -319,15 +374,8 @@ class FuelOrderService:
             return None, f"Fuel order with ID {order_id} not found.", 404  # Not Found
 
         # Check if the user is the assigned LST for this order
-        if current_user.role == UserRole.LST:
-            if order.assigned_lst_user_id != current_user.id:
-                return None, "Forbidden: You are not assigned to this fuel order.", 403  # Forbidden
-        elif current_user.role in [UserRole.CSR, UserRole.ADMIN]:
-            # Restrict status changes strictly to LSTs for MVP workflow
-            return None, "Forbidden: Only the assigned LST can update the status via this method.", 403
-        else:
-            # Should not happen due to auth middleware, but let's be thorough
-            return None, "Forbidden: Invalid user role.", 403
+        if not FuelOrderService.can_user_modify_order(current_user, order):
+            return None, "Forbidden: You do not have permission to update this fuel order.", 403  # Forbidden
 
         # Define allowed transitions for LST updates via this endpoint
         allowed_transitions = {
@@ -396,7 +444,7 @@ class FuelOrderService:
             return None, f"Fuel order with ID {order_id} not found.", 404  # Not Found
 
         # Perform Authorization Check: Ensure the user is the assigned LST
-        if not (current_user.role == UserRole.LST and order.assigned_lst_user_id == current_user.id):
+        if not FuelOrderService.can_user_complete_order(current_user, order):
             # Also allow Admin/CSR maybe? For MVP, let's stick to LST.
             return None, "Forbidden: Only the assigned LST can complete this fuel order.", 403  # Forbidden
 
@@ -502,9 +550,9 @@ class FuelOrderService:
                 - A success/error message
                 - HTTP status code (200, 400, 500)
         """
-        # Authorization check: Only CSR and Admin can export
-        if current_user.role not in [UserRole.CSR, UserRole.ADMIN]:
-            return None, "Forbidden: Only CSR and Admin users can export fuel orders.", 403
+        # Authorization check: Only users with export permissions can export
+        if not current_user.has_permission('export_order_data'):
+            return None, "Forbidden: You do not have permission to export fuel orders.", 403
 
         # Initialize base query
         query = FuelOrder.query
@@ -596,3 +644,109 @@ class FuelOrderService:
         except Exception as e:
             current_app.logger.error(f"Error generating CSV export: {str(e)}")
             return None, f"Error generating CSV export: {str(e)}", 500 
+
+    @staticmethod
+    def get_active_lsts():
+        """Get active Line Service Technicians based on permissions and roles."""
+        # Find users who have LST permissions through permission groups or direct assignments
+        lst_permissions = ['access_fueler_module', 'start_fueling_task', 'perform_fueling']
+        
+        # Get users with LST permission groups
+        lst_group = PermissionGroup.query.filter_by(name='LST_Default_Permissions').first()
+        active_lsts = []
+        
+        if lst_group:
+            # Get users assigned to LST permission group
+            lst_assignments = UserPermissionGroup.query.filter_by(
+                permission_group_id=lst_group.id,
+                is_active=True
+            ).all()
+            
+            for assignment in lst_assignments:
+                if assignment.user and assignment.user.is_active:
+                    active_lsts.append(assignment.user)
+        
+        # Also check for users with direct LST permissions
+        for permission_name in lst_permissions:
+            permission = Permission.query.filter_by(name=permission_name).first()
+            if permission:
+                direct_assignments = UserPermission.query.filter_by(
+                    permission_id=permission.id,
+                    is_active=True
+                ).all()
+                
+                for assignment in direct_assignments:
+                    if assignment.user and assignment.user.is_active and assignment.user not in active_lsts:
+                        active_lsts.append(assignment.user)
+        
+        # FALLBACK: Also check for users with traditional "Line Service Technician" role
+        # This ensures compatibility with role-based seeded data
+        from src.models.role import Role
+        lst_role = Role.query.filter_by(name='Line Service Technician').first()
+        if lst_role:
+            role_based_lsts = User.query.join(User.roles).filter(
+                Role.name == 'Line Service Technician',
+                User.is_active == True
+            ).all()
+            
+            for lst_user in role_based_lsts:
+                if lst_user not in active_lsts:
+                    active_lsts.append(lst_user)
+        
+        return active_lsts
+
+    @staticmethod
+    def validate_lst_assignment(assigned_lst_user_id: int) -> Tuple[Optional[User], Optional[str]]:
+        """Validate LST assignment based on permissions."""
+        lst_user = User.query.filter_by(id=assigned_lst_user_id, is_active=True).first()
+        if not lst_user:
+            return None, f"LST user with ID {assigned_lst_user_id} not found or inactive."
+        
+        # Check if user has LST permissions
+        active_lsts = FuelOrderService.get_active_lsts()
+        if lst_user not in active_lsts:
+            return None, f"User {lst_user.username} does not have LST permissions."
+        
+        return lst_user, None
+
+    @staticmethod
+    def can_user_modify_order(user: User, order: FuelOrder) -> bool:
+        """Check if user can modify a specific order based on permissions."""
+        if not user or not order:
+            return False
+        
+        # Check for admin permissions (System Administrator role)
+        admin_permissions = ['MANAGE_SETTINGS', 'MANAGE_ROLES', 'ACCESS_ADMIN_DASHBOARD']
+        for perm_name in admin_permissions:
+            if user.has_permission(perm_name):
+                return True
+        
+        # Check for CSR permissions - CSRs can view/edit fuel orders
+        csr_permissions = ['VIEW_ALL_ORDERS', 'EDIT_FUEL_ORDER', 'ACCESS_CSR_DASHBOARD']
+        for perm_name in csr_permissions:
+            if user.has_permission(perm_name):
+                return True
+        
+        # Check if LST can modify their own assigned orders
+        if (order.assigned_lst_user_id == user.id and 
+            user.has_permission('PERFORM_FUELING_TASK')):
+            return True
+        
+        return False
+
+    @staticmethod
+    def can_user_complete_order(user: User, order: FuelOrder) -> bool:
+        """Check if user can complete a specific order based on permissions."""
+        if not user or not order:
+            return False
+        
+        # Check for admin permissions
+        if user.has_permission('MANAGE_SETTINGS') or user.has_permission('ACCESS_ADMIN_DASHBOARD'):
+            return True
+        
+        # Check if LST can complete their own assigned orders
+        if (order.assigned_lst_user_id == user.id and 
+            user.has_permission('COMPLETE_OWN_ORDER')):
+            return True
+        
+        return False 

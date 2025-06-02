@@ -20,7 +20,6 @@ from .routes import admin_bp
 # from ...schemas import ErrorResponseSchema
 # from src.extensions import apispec
 
-@admin_bp.route('users', methods=['GET', 'OPTIONS'])
 @admin_bp.route('/users', methods=['GET', 'OPTIONS'])
 @token_required
 @require_permission('MANAGE_USERS')

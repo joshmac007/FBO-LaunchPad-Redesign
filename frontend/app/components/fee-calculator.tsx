@@ -132,7 +132,7 @@ const FeeCalculator: React.FC<FeeCalculatorProps> = ({
   }
 
   // Check if user has permission to calculate fees
-  const hasCalculationPermission = can("view_billing")
+  const hasCalculationPermission = can("VIEW_BILLING_INFO")
 
   if (isLoading) {
     return (

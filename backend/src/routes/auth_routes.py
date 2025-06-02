@@ -34,7 +34,6 @@ def reset_rate_limits():
     login_attempts = {}
 
 @auth_bp.route('/register', methods=['POST', 'OPTIONS'])
-@auth_bp.route('register', methods=['POST', 'OPTIONS'])
 def register():
     """Register a new user.
     ---
@@ -95,7 +94,6 @@ def register():
     }), 201
 
 @auth_bp.route('/login', methods=['POST', 'OPTIONS'])
-@auth_bp.route('login', methods=['POST', 'OPTIONS'])
 @rate_limit(limit=5, window=300)
 def login():
     """Login endpoint that returns a JWT token on successful authentication

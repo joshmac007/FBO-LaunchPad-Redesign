@@ -7,6 +7,7 @@ import { BarChart3, Clock, CheckCircle, AlertCircle, FileText, Plus } from "luci
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { getFuelOrders, getFuelOrderStats, type FuelOrderDisplay } from "@/app/services/fuel-order-service"
+import PermissionDebug from "@/app/components/permission-debug"
 
 export default function CSRDashboard() {
   const router = useRouter()
@@ -295,6 +296,9 @@ export default function CSRDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Permission Debug Component (development only) */}
+      <PermissionDebug />
+      
       {/* Welcome section */}
       <motion.div className="bg-card p-6 rounded-lg border" initial="initial" animate="animate" variants={cardVariants}>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

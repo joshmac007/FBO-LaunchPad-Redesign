@@ -8,10 +8,11 @@ import { calculateFees, type FeeCalculationResult } from "./fee-service"
 // Frontend Display Interface (optimized for UI interactions)
 export interface FuelOrderDisplay {
   id: number
-  aircraft_id: number
+  aircraft_id: string
   aircraft_tail_number: string
   aircraft_registration: string
   quantity: string // String for form handling
+  fuel_type: string // Added missing fuel_type field
   customer_name: string
   customer_id: number
   status: FuelOrderStatus
@@ -33,7 +34,8 @@ export interface FuelOrderDisplay {
 export interface FuelOrderBackend {
   id?: number
   tail_number: string
-  requested_amount: number // Decimal for API
+  fuel_type?: string // Added missing fuel_type field
+  requested_amount: number | string // Can be number or string depending on endpoint
   customer_id: number
   status: string
   priority?: string
@@ -47,11 +49,15 @@ export interface FuelOrderBackend {
   estimated_completion_time?: string
   completed_at?: string
   reviewed_at?: string
+  assigned_lst_username?: string;
+  assigned_lst_fullName?: string;
+  assigned_truck_number?: string;
 }
 
 // Request interfaces for different operations
 export interface FuelOrderCreateRequest {
   tail_number: string
+  fuel_type: string  // Added missing fuel_type field required by backend
   requested_amount: number
   customer_id: number
   priority?: string
@@ -111,7 +117,7 @@ export type FuelOrderStatus =
 
 // Lookup data interfaces for transformations
 export interface Aircraft {
-  id: number
+  id: string
   registration: string
   type: string
 }
@@ -196,16 +202,9 @@ export async function transformToDisplay(
   userData?: User[],
   truckData?: FuelTruck[]
 ): Promise<FuelOrderDisplay> {
-  // Get lookup data if not provided
-  const aircraft = aircraftData || await getAircraftData()
+  // Get lookup data if not provided (only for users and trucks)
   const users = userData || await getUserData()
   const trucks = truckData || await getFuelTruckData()
-
-  // Find aircraft by tail number
-  const aircraftInfo = aircraft.find(a => a.registration === backend.tail_number)
-  if (!aircraftInfo) {
-    throw new Error(`Aircraft with tail number ${backend.tail_number} not found`)
-  }
 
   // Helper functions for assignments
   const getLSTNameById = (id?: number): string => {
@@ -222,10 +221,11 @@ export async function transformToDisplay(
 
   return {
     id: backend.id!,
-    aircraft_id: aircraftInfo.id,
+    aircraft_id: backend.tail_number,  // Use tail_number directly as aircraft_id
     aircraft_tail_number: backend.tail_number,
-    aircraft_registration: aircraftInfo.registration,
-    quantity: backend.requested_amount.toString(),
+    aircraft_registration: backend.tail_number,  // Use tail_number as registration
+    quantity: backend.requested_amount ? (typeof backend.requested_amount === 'string' ? backend.requested_amount : backend.requested_amount.toString()) : '0',
+    fuel_type: backend.fuel_type || 'Unknown', // Get fuel_type from backend
     customer_id: backend.customer_id,
     customer_name: `Customer ${backend.customer_id}`, // Will be enhanced when customer service is available
     status: backend.status as FuelOrderStatus,
@@ -234,8 +234,8 @@ export async function transformToDisplay(
     lst_notes: backend.lst_notes || '',
     additive_requested: backend.additive_requested || false,
     location_on_ramp: backend.location_on_ramp || '',
-    assigned_lst_name: getLSTNameById(backend.assigned_lst_user_id),
-    assigned_truck_name: getTruckNameById(backend.assigned_truck_id),
+    assigned_lst_name: backend.assigned_lst_fullName || backend.assigned_lst_username || (backend.assigned_lst_user_id ? getLSTNameById(backend.assigned_lst_user_id) : 'N/A'),
+    assigned_truck_name: backend.assigned_truck_number || (backend.assigned_truck_id ? getTruckNameById(backend.assigned_truck_id) : 'N/A'),
     created_at: backend.created_at || '',
     estimated_completion: backend.estimated_completion_time || '',
     completed_at: backend.completed_at,
@@ -250,8 +250,7 @@ export async function transformToBackend(
   userData?: User[],
   truckData?: FuelTruck[]
 ): Promise<Partial<FuelOrderBackend>> {
-  // Get lookup data if not provided
-  const aircraft = aircraftData || await getAircraftData()
+  // Get lookup data if not provided (only for users and trucks)
   const users = userData || await getUserData()
   const trucks = truckData || await getFuelTruckData()
 
@@ -272,13 +271,9 @@ export async function transformToBackend(
 
   const result: Partial<FuelOrderBackend> = {}
 
-  // Handle aircraft lookup if aircraft_id is provided
+  // Handle aircraft_id - use it directly as tail_number
   if (display.aircraft_id) {
-    const aircraftInfo = aircraft.find(a => a.id === display.aircraft_id)
-    if (!aircraftInfo) {
-      throw new Error(`Aircraft with ID ${display.aircraft_id} not found`)
-    }
-    result.tail_number = aircraftInfo.registration
+    result.tail_number = display.aircraft_id
   }
 
   // Transform other fields
@@ -325,8 +320,8 @@ export async function createFuelOrder(data: FuelOrderCreateRequest): Promise<Fue
     body: JSON.stringify(data),
   })
 
-  const backendOrder = await handleApiResponse<FuelOrderBackend>(response)
-  return transformToDisplay(backendOrder)
+  const responseData = await handleApiResponse<{ message: string; fuel_order: FuelOrderBackend }>(response)
+  return transformToDisplay(responseData.fuel_order)
 }
 
 /**
@@ -334,7 +329,7 @@ export async function createFuelOrder(data: FuelOrderCreateRequest): Promise<Fue
  */
 
 // Get all fuel orders with optional filtering
-export async function getFuelOrders(filters?: FuelOrderFilters): Promise<FuelOrderDisplay[]> {
+export async function getFuelOrders(filters?: FuelOrderFilters): Promise<{ items: FuelOrderDisplay[]; pagination: any; message?: string }> {
   let url = `${API_BASE_URL}/fuel-orders`
   
   if (filters) {
@@ -357,17 +352,21 @@ export async function getFuelOrders(filters?: FuelOrderFilters): Promise<FuelOrd
     headers: getAuthHeaders(),
   })
 
-  const data = await handleApiResponse<{ fuel_orders?: FuelOrderBackend[] }>(response)
-  
-  // Handle case where fuel_orders is undefined (e.g., auth error, empty response)
-  if (!data.fuel_orders || !Array.isArray(data.fuel_orders)) {
+  const data = await handleApiResponse<{ orders?: FuelOrderBackend[], pagination?: any, message?: string }>(response)
+
+  if (!data.orders || !Array.isArray(data.orders)) {
     console.warn('No fuel orders returned from API:', data)
-    return []
+    return { items: [], pagination: data.pagination || null, message: data.message || "No orders found" };
   }
-  
-  // Transform all orders to display format
-  const transformPromises = data.fuel_orders.map(order => transformToDisplay(order))
-  return Promise.all(transformPromises)
+
+  const transformPromises = data.orders.map(order => transformToDisplay(order));
+  const displayOrders = await Promise.all(transformPromises);
+
+  return {
+    items: displayOrders,
+    pagination: data.pagination,
+    message: data.message
+  };
 }
 
 // Get a specific fuel order by ID
@@ -377,8 +376,8 @@ export async function getFuelOrderById(id: number): Promise<FuelOrderDisplay> {
     headers: getAuthHeaders(),
   })
 
-  const backendOrder = await handleApiResponse<FuelOrderBackend>(response)
-  return transformToDisplay(backendOrder)
+  const responseData = await handleApiResponse<{ message: string; fuel_order: FuelOrderBackend }>(response)
+  return transformToDisplay(responseData.fuel_order)
 }
 
 // Backward compatibility alias
@@ -418,8 +417,8 @@ export async function submitFuelOrderData(id: number, completionData: FuelOrderS
     body: JSON.stringify(completionData),
   })
 
-  const backendOrder = await handleApiResponse<FuelOrderBackend>(response)
-  return transformToDisplay(backendOrder)
+  const responseData = await handleApiResponse<{ message: string; fuel_order: FuelOrderBackend }>(response)
+  return transformToDisplay(responseData.fuel_order)
 }
 
 // Review fuel order (CSR review)
@@ -430,8 +429,8 @@ export async function reviewFuelOrder(id: number, reviewData: FuelOrderReviewReq
     body: JSON.stringify(reviewData),
   })
 
-  const backendOrder = await handleApiResponse<FuelOrderBackend>(response)
-  return transformToDisplay(backendOrder)
+  const responseData = await handleApiResponse<{ message: string; fuel_order: FuelOrderBackend }>(response)
+  return transformToDisplay(responseData.fuel_order)
 }
 
 /**

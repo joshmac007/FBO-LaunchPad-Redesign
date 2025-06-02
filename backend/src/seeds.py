@@ -16,14 +16,15 @@ all_permissions = [
     {'name': 'VIEW_ORDER_STATS', 'description': 'Allows viewing order statistics', 'category': 'fuel_orders'},
     {'name': 'EDIT_FUEL_ORDER', 'description': 'Allows editing fuel order details', 'category': 'fuel_orders'},
     {'name': 'DELETE_FUEL_ORDER', 'description': 'Allows deleting fuel orders', 'category': 'fuel_orders'},
+    {'name': 'PERFORM_FUELING_TASK', 'description': 'Allows performing fueling operations and task management', 'category': 'fuel_orders'},
     
     # Users
     {'name': 'VIEW_USERS', 'description': 'Allows viewing user list', 'category': 'users'},
     {'name': 'MANAGE_USERS', 'description': 'Allows creating, updating, deleting users and assigning roles', 'category': 'users'},
     
-    # Fuel Trucks
-    {'name': 'VIEW_TRUCKS', 'description': 'Allows viewing fuel truck list', 'category': 'fuel_trucks'},
-    {'name': 'MANAGE_TRUCKS', 'description': 'Allows creating, updating, deleting fuel trucks', 'category': 'fuel_trucks'},
+    # Fuel Trucks (renamed for consistency)
+    {'name': 'VIEW_FUEL_TRUCKS', 'description': 'Allows viewing fuel truck list', 'category': 'fuel_trucks'},
+    {'name': 'MANAGE_FUEL_TRUCKS', 'description': 'Allows creating, updating, deleting fuel trucks', 'category': 'fuel_trucks'},
     
     # Aircraft
     {'name': 'VIEW_AIRCRAFT', 'description': 'Allows viewing aircraft list', 'category': 'aircraft'},
@@ -37,6 +38,22 @@ all_permissions = [
     {'name': 'MANAGE_ROLES', 'description': 'Allows managing roles and their permissions', 'category': 'system'},
     {'name': 'VIEW_PERMISSIONS', 'description': 'Allows viewing available system permissions', 'category': 'system'},
     {'name': 'MANAGE_SETTINGS', 'description': 'Allows managing global application settings', 'category': 'system'},
+    
+    # Dashboard Access Permissions
+    {'name': 'ACCESS_ADMIN_DASHBOARD', 'description': 'Allows access to admin dashboard', 'category': 'dashboard_access'},
+    {'name': 'ACCESS_CSR_DASHBOARD', 'description': 'Allows access to CSR dashboard', 'category': 'dashboard_access'},
+    {'name': 'ACCESS_FUELER_DASHBOARD', 'description': 'Allows access to fueler dashboard', 'category': 'dashboard_access'},
+    {'name': 'ACCESS_MEMBER_DASHBOARD', 'description': 'Allows access to member dashboard', 'category': 'dashboard_access'},
+    
+    # Billing/Fees Permissions
+    {'name': 'VIEW_BILLING_INFO', 'description': 'Allows viewing billing information and fee calculations', 'category': 'billing'},
+    {'name': 'CALCULATE_FEES', 'description': 'Allows calculating fees and charges', 'category': 'billing'},
+    
+    # Fuel Receipt System Permissions
+    {'name': 'VIEW_ALL_RECEIPTS', 'description': 'Allows viewing all fuel receipts', 'category': 'receipts'},
+    {'name': 'VIEW_OWN_RECEIPTS', 'description': 'Allows viewing own fuel receipts', 'category': 'receipts'},
+    {'name': 'MANAGE_RECEIPTS', 'description': 'Allows creating, editing, and managing fuel receipts', 'category': 'receipts'},
+    {'name': 'EXPORT_RECEIPTS_CSV', 'description': 'Allows exporting receipt data to CSV', 'category': 'receipts'},
 ]
 
 default_roles = [
@@ -47,21 +64,37 @@ default_roles = [
 ]
 
 role_permission_mapping = {
-    'System Administrator': [p['name'] for p in all_permissions],
+    'System Administrator': [p['name'] for p in all_permissions],  # All permissions
     'Customer Service Representative': [
+        # Dashboard Access
+        'ACCESS_CSR_DASHBOARD',
+        # Fuel Orders
         'CREATE_ORDER', 'VIEW_ALL_ORDERS', 'REVIEW_ORDERS', 'EXPORT_ORDERS_CSV',
         'VIEW_ORDER_STATS', 'EDIT_FUEL_ORDER',
-        'VIEW_USERS', 'VIEW_TRUCKS', 'VIEW_AIRCRAFT', 'VIEW_CUSTOMERS',
+        # Users and Resources
+        'VIEW_USERS', 'VIEW_FUEL_TRUCKS', 'VIEW_AIRCRAFT', 'VIEW_CUSTOMERS',
         'MANAGE_AIRCRAFT', 'MANAGE_CUSTOMERS',
-        'VIEW_PERMISSIONS'
+        # System
+        'VIEW_PERMISSIONS',
+        # Billing
+        'VIEW_BILLING_INFO'
     ],
     'Line Service Technician': [
-        'CREATE_ORDER',
-        'VIEW_ASSIGNED_ORDERS', 'UPDATE_OWN_ORDER_STATUS', 'COMPLETE_OWN_ORDER',
-        'VIEW_ORDER_STATS'
+        # Dashboard Access
+        'ACCESS_FUELER_DASHBOARD',
+        # Fuel Orders
+        'CREATE_ORDER', 'VIEW_ASSIGNED_ORDERS', 'UPDATE_OWN_ORDER_STATUS', 'COMPLETE_OWN_ORDER',
+        'VIEW_ORDER_STATS', 'PERFORM_FUELING_TASK',
+        # Receipts
+        'VIEW_OWN_RECEIPTS'
     ],
     'Member': [
-        'VIEW_ORDER_STATS', 'VIEW_CUSTOMERS', 'VIEW_AIRCRAFT'
+        # Dashboard Access
+        'ACCESS_MEMBER_DASHBOARD',
+        # Limited View Access
+        'VIEW_ORDER_STATS', 'VIEW_CUSTOMERS', 'VIEW_AIRCRAFT',
+        # Receipts
+        'VIEW_OWN_RECEIPTS'
     ]
 }
 
@@ -69,8 +102,15 @@ def seed_data():
     """Seeds the database with initial permissions, roles, assignments, and admin user."""
     print("Starting database seeding...")
     try:
-        # Optional: Clear existing data respecting FK constraints
+        # Clear existing data respecting FK constraints (in correct order)
         print("Clearing existing PBAC data (if any)...")
+        
+        # Clear all dependent tables first (in order of dependencies)
+        db.session.execute(text('DELETE FROM user_permission_group_assignments'))
+        db.session.execute(text('DELETE FROM permission_group_permissions'))
+        db.session.execute(text('DELETE FROM user_permission_groups'))
+        db.session.execute(text('DELETE FROM permission_groups'))
+        db.session.execute(text('DELETE FROM user_permissions'))
         db.session.execute(text('DELETE FROM user_roles'))
         db.session.execute(text('DELETE FROM role_permissions'))
         db.session.execute(text('DELETE FROM fuel_orders'))
@@ -170,4 +210,5 @@ def seed_data():
         print("Database seeding completed successfully.")
     except Exception as e:
         db.session.rollback()
-        print(f"An error occurred during seeding: {str(e)}") 
+        print(f"An error occurred during seeding: {str(e)}")
+        raise 

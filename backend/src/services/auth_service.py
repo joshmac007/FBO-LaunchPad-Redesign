@@ -1,5 +1,7 @@
 from typing import Union, Tuple
-from ..models.user import User, UserRole
+from ..models.user import User
+from ..models.permission_group import PermissionGroup
+from ..models.user_permission_group import UserPermissionGroup
 from ..extensions import db
 from datetime import datetime, timedelta
 import jwt
@@ -42,24 +44,31 @@ class AuthService:
             print(f"Username {base_username} exists, trying {username}")
             
         try:
-            # Create new user instance with default role LST
+            # Create new user instance (no default role, will use permission groups)
             new_user = User(
                 username=username,
                 email=email,
-                role=UserRole.LST,
                 is_active=True
             )
-            print(f"Created user object: {new_user}")
-            
-            # Set password (will be automatically hashed by the User model)
             new_user.set_password(password)
-            print("Set password hash")
             
-            # Add user to database and commit transaction
+            # Add to session and flush to get ID
             db.session.add(new_user)
-            print("Added user to session")
+            db.session.flush()
+            
+            # Assign default LST permission group for new registrations
+            lst_group = PermissionGroup.query.filter_by(name='LST_Default_Permissions').first()
+            if lst_group:
+                assignment = UserPermissionGroup(
+                    user_id=new_user.id,
+                    permission_group_id=lst_group.id,
+                    assigned_at=datetime.utcnow(),
+                    is_active=True
+                )
+                db.session.add(assignment)
+            
             db.session.commit()
-            print("Committed transaction")
+            print(f"Successfully created user: {new_user.username} with LST permissions")
             return new_user
         except Exception as e:
             db.session.rollback()

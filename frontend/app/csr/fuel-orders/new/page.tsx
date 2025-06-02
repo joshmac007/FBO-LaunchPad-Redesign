@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Info, Bot } from "lucide-react"
+import { ArrowLeft, Info, Bot, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -22,14 +22,16 @@ import {
   transformToBackend 
 } from "@/app/services/fuel-order-service"
 import AircraftLookup from "@/app/components/aircraft-lookup"
-import OwnershipChangeAlert from "@/app/components/ownership-change-alert"
+import CustomerSelector from "@/app/components/customer-selector"
+
 import Link from "next/link"
 import type { Aircraft } from "@/app/services/aircraft-service"
+import type { Customer } from "@/app/services/customer-service"
 
 // Enhanced form data interface for the new fields
 interface EnhancedFormData {
-  aircraft_id: number
-  customer_id: number
+  aircraft_id: string  // Changed from number to string since we use tail_number as ID
+  customer_id: number | undefined // Made optional since customer is now optional
   quantity: string
   priority: 'normal' | 'high' | 'urgent'
   csr_notes: string
@@ -48,11 +50,12 @@ export default function NewFuelOrderPage() {
   const [fuelTrucks, setFuelTrucks] = useState<FuelTruck[]>([])
   const [isApiConnected, setIsApiConnected] = useState<boolean>(true)
   const [selectedAircraft, setSelectedAircraft] = useState<Aircraft | null>(null)
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
 
   // Enhanced form state with new fields
   const [formData, setFormData] = useState<EnhancedFormData>({
-    aircraft_id: 0,
-    customer_id: 0,
+    aircraft_id: "",
+    customer_id: undefined, // Customer is now optional
     quantity: "",
     priority: 'normal',
     csr_notes: "",
@@ -133,6 +136,14 @@ export default function NewFuelOrderPage() {
     loadData()
   }, [router])
 
+  // DEBUG: Track state changes
+  useEffect(() => {
+    console.log('State change detected:', {
+      selectedAircraft: selectedAircraft ? { id: selectedAircraft.id, tailNumber: selectedAircraft.tailNumber } : null,
+      formData_aircraft_id: formData.aircraft_id
+    })
+  }, [selectedAircraft, formData.aircraft_id])
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
@@ -147,11 +158,27 @@ export default function NewFuelOrderPage() {
   }
 
   const handleAircraftFound = (aircraft: Aircraft) => {
+    console.log('Aircraft found handler called with:', aircraft)
+    
+    // Validate aircraft object
+    if (!aircraft || !aircraft.id) {
+      console.error('Invalid aircraft object received:', aircraft)
+      setError("Invalid aircraft data received. Please try again.")
+      return
+    }
+    
+    // Update both state variables synchronously
     setSelectedAircraft(aircraft)
     setFormData((prev) => ({
       ...prev,
       aircraft_id: aircraft.id,
     }))
+    
+    console.log('Aircraft state updated:', {
+      aircraftId: aircraft.id,
+      tailNumber: aircraft.tailNumber
+    })
+    
     // Clear any previous aircraft lookup errors
     if (error?.includes("Aircraft with tail number")) {
       setError(null)
@@ -162,9 +189,29 @@ export default function NewFuelOrderPage() {
     setSelectedAircraft(null)
     setFormData((prev) => ({
       ...prev,
-      aircraft_id: 0,
+      aircraft_id: "",
     }))
     setError(`Aircraft "${tailNumber}" not found. Please verify the tail number and try again.`)
+  }
+
+  const handleCustomerSelected = (customer: Customer) => {
+    setSelectedCustomer(customer)
+    setFormData((prev) => ({
+      ...prev,
+      customer_id: customer.id,
+    }))
+    // Clear any previous customer errors
+    if (error?.includes("customer")) {
+      setError(null)
+    }
+  }
+
+  const handleCustomerCleared = () => {
+    setSelectedCustomer(null)
+    setFormData((prev) => ({
+      ...prev,
+      customer_id: undefined,
+    }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -173,35 +220,56 @@ export default function NewFuelOrderPage() {
     setIsSubmitting(true)
 
     try {
-      // Validate required fields
-      if (!formData.aircraft_id) {
+      // Get the current state values at the time of submission
+      const currentSelectedAircraft = selectedAircraft
+      const currentFormData = formData
+      
+      console.log('Form submission - Current state:', {
+        selectedAircraft: currentSelectedAircraft,
+        formData: currentFormData
+      })
+
+      // Validate required fields using current state
+      if (!currentSelectedAircraft || !currentSelectedAircraft.id) {
+        console.error('VALIDATION FAILED: selectedAircraft:', currentSelectedAircraft, 'selectedAircraft?.id:', currentSelectedAircraft?.id)
         throw new Error("Please select an aircraft")
       }
-      if (!formData.customer_id) {
-        throw new Error("Please enter a customer ID")
+      
+      // Also check formData.aircraft_id as a backup
+      if (!currentFormData.aircraft_id) {
+        console.error('VALIDATION FAILED: formData.aircraft_id is missing:', currentFormData.aircraft_id)
+        throw new Error("Please select an aircraft")
       }
-      if (!formData.quantity || parseFloat(formData.quantity) <= 0) {
+      
+      // Customer is now optional - no validation required
+      if (!currentFormData.quantity || parseFloat(currentFormData.quantity) <= 0) {
         throw new Error("Please enter a valid quantity")
       }
 
       // Transform form data to backend format using the new service layer
       const displayData: Partial<FuelOrderDisplay> = {
-        aircraft_id: formData.aircraft_id,
-        customer_id: formData.customer_id,
-        quantity: formData.quantity,
-        priority: formData.priority,
-        csr_notes: formData.csr_notes,
-        additive_requested: formData.additive_requested,
-        location_on_ramp: formData.location_on_ramp,
-        assigned_lst_name: formData.assigned_lst_name,
-        assigned_truck_name: formData.assigned_truck_name,
+        aircraft_id: currentSelectedAircraft.id, // Use selectedAircraft.id as primary source
+        customer_id: selectedCustomer?.id || undefined, // Use actual customer ID or undefined if no customer selected
+        quantity: currentFormData.quantity,
+        priority: currentFormData.priority,
+        csr_notes: currentFormData.csr_notes,
+        additive_requested: currentFormData.additive_requested,
+        location_on_ramp: currentFormData.location_on_ramp,
+        assigned_lst_name: currentFormData.assigned_lst_name,
+        assigned_truck_name: currentFormData.assigned_truck_name,
       }
 
       // Transform to backend format
       const backendData = await transformToBackend(displayData)
-      
+
+      // Add the fuel_type from the selected aircraft (required by backend)
+      const fuelOrderRequest: FuelOrderCreateRequest = {
+        ...backendData,
+        fuel_type: currentSelectedAircraft.preferredFuelType, // Get fuel type from selected aircraft
+      } as FuelOrderCreateRequest
+
       // Create the fuel order using the new service
-      const result = await createFuelOrder(backendData as FuelOrderCreateRequest)
+      const result = await createFuelOrder(fuelOrderRequest)
 
       // Show success message before redirecting
       setError(null)
@@ -231,8 +299,7 @@ export default function NewFuelOrderPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Ownership change alert */}
-      {selectedAircraft && <OwnershipChangeAlert specificAircraftId={selectedAircraft.id} />}
+
 
       <main className="container px-4 md:px-6 py-6 md:py-8">
         <div className="flex flex-col gap-6 max-w-4xl mx-auto">
@@ -250,6 +317,19 @@ export default function NewFuelOrderPage() {
               <CardDescription>Fill in the details to create a new fuel order</CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Error Display */}
+              {error && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
+                  <div className="flex items-center gap-2 text-red-800">
+                    <AlertCircle className="h-4 w-4" />
+                    <span className="font-medium">Error</span>
+                  </div>
+                  <p className="text-red-700 mt-1">{error}</p>
+                </div>
+              )}
+
+
+              
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Aircraft Information Section */}
                 <div className="space-y-2">
@@ -261,18 +341,12 @@ export default function NewFuelOrderPage() {
 
                 {/* Customer Information Section */}
                 <div className="border-t pt-4 space-y-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="customer_id">Customer ID *</Label>
-                    <Input
-                      id="customer_id"
-                      name="customer_id"
-                      type="number"
-                      placeholder="Enter customer ID"
-                      required
-                      value={formData.customer_id || ""}
-                      onChange={handleInputChange}
-                    />
-                  </div>
+                  <CustomerSelector 
+                    onCustomerSelected={handleCustomerSelected}
+                    onCustomerCleared={handleCustomerCleared}
+                    initialCustomerId={formData.customer_id}
+                    required={false}
+                  />
                 </div>
 
                 {/* Fuel Details Section */}

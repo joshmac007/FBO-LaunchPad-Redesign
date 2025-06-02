@@ -16,7 +16,6 @@ from marshmallow import ValidationError
 from src.extensions import apispec
 from .routes import admin_bp
 
-@admin_bp.route('roles', methods=['GET', 'OPTIONS'])
 @admin_bp.route('/roles', methods=['GET', 'OPTIONS'])
 @token_required
 @require_permission('MANAGE_ROLES')
@@ -42,7 +41,6 @@ def get_roles():
     schema = RoleSchema(many=True)
     return jsonify({"roles": schema.dump(roles)}), status
 
-@admin_bp.route('roles', methods=['POST', 'OPTIONS'])
 @admin_bp.route('/roles', methods=['POST', 'OPTIONS'])
 @token_required
 @require_permission('MANAGE_ROLES')

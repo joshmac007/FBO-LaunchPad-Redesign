@@ -10,12 +10,14 @@ class UserCreateRequestSchema(Schema):
     email = fields.Email(required=True)
     password = fields.String(required=True, load_only=True, validate=validate.Length(min=6))
     role_ids = fields.List(fields.Integer(), required=True)
-    name = fields.String(required=False)
+    username = fields.String(required=False)
+    fullName = fields.String(required=False, attribute="name")
     is_active = fields.Boolean(required=False)
 
 class UserUpdateRequestSchema(Schema):
     """Schema for user update requests."""
-    name = fields.String(required=False)
+    username = fields.String(required=False)
+    fullName = fields.String(required=False, attribute="name")
     email = fields.Email(required=False)
     role_ids = fields.List(fields.Integer(), required=False)
     is_active = fields.Boolean(required=False)
@@ -24,7 +26,8 @@ class UserUpdateRequestSchema(Schema):
 class UserBriefSchema(Schema):
     """Brief schema for user information in list responses."""
     id = fields.Integer()
-    name = fields.String(attribute="username")
+    username = fields.String()
+    fullName = fields.String(attribute="name")
     email = fields.Email()
     roles = fields.List(fields.Nested(RoleBriefSchema))
     is_active = fields.Boolean()
@@ -33,7 +36,8 @@ class UserBriefSchema(Schema):
 class UserDetailSchema(Schema):
     """Detailed schema for single user responses."""
     id = fields.Integer()
-    name = fields.String(attribute="username")
+    username = fields.String()
+    fullName = fields.String(attribute="name")
     email = fields.Email()
     roles = fields.List(fields.Nested(RoleBriefSchema))
     is_active = fields.Boolean()

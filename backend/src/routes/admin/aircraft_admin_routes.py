@@ -7,7 +7,6 @@ from ...schemas.admin_schemas import AdminAircraftSchema, AdminAircraftListRespo
 from src.extensions import apispec
 from .routes import admin_bp
 
-@admin_bp.route('aircraft', methods=['GET', 'OPTIONS'])
 @admin_bp.route('/aircraft', methods=['GET', 'OPTIONS'])
 @token_required
 @require_permission('MANAGE_AIRCRAFT')
@@ -35,7 +34,6 @@ def list_aircraft():
     schema = AdminAircraftSchema(many=True)
     return jsonify({"aircraft": schema.dump(aircraft_list)}), status
 
-@admin_bp.route('aircraft', methods=['POST', 'OPTIONS'])
 @admin_bp.route('/aircraft', methods=['POST', 'OPTIONS'])
 @token_required
 @require_permission('MANAGE_AIRCRAFT')

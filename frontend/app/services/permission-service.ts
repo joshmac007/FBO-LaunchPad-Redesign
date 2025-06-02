@@ -3,7 +3,7 @@ import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config"
 
 // TypeScript interfaces for API responses
 export interface Permission {
-  id: string
+  id: number
   name: string
   description: string
   category: string
@@ -11,7 +11,7 @@ export interface Permission {
 }
 
 export interface Role {
-  id: string
+  id: number
   name: string
   description: string
   permissions: string[]
@@ -76,7 +76,7 @@ export const getAllRoles = async (): Promise<Role[]> => {
   }
 }
 
-export const getRoleById = async (roleId: string): Promise<Role | null> => {
+export const getRoleById = async (roleId: number): Promise<Role | null> => {
   try {
     const response = await fetch(`${API_BASE_URL}/admin/roles/${roleId}`, {
       method: "GET",
@@ -144,7 +144,7 @@ export const createRole = async (roleData: Omit<Role, "id" | "createdAt" | "upda
 }
 
 export const updateRole = async (
-  roleId: string,
+  roleId: number,
   updates: Partial<Omit<Role, "id" | "createdAt" | "updatedAt">>
 ): Promise<Role> => {
   try {
@@ -161,7 +161,7 @@ export const updateRole = async (
   }
 }
 
-export const deleteRole = async (roleId: string): Promise<boolean> => {
+export const deleteRole = async (roleId: number): Promise<boolean> => {
   try {
     const response = await fetch(`${API_BASE_URL}/admin/roles/${roleId}`, {
       method: "DELETE",
@@ -181,7 +181,7 @@ export const deleteRole = async (roleId: string): Promise<boolean> => {
 }
 
 // Role Permission Management Functions
-export const getRolePermissions = async (roleId: string): Promise<Permission[]> => {
+export const getRolePermissions = async (roleId: number): Promise<Permission[]> => {
   try {
     const response = await fetch(`${API_BASE_URL}/admin/roles/${roleId}/permissions`, {
       method: "GET",
@@ -195,7 +195,7 @@ export const getRolePermissions = async (roleId: string): Promise<Permission[]> 
   }
 }
 
-export const addPermissionToRole = async (roleId: string, permissionId: string): Promise<void> => {
+export const addPermissionToRole = async (roleId: number, permissionId: number): Promise<void> => {
   try {
     const response = await fetch(`${API_BASE_URL}/admin/roles/${roleId}/permissions`, {
       method: "POST",
@@ -210,7 +210,7 @@ export const addPermissionToRole = async (roleId: string, permissionId: string):
   }
 }
 
-export const removePermissionFromRole = async (roleId: string, permissionId: string): Promise<void> => {
+export const removePermissionFromRole = async (roleId: number, permissionId: number): Promise<void> => {
   try {
     const response = await fetch(`${API_BASE_URL}/admin/roles/${roleId}/permissions/${permissionId}`, {
       method: "DELETE",
@@ -225,7 +225,7 @@ export const removePermissionFromRole = async (roleId: string, permissionId: str
 }
 
 // Helper Functions for UI Components
-export const getPermissionsForRole = async (roleId: string): Promise<Permission[]> => {
+export const getPermissionsForRole = async (roleId: number): Promise<Permission[]> => {
   return await getRolePermissions(roleId)
 }
 

@@ -77,8 +77,8 @@ def test_permissions(app, db):
             Permission(name='MANAGE_ORDERS', description='Can manage fuel orders'),
             Permission(name='VIEW_ORDERS', description='Can view fuel orders'),
             Permission(name='COMPLETE_ORDER', description='Can complete fuel orders'),
-            Permission(name='MANAGE_TRUCKS', description='Can manage fuel trucks'),
-            Permission(name='VIEW_TRUCKS', description='Can view fuel trucks')
+            Permission(name='MANAGE_FUEL_TRUCKS', description='Can manage fuel trucks'),
+            Permission(name='VIEW_FUEL_TRUCKS', description='Can view fuel trucks')
         ]
         for p in permissions:
             db.session.add(p)
@@ -103,7 +103,7 @@ def test_roles(app, db, test_permissions):
         # LST role gets limited permissions
         lst_role = Role(name='Line Service Technician', description='Line service access')
         lst_permissions = [perm_dict[n] for n in [
-            'VIEW_ORDERS', 'COMPLETE_ORDER', 'VIEW_TRUCKS'
+            'VIEW_ORDERS', 'COMPLETE_ORDER', 'VIEW_FUEL_TRUCKS'
         ] if n in perm_dict]
         lst_role.permissions.extend(lst_permissions)
         roles = [admin_role, csr_role, lst_role]

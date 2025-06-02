@@ -17,12 +17,12 @@ truck_bp = Blueprint('truck_bp', __name__, url_prefix='/api/fuel-trucks')
 @truck_bp.route('', methods=['GET', 'OPTIONS'])
 @truck_bp.route('/', methods=['GET', 'OPTIONS'])
 @token_required
-@require_permission('VIEW_TRUCKS')
+@require_permission('VIEW_FUEL_TRUCKS')
 def get_fuel_trucks():
     if request.method == 'OPTIONS':
         return jsonify({'message': 'OPTIONS request successful'}), 200
     """Get a list of fuel trucks.
-    Requires VIEW_TRUCKS permission. Supports filtering by active status.
+    Requires VIEW_FUEL_TRUCKS permission. Supports filtering by active status.
     ---
     tags:
       - Fuel Trucks
@@ -84,10 +84,10 @@ def get_fuel_trucks():
 
 @truck_bp.route('/', methods=['POST'])
 @token_required
-@require_permission('MANAGE_TRUCKS')
+@require_permission('MANAGE_FUEL_TRUCKS')
 def create_fuel_truck():
     """Create a new fuel truck.
-    Requires MANAGE_TRUCKS permission.
+    Requires MANAGE_FUEL_TRUCKS permission.
     ---
     tags:
       - Fuel Trucks
@@ -146,10 +146,10 @@ def create_fuel_truck():
 
 @truck_bp.route('/<int:truck_id>', methods=['GET'])
 @token_required
-@require_permission('VIEW_TRUCKS')
+@require_permission('VIEW_FUEL_TRUCKS')
 def get_fuel_truck(truck_id):
     """Get a fuel truck by ID.
-    Requires VIEW_TRUCKS permission.
+    Requires VIEW_FUEL_TRUCKS permission.
     ---
     tags:
       - Fuel Trucks
@@ -200,10 +200,10 @@ def get_fuel_truck(truck_id):
 
 @truck_bp.route('/<int:truck_id>', methods=['PATCH'])
 @token_required
-@require_permission('MANAGE_TRUCKS')
+@require_permission('MANAGE_FUEL_TRUCKS')
 def update_fuel_truck(truck_id):
     """Update a fuel truck.
-    Requires MANAGE_TRUCKS permission.
+    Requires MANAGE_FUEL_TRUCKS permission.
     ---
     tags:
       - Fuel Trucks
@@ -269,10 +269,10 @@ def update_fuel_truck(truck_id):
 
 @truck_bp.route('/<int:truck_id>', methods=['DELETE'])
 @token_required
-@require_permission('MANAGE_TRUCKS')
+@require_permission('MANAGE_FUEL_TRUCKS')
 def delete_fuel_truck(truck_id):
     """Delete a fuel truck by ID.
-    Requires MANAGE_TRUCKS permission.
+    Requires MANAGE_FUEL_TRUCKS permission.
     ---
     tags:
       - Fuel Trucks

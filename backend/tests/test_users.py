@@ -205,7 +205,7 @@ def test_user_role_assignment(client, auth_headers, test_users, test_roles):
     assert user.has_permission('VIEW_ORDERS')   # LST permission
     assert user.has_permission('MANAGE_ORDERS') # CSR permission
     assert user.has_permission('VIEW_AIRCRAFT') # Both roles
-    assert user.has_permission('VIEW_TRUCKS')   # Both roles
+    assert user.has_permission('VIEW_FUEL_TRUCKS')   # Both roles
 
 def test_user_role_removal(client, auth_headers, test_users, test_roles):
     """Test role removal functionality."""
@@ -239,7 +239,7 @@ def test_user_role_removal(client, auth_headers, test_users, test_roles):
     user = User.query.get(user.id)
     assert user.has_permission('VIEW_ORDERS')     # LST permission
     assert user.has_permission('VIEW_AIRCRAFT')   # LST permission
-    assert user.has_permission('VIEW_TRUCKS')     # LST permission
+    assert user.has_permission('VIEW_FUEL_TRUCKS')     # LST permission
     assert not user.has_permission('MANAGE_ORDERS') # Lost CSR permission
 
 def test_user_deactivation(client, auth_headers, test_users):

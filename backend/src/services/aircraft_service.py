@@ -56,6 +56,8 @@ class AircraftService:
                 return None, f"Aircraft with tail number {tail_number} not found", 404
             if 'aircraft_type' in update_data:
                 aircraft.aircraft_type = update_data['aircraft_type']
+            if 'fuel_type' in update_data:
+                aircraft.fuel_type = update_data['fuel_type']
             if 'customer_id' in update_data:
                 aircraft.customer_id = update_data['customer_id']
             db.session.commit()

@@ -9,13 +9,41 @@ export async function handleApiResponse<T>(response: Response): Promise<T> {
   // Handle authentication errors specially
   if (response.status === 401) {
     const errorText = await response.text()
-    throw new Error(`Authentication required: Please log in to access fuel orders`)
+    
+    // Try to parse JSON error response
+    try {
+      const errorJson = JSON.parse(errorText)
+      const userMessage = errorJson.error || errorJson.message || 'Authentication required'
+      throw new Error(`Authentication required: ${userMessage}`)
+    } catch (parseError) {
+      // Fallback to raw text if JSON parsing fails
+      throw new Error(`Authentication required: Please log in to access this resource`)
+    }
   }
   
   if (!response.ok) {
     // Handle other HTTP error statuses
     const errorText = await response.text()
-    throw new Error(`API error (${response.status}): ${errorText}`)
+    
+    // Try to parse JSON error response for better user-facing messages
+    try {
+      const errorJson = JSON.parse(errorText)
+      
+      // Check for common error message fields
+      const userMessage = errorJson.error || errorJson.message || errorJson.details || errorText
+      
+      // If we have a structured error with details, use the main error message
+      if (typeof userMessage === 'string') {
+        throw new Error(userMessage)
+      } else if (typeof userMessage === 'object' && userMessage.message) {
+        throw new Error(userMessage.message)
+      } else {
+        throw new Error(`API error (${response.status}): ${errorText}`)
+      }
+    } catch (parseError) {
+      // If JSON parsing fails, use the raw error text
+      throw new Error(`API error (${response.status}): ${errorText}`)
+    }
   }
 
   try {

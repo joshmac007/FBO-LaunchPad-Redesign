@@ -48,7 +48,8 @@ export default function UserManagement() {
   const [roleStringToIdMap, setRoleStringToIdMap] = useState<Record<string, number>>({})
 
   const [newUser, setNewUser] = useState({
-    name: "",
+    username: "",
+    fullName: "",
     email: "",
     password: "",
     role: "", // This will be a role name string, to be mapped to role_ids
@@ -101,7 +102,7 @@ export default function UserManagement() {
     if (searchTerm) {
       filtered = filtered.filter(
         (user) =>
-          (user.name && user.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (user.fullName && user.fullName.toLowerCase().includes(searchTerm.toLowerCase())) ||
           user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
           (user.username && user.username.toLowerCase().includes(searchTerm.toLowerCase())),
       )
@@ -135,7 +136,8 @@ export default function UserManagement() {
     }
 
     const payload: UserCreateRequest = {
-      name: newUser.name,
+      username: newUser.username,
+      fullName: newUser.fullName,
       email: newUser.email,
       password: newUser.password,
       role_ids: [roleId], // Use dynamic mapping
@@ -146,7 +148,7 @@ export default function UserManagement() {
       await createUser(payload)
       toast.success("User created successfully!")
       fetchUsers() // Refresh user list
-      setNewUser({ name: "", email: "", password: "", role: "", is_active: true })
+      setNewUser({ username: "", fullName: "", email: "", password: "", role: "", is_active: true })
       setIsCreateDialogOpen(false)
     } catch (error: any) {
       console.error("Failed to create user:", error)
@@ -173,7 +175,8 @@ export default function UserManagement() {
     }
 
     const payload: UserUpdateRequest = {
-      name: selectedUser.name,
+      username: selectedUser.username,
+      fullName: selectedUser.fullName,
       email: selectedUser.email,
       is_active: selectedUser.is_active,
       // Only include role_ids if a valid role was found/selected
@@ -259,11 +262,20 @@ export default function UserManagement() {
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="username">Username</Label>
                 <Input
-                  id="name"
-                  value={newUser.name}
-                  onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                  id="username"
+                  value={newUser.username}
+                  onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                  placeholder="johndoe"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input
+                  id="fullName"
+                  value={newUser.fullName}
+                  onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
                   placeholder="John Doe"
                 />
               </div>
@@ -427,8 +439,11 @@ export default function UserManagement() {
                   <TableRow key={user.id}>
                     <TableCell>
                       <div>
-                        <div className="font-medium">{user.name || user.username || "N/A"}</div>
+                        <div className="font-medium">{user.fullName || user.username || "N/A"}</div>
                         <div className="text-sm text-muted-foreground">{user.email}</div>
+                        {user.username && user.fullName && (
+                          <div className="text-xs text-muted-foreground">Username: {user.username}</div>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -504,11 +519,19 @@ export default function UserManagement() {
           {selectedUser && (
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="edit-name">Full Name</Label>
+                <Label htmlFor="edit-username">Username</Label>
                 <Input
-                  id="edit-name"
-                  value={selectedUser.name || ""}
-                  onChange={(e) => setSelectedUser({ ...selectedUser, name: e.target.value })}
+                  id="edit-username"
+                  value={selectedUser.username || ""}
+                  onChange={(e) => setSelectedUser({ ...selectedUser, username: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-fullName">Full Name</Label>
+                <Input
+                  id="edit-fullName"
+                  value={selectedUser.fullName || ""}
+                  onChange={(e) => setSelectedUser({ ...selectedUser, fullName: e.target.value })}
                 />
               </div>
               <div className="grid gap-2">
@@ -528,7 +551,7 @@ export default function UserManagement() {
                     const firstRole = selectedUser.roles[0]
                     return typeof firstRole === 'string' ? firstRole : (firstRole as any)?.name || ""
                   })()}
-                  onValueChange={(value) => setSelectedUser({ ...selectedUser, roles: [value] })}
+                  onValueChange={(value) => setSelectedUser({ ...selectedUser, roles: [{ id: roleStringToIdMap[value.toLowerCase()] || 0, name: value }] })}
                   disabled={isLoadingRoles}
                 >
                   <SelectTrigger>

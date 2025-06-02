@@ -3,10 +3,10 @@ import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config" /
 // Updated User Interface
 export interface User {
   id: number
-  name?: string // Optional: User's full name
-  username?: string // Optional: User's login username
+  username: string // Login username
+  fullName?: string // User's full/display name
   email: string
-  roles: string[] // Changed from role: string
+  roles: Array<{ id: number; name: string }> // Standardized to match backend RoleBriefSchema
   is_active: boolean
   created_at?: string // Optional: ISO timestamp
 }
@@ -41,12 +41,14 @@ export interface UserCreateRequest {
   email: string
   password: string
   role_ids: number[] // IDs of roles to assign
-  name?: string // User's full name
+  username?: string // Login username
+  fullName?: string // User's full name
   is_active?: boolean // Defaults to true on backend
 }
 
 export interface UserUpdateRequest {
-  name?: string
+  username?: string // Login username
+  fullName?: string // User's full name
   email?: string
   role_ids?: number[]
   is_active?: boolean
@@ -69,24 +71,28 @@ interface UserBriefResponse {
 }
 
 export async function getActiveLSTs(): Promise<User[]> {
-  // Removed checkApiHealth and mockLSTs fallback
   try {
-    const response = await fetch(`${API_BASE_URL}/users?role=LST&is_active=true`, {
+    // First, get all roles to find the LST role ID
+    const roles = await getRoles()
+    const lstRole = roles.find(role => role.name === "Line Service Technician")
+    
+    if (!lstRole) {
+      throw new Error("Line Service Technician role not found")
+    }
+
+    // Use the role_ids parameter with the LST role ID
+    const response = await fetch(`${API_BASE_URL}/admin/users?role_ids=${lstRole.id}&is_active=true`, {
       method: "GET",
       headers: getAuthHeaders(),
     })
 
-    const data = await handleApiResponse<UserBriefResponse>(response)
+    const data = await handleApiResponse<UsersResponse>(response)
 
-    // Map UserBriefSchema[] to User[]
-    return data.users.map((userBrief) => ({
-      ...userBrief,
-      roles: [userBrief.role], // Convert single role string to array
-    }))
+    // Return the users directly since they already have the standardized roles structure
+    return data.users
   } catch (error) {
-    // Log and re-throw the error, or handle it as per application's error handling strategy
     console.error("Error fetching LSTs:", error) 
-    throw error // Propagate the error
+    throw error
   }
 }
 

@@ -6,7 +6,6 @@ from ...schemas.admin_schemas import AdminCustomerSchema, AdminCustomerListRespo
 from src.extensions import apispec
 from .routes import admin_bp
 
-@admin_bp.route('customers', methods=['GET', 'OPTIONS'])
 @admin_bp.route('/customers', methods=['GET', 'OPTIONS'])
 @token_required
 @require_permission('MANAGE_CUSTOMERS')
@@ -34,7 +33,6 @@ def list_customers():
     schema = AdminCustomerSchema(many=True)
     return jsonify({"customers": schema.dump(customers)}), status
 
-@admin_bp.route('customers', methods=['POST', 'OPTIONS'])
 @admin_bp.route('/customers', methods=['POST', 'OPTIONS'])
 @token_required
 @require_permission('MANAGE_CUSTOMERS')

@@ -4,7 +4,7 @@ Authentication decorators for protecting API routes.
 from functools import wraps
 from flask import request, jsonify, current_app, g, make_response
 import jwt
-from ..models.user import User, UserRole
+from ..models.user import User
 
 
 def token_required(f):

@@ -1,0 +1,25 @@
+{
+  "bundles": {
+    "CoreComponents-653": {
+      "name": "CoreComponents",
+      "created": "2025-06-02T19:43:32.419Z",
+      "lastUsed": "2025-06-02T19:43:37.984Z",
+      "tags": [],
+      "files": [
+        "frontend/app",
+        "frontend/components",
+        "frontend/hooks",
+        "frontend/tailwind.config.ts",
+        "frontend/next.config.mjs",
+        "backend/src",
+        "backend/migrations",
+        "backend/DATABASE_SETUP.md",
+        "backend/docker-compose.yml",
+        "backend/Dockerfile",
+        "backend/entrypoint.sh",
+        "backend/setup.py",
+        "backend/reseed_database.sh"
+      ]
+    }
+  }
+}

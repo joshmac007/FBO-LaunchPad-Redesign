@@ -47,6 +47,11 @@ class User(db.Model):
         backref=db.backref('users', lazy='dynamic'),
         lazy='dynamic'
     )
+    
+    # Enhanced permission system relationships
+    # Note: These relationships are defined in the respective model files
+    # direct_permissions - defined in UserPermission model
+    # permission_groups - defined in PermissionGroup model via user_permission_groups table
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
@@ -96,30 +101,52 @@ class User(db.Model):
     def __repr__(self):
         return f'<User {self.username}>'
 
-    def has_permission(self, permission_name: str) -> bool:
+    def has_permission(self, permission_name: str, resource_type: str = None, resource_id: str = None) -> bool:
         """
-        Check if the user has a specific permission through any of their assigned roles.
+        Enhanced permission checking that supports the new granular permission system.
+        Checks permissions from multiple sources: direct assignments, permission groups, and legacy roles.
         
         Args:
             permission_name (str): The name of the permission to check for.
+            resource_type (str): Optional resource type for resource-specific permissions.
+            resource_id (str): Optional resource ID for resource-specific permissions.
             
         Returns:
-            bool: True if the user has the permission through any role, False otherwise.
+            bool: True if the user has the permission, False otherwise.
             
         Note:
-            This method uses SQLAlchemy's EXISTS subquery for efficient permission checking
-            and caches results for the duration of the request.
+            This method now uses the enhanced PermissionService for comprehensive permission checking.
+            Falls back to legacy role-based checking for backward compatibility.
         """
         if not self.is_active:
             return False
-            
+        
+        # Use the enhanced permission service for comprehensive checking
+        try:
+            # Import here to avoid circular imports
+            from ..services.permission_service import PermissionService
+            return PermissionService.user_has_permission(
+                user_id=self.id,
+                permission_name=permission_name,
+                resource_type=resource_type,
+                resource_id=resource_id
+            )
+        except ImportError:
+            # Fallback to legacy role-based checking if PermissionService is not available
+            return self._legacy_has_permission(permission_name)
+    
+    def _legacy_has_permission(self, permission_name: str) -> bool:
+        """
+        Legacy permission checking method for backward compatibility.
+        Only checks role-based permissions.
+        """
         # Use request-level caching if available
         if has_request_context():
             # Initialize permission cache if it doesn't exist
             if not hasattr(g, '_permission_cache'):
                 g._permission_cache = {}
             
-            cache_key = f'user_{self.id}_perm_{permission_name}'
+            cache_key = f'user_{self.id}_legacy_perm_{permission_name}'
             if cache_key in g._permission_cache:
                 return g._permission_cache[cache_key]
             
@@ -141,6 +168,36 @@ class User(db.Model):
                 User.roles.any(Role.permissions.any(Permission.name == permission_name))
             )
         )).scalar()
+    
+    def get_effective_permissions(self, include_resource_context: bool = False) -> dict:
+        """
+        Get all effective permissions for this user from all sources.
+        
+        Args:
+            include_resource_context (bool): Whether to include resource-specific permissions
+            
+        Returns:
+            dict: Dictionary of effective permissions
+        """
+        try:
+            from ..services.permission_service import PermissionService
+            return PermissionService.get_user_effective_permissions(
+                user_id=self.id,
+                include_resource_context=include_resource_context
+            )
+        except ImportError:
+            # Fallback to legacy role-based permissions
+            permissions = {}
+            for role in self.roles:
+                for role_perm in role.permissions:
+                    perm = role_perm.permission
+                    if perm and perm.is_active:
+                        permissions[perm.name] = {
+                            'permission': perm.name,
+                            'source': f'role:{role.name}',
+                            'role_id': role.id
+                        }
+            return permissions
 
     def generate_token(self, expires_in=3600):
         """

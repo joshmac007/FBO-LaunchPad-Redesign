@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { isAuthenticated } from "@/app/services/auth-service"
-import { type FuelOrder, getFuelOrder, reviewFuelOrder } from "@/app/services/fuel-order-service"
+import { type FuelOrderDisplay, getFuelOrder, reviewFuelOrder } from "@/app/services/fuel-order-service"
 import Link from "next/link"
 
 export default function FuelOrderDetailPage() {
@@ -19,7 +19,7 @@ export default function FuelOrderDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [fuelOrder, setFuelOrder] = useState<FuelOrder | null>(null)
+  const [fuelOrder, setFuelOrder] = useState<FuelOrderDisplay | null>(null)
   const [reviewNotes, setReviewNotes] = useState("")
 
   useEffect(() => {
@@ -32,7 +32,14 @@ export default function FuelOrderDetailPage() {
     const userData = localStorage.getItem("fboUser")
     if (userData) {
       const parsedUser = JSON.parse(userData)
-      if (!parsedUser.isLoggedIn || parsedUser.role !== "csr") {
+      
+      // Check if user has CSR role - handle both array and string formats (same as CSR layout)
+      const userRoles = parsedUser.roles || []
+      const hasCSRRole = Array.isArray(userRoles) 
+        ? userRoles.some(role => role.toLowerCase().includes("customer service") || role.toLowerCase().includes("csr"))
+        : false
+        
+      if (!parsedUser.isLoggedIn || !hasCSRRole) {
         router.push("/login")
         return
       }
@@ -43,9 +50,6 @@ export default function FuelOrderDetailPage() {
       try {
         const order = await getFuelOrder(orderId)
         setFuelOrder(order)
-        if (order.review_notes) {
-          setReviewNotes(order.review_notes)
-        }
       } catch (error) {
         console.error("Error loading fuel order:", error)
         setError("Failed to load fuel order details. Please try again.")
@@ -64,7 +68,10 @@ export default function FuelOrderDetailPage() {
     setIsSubmitting(true)
 
     try {
-      const updatedOrder = await reviewFuelOrder(fuelOrder.id, reviewNotes)
+      const updatedOrder = await reviewFuelOrder(fuelOrder.id, {
+        approved: true,
+        review_notes: reviewNotes
+      })
       setFuelOrder(updatedOrder)
     } catch (error) {
       console.error("Error reviewing fuel order:", error)

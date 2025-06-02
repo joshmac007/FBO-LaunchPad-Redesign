@@ -10,7 +10,6 @@ from .routes import admin_bp
 class PermissionListResponseSchema(Schema):
     permissions = fields.List(fields.Nested(PermissionSchema))
 
-@admin_bp.route('permissions', methods=['GET', 'OPTIONS'])
 @admin_bp.route('/permissions', methods=['GET', 'OPTIONS'])
 @token_required
 @require_permission('MANAGE_ROLES')

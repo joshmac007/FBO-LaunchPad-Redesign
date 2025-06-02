@@ -67,6 +67,10 @@ class FuelOrderResponseSchema(Schema):
     requested_amount = fields.Decimal(dump_only=True, places=2, as_string=True, allow_none=True) # Dump Decimal as string
     assigned_lst_user_id = fields.Int(dump_only=True, allow_none=True)
     assigned_truck_id = fields.Int(dump_only=True, allow_none=True)
+    # Denormalized fields for optimization
+    assigned_lst_username = fields.Str(dump_only=True, attribute="assigned_lst_user.username", allow_none=True)
+    assigned_lst_fullName = fields.Str(dump_only=True, attribute="assigned_lst_user.name", allow_none=True)
+    assigned_truck_number = fields.Str(dump_only=True, attribute="assigned_truck.truck_number", allow_none=True)
     location_on_ramp = fields.Str(dump_only=True, allow_none=True)
     csr_notes = fields.Str(dump_only=True, allow_none=True)
     start_meter_reading = fields.Decimal(dump_only=True, places=2, as_string=True, allow_none=True)
@@ -89,6 +93,10 @@ class FuelOrderBriefResponseSchema(Schema): # For list view
     tail_number = fields.Str(dump_only=True)
     assigned_lst_user_id = fields.Int(dump_only=True, allow_none=True)
     assigned_truck_id = fields.Int(dump_only=True, allow_none=True)
+    # Denormalized fields for optimization
+    assigned_lst_username = fields.Str(dump_only=True, attribute="assigned_lst_user.username", allow_none=True)
+    assigned_lst_fullName = fields.Str(dump_only=True, attribute="assigned_lst_user.name", allow_none=True)
+    assigned_truck_number = fields.Str(dump_only=True, attribute="assigned_truck.truck_number", allow_none=True)
     created_at = fields.DateTime(dump_only=True)
 
 class FuelOrderCreateResponseSchema(Schema):

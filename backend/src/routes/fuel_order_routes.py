@@ -10,6 +10,9 @@ from ..schemas import OrderStatusCountsResponseSchema, ErrorResponseSchema
 from ..extensions import db
 from ..models.aircraft import Aircraft
 from ..services.aircraft_service import AircraftService
+from sqlalchemy.exc import IntegrityError
+from ..models import User, Customer
+import logging
 
 # Create the blueprint for fuel order routes
 fuel_order_bp = Blueprint('fuel_order_bp', __name__)
@@ -17,6 +20,8 @@ fuel_order_bp = Blueprint('fuel_order_bp', __name__)
 # Special value for auto-assigning LST
 AUTO_ASSIGN_LST_ID = -1  # If this value is provided, backend will auto-select least busy LST
 AUTO_ASSIGN_TRUCK_ID = -1 # If this value is provided, backend will auto-select an available truck
+
+logger = logging.getLogger(__name__)
 
 @fuel_order_bp.route('/stats/status-counts', methods=['GET', 'OPTIONS'])
 @fuel_order_bp.route('/stats/status-counts/', methods=['GET', 'OPTIONS'])
@@ -47,8 +52,6 @@ def create_fuel_order():
         # We just need to return a valid response.
         return jsonify({'message': 'OPTIONS request successful'}), 200
     current_app.logger.info(f"--- Entered create_fuel_order function. Request Method: {request.method} ---")
-    import logging
-    logger = logging.getLogger(__name__)
     logger.info('[DEBUG] JWT_SECRET_KEY in create_fuel_order: %s', current_app.config.get('JWT_SECRET_KEY'))
     logger.info('[DEBUG] JWT_ALGORITHM in create_fuel_order: %s', current_app.config.get('JWT_ALGORITHM', 'HS256'))
     logger.info('Entered create_fuel_order')
@@ -198,10 +201,9 @@ def create_fuel_order():
     # LST Auto-assignment
     if data['assigned_lst_user_id'] == AUTO_ASSIGN_LST_ID:
         try:
-            from src.services.user_service import UserService
-            from src.models.user import UserRole
-            # Get all active LST users
-            lst_users, _, _ = UserService.get_users({'role': UserRole.LST, 'is_active': True})
+            from src.services.fuel_order_service import FuelOrderService
+            # Get all active LST users using permission-based logic
+            lst_users = FuelOrderService.get_active_lsts()
             if not lst_users:
                 logger.error('No active LST users found for auto-assignment')
                 return jsonify({"error": "No active LST users available for auto-assignment"}), 400
@@ -254,7 +256,8 @@ def create_fuel_order():
     optional_fields = {
         'customer_id': int,
         'additive_requested': bool,
-        'csr_notes': str
+        'csr_notes': str,
+        'location_on_ramp': str  # Added location_on_ramp as optional field
     }
     
     for field, field_type in optional_fields.items():
@@ -286,7 +289,7 @@ def create_fuel_order():
             requested_amount=data['requested_amount'],
             assigned_lst_user_id=data['assigned_lst_user_id'],
             assigned_truck_id=data['assigned_truck_id'],
-            location_on_ramp=data['location_on_ramp'],
+            location_on_ramp=data.get('location_on_ramp'),
             csr_notes=data.get('csr_notes')
         )
         logger.info('Step 5: FuelOrder object created')
@@ -319,6 +322,7 @@ def create_fuel_order():
 @fuel_order_bp.route('', methods=['GET', 'OPTIONS'])
 @fuel_order_bp.route('/', methods=['GET', 'OPTIONS'])
 @token_required
+@require_permission('VIEW_ASSIGNED_ORDERS')
 def get_fuel_orders():
     import traceback
     try:
@@ -368,6 +372,7 @@ def get_fuel_orders():
 
 @fuel_order_bp.route('/<int:order_id>', methods=['GET'])
 @token_required
+@require_permission('VIEW_ASSIGNED_ORDERS')
 def get_fuel_order(order_id):
     """Get details of a specific fuel order.
     LST must be assigned to the order. CSR/Admin can view any.
@@ -451,6 +456,7 @@ def get_fuel_order(order_id):
 
 @fuel_order_bp.route('/<int:order_id>/status', methods=['PATCH'])
 @token_required
+@require_permission('UPDATE_OWN_ORDER_STATUS')
 def update_fuel_order_status(order_id):
     """Update a fuel order's status.
     ---
@@ -567,10 +573,10 @@ def update_fuel_order_status(order_id):
 
 @fuel_order_bp.route('/<int:order_id>/submit-data', methods=['PUT'])
 @token_required
-@require_permission('COMPLETE_ORDER')
+@require_permission('COMPLETE_OWN_ORDER')
 def submit_fuel_data(order_id):
     """Submit fuel meter readings and notes for a fuel order.
-    Requires COMPLETE_ORDER permission. Order must be in FUELING status.
+    Requires COMPLETE_OWN_ORDER permission. Order must be in FUELING status.
     ---
     tags:
       - Fuel Orders

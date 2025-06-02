@@ -157,6 +157,72 @@ def update_aircraft(tail_number):
     else:
         return jsonify({"error": message}), status_code
 
+@aircraft_bp.route('/quick-create', methods=['POST', 'OPTIONS'])
+@token_required
+@require_permission('MANAGE_AIRCRAFT')
+def quick_create_aircraft():
+    """Quick create an aircraft with minimal fields (MANAGE_AIRCRAFT permission required).
+    ---
+    tags:
+      - Aircraft
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              tail_number:
+                type: string
+                description: Aircraft tail number
+              aircraft_type:
+                type: string
+                description: Type of aircraft
+              fuel_type:
+                type: string
+                description: Type of fuel
+            required:
+              - tail_number
+              - aircraft_type
+              - fuel_type
+    responses:
+      201:
+        description: Aircraft created successfully
+        content:
+          application/json:
+            schema: AircraftResponseSchema
+      400:
+        description: Bad request
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      409:
+        description: Aircraft already exists
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+    """
+    if request.method == 'OPTIONS':
+        return jsonify({'message': 'OPTIONS request successful'}), 200
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    
+    # Validate required fields
+    required_fields = ['tail_number', 'aircraft_type', 'fuel_type']
+    for field in required_fields:
+        if field not in data or not data[field]:
+            return jsonify({"error": f"Missing required field: {field}"}), 400
+    
+    aircraft, message, status_code = AircraftService.create_aircraft(data)
+    if aircraft:
+        return jsonify({"message": message, "aircraft": AircraftResponseSchema().dump(aircraft)}), status_code
+    else:
+        return jsonify({"error": message}), status_code
+
 @aircraft_bp.route('/<string:tail_number>', methods=['DELETE'])
 @token_required
 @require_permission('MANAGE_AIRCRAFT')

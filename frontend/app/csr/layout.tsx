@@ -4,72 +4,198 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { isAuthenticated } from "@/app/services/auth-service"
+import { usePermissions } from "@/hooks/usePermissions"
 import AppSidebar from "@/components/layout/app-sidebar"
 import { cn } from "@/lib/utils"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
+import { RefreshCw, AlertTriangle } from "lucide-react"
 
 export default function CSRLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [hasAccess, setHasAccess] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<any>(null)
+  const [showDebug, setShowDebug] = useState(false)
+
+  const { 
+    loading: permissionsLoading, 
+    user, 
+    canAny,
+    isCSR,
+    userPermissions,
+    refresh
+  } = usePermissions()
 
   useEffect(() => {
-    // Check if user is logged in and is CSR
-    const checkAuth = async () => {
-      try {
-        if (!isAuthenticated()) {
-          router.push("/login")
-          return
-        }
+    // Wait for permissions to load
+    if (permissionsLoading) {
+      return
+    }
 
-        const userData = localStorage.getItem("fboUser")
-        if (userData) {
-          const parsedUser = JSON.parse(userData)
-          if (!parsedUser.isLoggedIn) {
-            router.push("/login")
-            return
-          }
-          
-          // Check if user has CSR role - handle both array and string formats
-          const userRoles = parsedUser.roles || []
-          const hasCSRRole = Array.isArray(userRoles) 
-            ? userRoles.some(role => role.toLowerCase().includes("customer service") || role.toLowerCase().includes("csr"))
-            : false
-            
-          if (!hasCSRRole) {
-            console.log("User does not have CSR role, redirecting to login")
-            router.push("/login")
-            return
-          }
-        } else {
-          router.push("/login")
-          return
-        }
+    // Check authentication and CSR permissions
+    if (!user || !user.isLoggedIn) {
+      console.log("CSR Layout: User not authenticated, redirecting to login")
+      router.push("/login")
+      return
+    }
 
-        setIsLoading(false)
-      } catch (error) {
-        console.error("Authentication error:", error)
-        router.push("/login")
+    // Check for CSR access using backend permissions
+    const csrPermissions = [
+      'ACCESS_CSR_DASHBOARD',   // Dashboard access permission
+      'CREATE_ORDER',           // Allows creating new fuel orders
+      'VIEW_ALL_ORDERS',        // Allows viewing all fuel orders  
+      'REVIEW_ORDERS',          // Allows CSR/Admin to mark orders as reviewed
+      'EXPORT_ORDERS_CSV',      // Allows exporting order data to CSV
+      'VIEW_ORDER_STATS',       // Allows viewing order statistics
+      'EDIT_FUEL_ORDER',        // Allows editing fuel order details
+      'VIEW_CUSTOMERS',         // Allows viewing customer list
+      'MANAGE_CUSTOMERS',       // Allows creating, updating, deleting customers
+    ]
+
+    const hasCSRAccess = canAny(csrPermissions) || isCSR
+
+    // Create debug information
+    const debug = {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        isLoggedIn: user.isLoggedIn,
+        roles: user.roles
+      },
+      permissions: {
+        total: userPermissions.length,
+        list: userPermissions,
+        csrPermissions,
+        hasAnyCSRPermission: canAny(csrPermissions),
+        isCSRFromHook: isCSR,
+        hasCSRAccess
+      },
+      checks: {
+        canAny_ACCESS_CSR_DASHBOARD: canAny(['ACCESS_CSR_DASHBOARD']),
+        canAny_CREATE_ORDER: canAny(['CREATE_ORDER']),
+        canAny_VIEW_ALL_ORDERS: canAny(['VIEW_ALL_ORDERS']),
+        canAny_REVIEW_ORDERS: canAny(['REVIEW_ORDERS']),
       }
     }
 
-    checkAuth()
-  }, [router])
+    setDebugInfo(debug)
 
-  if (isLoading) {
+    if (!hasCSRAccess) {
+      console.log("CSR Layout: User does not have CSR permissions")
+      console.log("Debug info:", debug)
+      
+      // Show debug info in development
+      if (process.env.NODE_ENV === 'development') {
+        setShowDebug(true)
+        setIsLoading(false)
+        return
+      }
+      
+      // Redirect to appropriate dashboard based on user's permissions
+      if (canAny(['ACCESS_ADMIN_DASHBOARD', 'MANAGE_USERS', 'MANAGE_SETTINGS', 'MANAGE_ROLES'])) {
+        console.log("CSR Layout: Redirecting to admin dashboard")
+        router.push("/admin/dashboard")
+      } else if (canAny(['ACCESS_FUELER_DASHBOARD', 'PERFORM_FUELING_TASK', 'UPDATE_OWN_ORDER_STATUS'])) {
+        console.log("CSR Layout: Redirecting to fueler dashboard")
+        router.push("/fueler/dashboard")
+      } else if (canAny(['ACCESS_MEMBER_DASHBOARD']) || user.is_active) {
+        console.log("CSR Layout: Redirecting to member dashboard")
+        router.push("/member/dashboard")
+      } else {
+        console.log("CSR Layout: User not active, redirecting to login")
+        router.push("/login")
+      }
+      return
+    }
+
+    console.log("CSR Layout: User has CSR access, proceeding")
+    setHasAccess(true)
+    setIsLoading(false)
+  }, [
+    permissionsLoading, 
+    user, 
+    canAny, 
+    isCSR,
+    userPermissions,
+    router
+  ])
+
+  const handleRefreshPermissions = async () => {
+    setIsLoading(true)
+    try {
+      await refresh()
+    } catch (error) {
+      console.error("Failed to refresh permissions:", error)
+    }
+    setIsLoading(false)
+  }
+
+  // Show loading while permissions are being checked
+  if (isLoading || permissionsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p>Loading...</p>
+          <p className="text-sm text-muted-foreground">
+            {permissionsLoading ? "Loading permissions..." : "Checking CSR access..."}
+          </p>
         </div>
       </div>
     )
   }
 
+  // Show debug information in development when access is denied
+  if (showDebug && !hasAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="max-w-2xl w-full space-y-4">
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>CSR Access Denied</AlertTitle>
+            <AlertDescription>
+              You don't have the required permissions to access the CSR module.
+            </AlertDescription>
+          </Alert>
+
+          <div className="bg-card border rounded-lg p-4">
+            <h3 className="font-semibold mb-2">Debug Information</h3>
+            <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-96">
+              {JSON.stringify(debugInfo, null, 2)}
+            </pre>
+          </div>
+
+          <div className="flex gap-2">
+            <Button onClick={handleRefreshPermissions} disabled={isLoading}>
+              <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
+              Refresh Permissions
+            </Button>
+            <Button variant="outline" onClick={() => router.push("/member/dashboard")}>
+              Go to Member Dashboard
+            </Button>
+            <Button variant="outline" onClick={() => router.push("/login")}>
+              Back to Login
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Don't render anything if user doesn't have access (they'll be redirected)
+  if (!hasAccess) {
+    return null
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      <AppSidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} userRole="csr" />
+      <AppSidebar 
+        collapsed={sidebarCollapsed} 
+        setCollapsed={setSidebarCollapsed} 
+        userRole="csr" // Keep for compatibility, but sidebar should use permissions internally
+      />
       <div
         className={cn(
           "transition-all duration-300 ease-in-out min-h-screen",

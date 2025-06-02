@@ -48,7 +48,7 @@ def test_register_success(client, db_session, test_roles):
     assert user.has_permission('VIEW_USERS')
     assert user.has_permission('VIEW_AIRCRAFT')
     assert user.has_permission('VIEW_CUSTOMERS')
-    assert user.has_permission('VIEW_TRUCKS')
+    assert user.has_permission('VIEW_FUEL_TRUCKS')
     assert not user.has_permission('MANAGE_ROLES')
     assert not user.has_permission('MANAGE_USERS')
 
@@ -93,7 +93,7 @@ def test_login_success(client, test_users):
     assert user.has_permission('VIEW_USERS')
     assert user.has_permission('VIEW_AIRCRAFT')
     assert user.has_permission('VIEW_CUSTOMERS')
-    assert user.has_permission('VIEW_TRUCKS')
+    assert user.has_permission('VIEW_FUEL_TRUCKS')
     assert not user.has_permission('MANAGE_ROLES')
     assert not user.has_permission('MANAGE_USERS')
 
@@ -171,7 +171,7 @@ def test_permission_inheritance(client, db_session, test_users):
     assert admin.has_permission('MANAGE_ORDERS')
     assert admin.has_permission('MANAGE_AIRCRAFT')
     assert admin.has_permission('MANAGE_CUSTOMERS')
-    assert admin.has_permission('MANAGE_TRUCKS')
+    assert admin.has_permission('MANAGE_FUEL_TRUCKS')
     
     # CSR should have subset of permissions
     assert csr.has_permission('CREATE_ORDER')
@@ -184,7 +184,7 @@ def test_permission_inheritance(client, db_session, test_users):
     assert lst.has_permission('VIEW_ORDERS')
     assert lst.has_permission('CREATE_ORDER')
     assert lst.has_permission('VIEW_AIRCRAFT')
-    assert lst.has_permission('VIEW_TRUCKS')
+    assert lst.has_permission('VIEW_FUEL_TRUCKS')
     assert not lst.has_permission('MANAGE_ORDERS')
     assert not lst.has_permission('MANAGE_ROLES')
     assert not lst.has_permission('MANAGE_USERS')

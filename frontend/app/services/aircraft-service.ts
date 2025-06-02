@@ -1,8 +1,8 @@
 import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config"
 
-// Frontend Aircraft model (kept as is for richness)
+// Frontend Aircraft model (updated to use tail_number as id)
 export interface Aircraft {
-  id: number
+  id: string  // Use tail_number as the ID
   tailNumber: string
   type: string // Corresponds to aircraft_type from backend
   model: string // Will be 'N/A' or derived if not directly from backend
@@ -15,9 +15,6 @@ export interface Aircraft {
   preferredFuelType: string // Corresponds to fuel_type from backend
   mtow?: number
   lastFaaSyncAt?: string
-  previousOwner?: string
-  ownershipChangeDate?: string
-  ownershipChangeAcknowledged?: boolean
   // Potentially add customer_id if needed on frontend representation
   customer_id?: number
 }
@@ -33,8 +30,7 @@ interface BackendAdminAircraft {
 }
 
 interface BackendAircraft {
-  id: number
-  tail_number: string
+  tail_number: string  // Primary key in backend
   aircraft_type: string
   fuel_type: string
   // Add other fields if the backend AircraftResponseSchema provides more that are useful for mapping
@@ -54,6 +50,13 @@ export interface AdminAircraftUpdateRequest {
   customer_id?: number
 }
 
+// CSR Aircraft Creation Request (limited fields)
+export interface CSRAircraftCreateRequest {
+  tail_number: string
+  aircraft_type: string
+  fuel_type: string
+}
+
 // Response type for list endpoints
 interface AdminAircraftListResponse {
   aircraft: BackendAdminAircraft[]
@@ -69,7 +72,7 @@ interface AircraftListResponse {
 
 function mapBackendAdminToFrontendAircraft(backend: BackendAdminAircraft): Aircraft {
   return {
-    id: backend.id,
+    id: backend.tail_number,
     tailNumber: backend.tail_number,
     type: backend.aircraft_type,
     model: "N/A", // Or derive if possible from aircraft_type or other data
@@ -84,15 +87,12 @@ function mapBackendAdminToFrontendAircraft(backend: BackendAdminAircraft): Aircr
     nextMaintenance: undefined,
     mtow: undefined,
     lastFaaSyncAt: undefined,
-    previousOwner: undefined,
-    ownershipChangeDate: undefined,
-    ownershipChangeAcknowledged: undefined,
   }
 }
 
 function mapBackendToFrontendAircraft(backend: BackendAircraft): Aircraft {
   return {
-    id: backend.id,
+    id: backend.tail_number,
     tailNumber: backend.tail_number,
     type: backend.aircraft_type,
     model: "N/A",
@@ -106,9 +106,6 @@ function mapBackendToFrontendAircraft(backend: BackendAircraft): Aircraft {
     nextMaintenance: undefined,
     mtow: undefined,
     lastFaaSyncAt: undefined,
-    previousOwner: undefined,
-    ownershipChangeDate: undefined,
-    ownershipChangeAcknowledged: undefined,
   }
 }
 
@@ -149,8 +146,6 @@ export async function getAdminAircraftByTailNumber(tailNumber: string): Promise<
 // Functions to be removed as per subtask description:
 // - getAircraftById(id: number)
 // - validateAircraft(tailNumber: string)
-// - acknowledgeOwnershipChange(aircraftId: number)
-// - getAircraftWithOwnershipChanges()
 // These functions were part of the original file but are not included in the refactored version below this comment block.
 // Their removal will be completed by not re-defining them.
 
@@ -162,6 +157,17 @@ export async function createAdminAircraft(aircraftData: AdminAircraftCreateReque
   })
   const backendAircraft = await handleApiResponse<BackendAdminAircraft>(response)
   return mapBackendAdminToFrontendAircraft(backendAircraft)
+}
+
+// CSR Aircraft Creation Function (using existing permissions)
+export async function createCSRAircraft(aircraftData: CSRAircraftCreateRequest): Promise<Aircraft> {
+  const response = await fetch(`${API_BASE_URL}/aircraft/quick-create`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(aircraftData),
+  })
+  const data = await handleApiResponse<{ message: string; aircraft: BackendAircraft }>(response)
+  return mapBackendToFrontendAircraft(data.aircraft)
 }
 
 export async function updateAdminAircraft(
@@ -207,8 +213,22 @@ export async function getAircraftByTailNumber(tailNumber: string): Promise<Aircr
       method: "GET",
       headers: getAuthHeaders(),
     })
-    const backendAircraft = await handleApiResponse<BackendAircraft>(response)
-    return mapBackendToFrontendAircraft(backendAircraft)
+    const data = await handleApiResponse<{ message: string; aircraft: BackendAircraft }>(response)
+    
+    // Validate that the backend aircraft has required fields
+    if (!data.aircraft) {
+      console.error('Backend response missing aircraft object:', data)
+      throw new Error('Invalid response: missing aircraft data')
+    }
+    
+    if (!data.aircraft.tail_number) {
+      console.error('Backend aircraft missing tail_number field:', data.aircraft)
+      throw new Error('Invalid aircraft data: missing tail number')
+    }
+    
+    const mappedAircraft = mapBackendToFrontendAircraft(data.aircraft)
+    
+    return mappedAircraft
   } catch (error) {
     if (error instanceof Error && error.message.includes("API error (404)")) {
       return null

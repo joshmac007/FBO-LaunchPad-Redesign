@@ -1,123 +1,136 @@
-# Technical Context
+# FBO LaunchPad - AI Context & Guidelines
 
-This document outlines key technical aspects and architectural decisions for the FBO LaunchPad project.
+This document provides essential context about the FBO LaunchPad project to help AI assistants understand its structure, common development patterns, and potential pitfalls.
 
-## Backend
-*   Language/Framework: Python with FastAPI (assumed based on common patterns).
-*   Database: PostgreSQL (assumed).
-*   Authentication: JWT-based authentication.
-*   API Style: RESTful APIs.
-*   Key Endpoints (examples):
-    *   `/auth/login`
-    *   `/auth/me/permissions`
-    *   `/admin/users/`
-    *   `/admin/aircraft/`
-    *   `/admin/customers/`
-    *   `/fuel-trucks/`
-    *   `/aircraft/`
+## 1. Project Overview
 
-## Frontend
-*   Framework: Next.js (React).
-*   Language: TypeScript.
-*   Styling: Tailwind CSS with Shadcn UI components.
-*   State Management: React Context API (e.g., `PermissionContext`), local component state (`useState`).
-*   API Communication: `fetch` API used within service modules.
+*   **Name:** FBO LaunchPad
+*   **Purpose:** A comprehensive Fixed Base Operator (FBO) management system designed to streamline aircraft fueling operations, user management, and related administrative tasks.
+*   **Key User Roles:**
+    *   **System Administrator:** Full system access, manages users, roles, permissions, and system settings.
+    *   **Customer Service Representative (CSR):** Manages fuel orders, customer interactions, and reviews completed orders.
+    *   **Line Service Technician (LST/Fueler):** Executes fuel orders, updates order statuses, and records operational data.
+    *   **Member:** Basic user with limited view access (e.g., view their own statistics, customer/aircraft info).
 
-## Frontend Architecture & Data Flow (Post API Integration Phase 1 & 2)
+## 2. Tech Stack
 
-*   **Service Layer:**
-    *   All backend API interactions for primary data modules (Authentication, Users, Aircraft, Customers, Fuel Trucks) are now centralized in dedicated service files located in `frontend/app/services/`.
-    *   These services (`auth-service.ts`, `user-service.ts`, `aircraft-service.ts`, `customer-service.ts`, `fuel-truck-service.ts`) encapsulate API endpoint calls, request/response handling, and data mapping.
-    *   Mock data and direct `localStorage` usage for storing primary application data (like lists of users, aircraft, etc.) have been removed from these core services. Data is fetched live from the API.
+*   **Frontend:**
+    *   Framework: Next.js (React)
+    *   Language: TypeScript
+    *   Styling: Tailwind CSS with Shadcn UI components
+    *   State Management: React Context API (e.g., `PermissionContext`), local component state.
+*   **Backend:**
+    *   Framework: Flask (Python)
+    *   ORM: SQLAlchemy
+    *   Database: PostgreSQL
+    *   Authentication: JWT (JSON Web Tokens)
+    *   API Style: RESTful
+*   **Containerization:** Docker and Docker Compose for the backend and database.
 
-## Fuel Order Management Architecture (Creative Phase Decisions)
+## 3. Development Environment & Key Commands
 
-### Service Layer Architecture ✅ DECIDED
-**Pattern:** Functional Service Module with Specialized Functions
-*   **Implementation:** `fuel-order-service.ts` will be refactored to use dedicated functions per backend endpoint
-*   **Structure:**
-    ```typescript
-    // Create operations
-    createFuelOrder(data: FuelOrderCreateRequest): Promise<FuelOrderResponse>
-    
-    // Read operations  
-    getFuelOrders(filters?: FuelOrderFilters): Promise<FuelOrderResponse[]>
-    getFuelOrderById(id: number): Promise<FuelOrderResponse>
-    getFuelOrderStats(): Promise<FuelOrderStats>
-    
-    // Update operations (mapped to specific endpoints)
-    updateFuelOrderStatus(id: number, status: string): Promise<FuelOrderResponse>
-    submitFuelOrderData(id: number, data: LST_CompletionData): Promise<FuelOrderResponse>
-    reviewFuelOrder(id: number, reviewData: CSR_ReviewData): Promise<FuelOrderResponse>
-    
-    // Cancel operation (replaces delete)
-    cancelFuelOrder(id: number): Promise<FuelOrderResponse>
+### Backend (Dockerized)
+
+*   **Container Orchestration:** `docker-compose.yml` (or `docker-compose.yml`) manages the backend Flask application and PostgreSQL database services.
+*   **Database Service Name:** The PostgreSQL database service is typically named `db` within the Docker network.
+*   **Database Port (Internal Docker):** `5432`
+*   **Database Port (Host Mapping):** Usually mapped to `5433` on the host machine (e.g., `localhost:5433`).
+*   **Default Backend Connection String (within Docker network):**
+    `postgresql://fbo_user:fbo_password@db:5432/fbo_launchpad_dev`
+*   **Host Machine Connection String (for direct DB access from host):**
+    `postgresql://fbo_user:fbo_password@localhost:5433/fbo_launchpad_dev`
+*   **Starting Backend & DB:**
+    ```bash
+    cd backend
+    docker-compose up -d  # Or: docker compose up -d
     ```
-*   **Benefits:** Direct mapping to backend endpoints, consistent error handling, clear function purposes
+*   **Running Flask Commands (Migrations, Seeding, CLI):**
+    Always execute Flask commands *inside* the backend container:
+    ```bash
+    # General format
+    docker-compose exec backend flask <command_group> <command> [options]
 
-### Data Synchronization Architecture ✅ DECIDED  
-**Pattern:** Dual Model Architecture with Type-Safe Mapping
-*   **Implementation:** Separate TypeScript interfaces for frontend display and backend communication
-*   **Structure:**
-    ```typescript
-    // Frontend display interface
-    interface FuelOrderDisplay {
-      id: number;
-      aircraft_id: number;        // For UI interactions
-      aircraft_tail_number: string; // Display value
-      quantity: string;           // String for form handling
-      // ... other display-optimized fields
-    }
-    
-    // Backend communication interface  
-    interface FuelOrderBackend {
-      id?: number;
-      tail_number: string;        // Backend requirement
-      requested_amount: number;   // Decimal for API
-      additive_requested?: boolean;
-      location_on_ramp?: string;
-      // ... other backend fields
-    }
-    
-    // Transformation utilities
-    function transformToBackend(display: FuelOrderDisplay): FuelOrderBackend
-    function transformToDisplay(backend: FuelOrderBackend): FuelOrderDisplay
+    # Examples:
+    docker-compose exec backend flask db upgrade
+    docker-compose exec backend flask seed run
+    docker-compose exec backend flask create-admin
     ```
-*   **Benefits:** Type safety at compile time, clear data flow, validation at transformation points
+*   **Backend API Port (Internal Docker):** `5000`
+*   **Backend API Port (Host Mapping):** Mapped to `5001` on the host (i.e., accessible at `http://localhost:5001`).
 
-### UI Integration Architecture ✅ DECIDED
-**Pattern:** Component Library Enhancement with UX Improvements  
-*   **Implementation:** Enhance existing components while maintaining visual consistency
-*   **Enhancements:**
-    - Form components with new fields (additive_requested, location_on_ramp)
-    - Auto-assign dropdown options for LST/truck selection
-    - Real-time dashboard updates with loading states
-    - Enhanced error handling and user feedback
-    - Mobile-first responsive design with WCAG AA compliance
-*   **Benefits:** Faster implementation, visual consistency, improved user experience
-*   **API Configuration:**
-    *   `frontend/app/services/api-config.ts` provides the `API_BASE_URL`, a helper `getAuthHeaders()` to retrieve the JWT token from `localStorage` and prepare authorization headers, and `handleApiResponse()` for consistent response parsing and error handling.
-*   **State Management & Permissions:**
-    *   User session state (JWT token and basic user info) is stored in `localStorage` after successful login via `auth-service.ts`.
-    *   `PermissionContext` (in `frontend/app/contexts/permission-context.tsx`), in conjunction with `auth-service.ts`, manages user roles and live permissions. Permissions are fetched from the `/auth/me/permissions` endpoint upon application load (if authenticated) and made available via the `usePermissions` hook.
-*   **Data Display and Forms:**
-    *   Page components (e.g., under `frontend/app/admin/`) and general components utilize these services to fetch data and perform CRUD operations.
-    *   Forms for creating and editing entities (Users, Customers, Fuel Trucks) are implemented within their respective page components, using local component state to manage form data and submission states.
+### Frontend (Typically Run on Host)
 
-## Known Challenges & Frontend-Backend Interaction Notes
+*   **Default Port:** `3000`.
+*   **CRITICAL NOTE FOR AI:** The frontend development server should ideally be running on `http://localhost:3000`. **Avoid suggesting commands that start a *new* frontend dev server if one is already running.** New instances often pick `3001`, `3002`, etc., leading to confusion and issues with API proxying if not configured for the new port. Assume `http://localhost:3000` is the active frontend URL.
+*   **Starting Frontend:**
+    ```bash
+    cd frontend
+    npm run dev
+    ```
+*   **API Proxy:** The Next.js frontend uses rewrites to proxy API requests. Requests from the frontend to `/api/*` are forwarded to the backend at `http://localhost:5001/api/*`. This is configured in `frontend/next.config.mjs`.
 
-*   **Data Mapping for Model Discrepancies:**
-    *   A data mapping strategy is employed in services like `aircraft-service.ts` to bridge differences between the richer frontend data models (designed for a comprehensive UI) and the current, more limited backend schemas.
-    *   This results in some data fields on the frontend being displayed with default values (e.g., 'N/A', 0) or derived information when the backend does not provide corresponding data. For example, the `Aircraft` frontend model has fields like `model`, `owner`, `homeBase` which are not yet fully supplied by the backend.
-    *   Create and Update operations in the services ensure that payloads sent to the backend conform to the expected backend schemas, omitting frontend-only fields or transforming data as needed.
-*   **Error Handling:**
-    *   `handleApiResponse` provides a basic layer for handling non-OK HTTP responses and parsing errors.
-    *   Individual services and components implement further error handling, often displaying messages to the user via `toast` notifications or in-form error messages.
-*   **API Endpoint Versioning/Consistency:**
-    *   Care is taken to align frontend service calls with the documented backend API endpoints (e.g., use of trailing slashes where appropriate, correct HTTP methods).
-    *   The admin user management temporarily uses a non-admin route for fetching a single user due to backend limitations (see `activeContext.md`).
+## 4. Database Seeding - CRITICAL CONTEXT
 
-## Testing
-*   Unit and integration tests for frontend components are being developed using Vitest and React Testing Library.
-*   Service modules are mocked to isolate component behavior during tests.
-*   Focus is on testing user interactions, data display, form submissions, and error handling.
+*   **Primary Seeding Script:** `backend/src/seeds.py` contains the logic for populating initial data, including permissions, roles, role-permission assignments, and default users.
+*   **CLI Command for Seeding:**
+    ```bash
+    docker-compose exec backend flask seed run
+    ```
+*   **Idempotency:** The `seed_data()` function in `seeds.py` is designed to be idempotent. It typically clears existing PBAC-related tables (`user_roles`, `role_permissions`, etc.) before re-populating them. This means it can be re-run safely without duplicating core data.
+*   **When to Seed:**
+    *   After a full database reset (e.g., `docker-compose down -v` followed by `docker-compose up -d`).
+    *   When new permissions or default roles are added/modified in `seeds.py`.
+    *   The `backend/entrypoint.sh` script attempts to auto-seed the database if the `users` table is empty upon container startup.
+*   **Convenience Script:** `backend/reseed_database.sh` offers helpful commands:
+    *   `./reseed_database.sh reseed`: Force re-runs `flask seed run`.
+    *   `./reseed_database.sh fresh`: Stops containers, removes volumes (full data wipe), and restarts, triggering auto-seed.
+*   **COMMON AI PITFALL (Database Connection for Seeding/Migrations):**
+    *   The AI often assumes a local PostgreSQL instance or tries to run `psql` commands directly on the host without considering Docker.
+    *   **Guidance for AI:** Always emphasize that database operations like seeding and migrations for the backend are performed *via Flask commands executed inside the Docker container* (`docker-compose exec backend flask ...`). The backend application connects to the database using the service name `db` (e.g., `postgresql://fbo_user:fbo_password@db:5432/fbo_launchpad_dev`).
+
+## 5. Permissions System (PBAC)
+
+*   **Current State:** The system has transitioned from a simple role-based system to a more granular Permission-Based Access Control (PBAC) system.
+*   **Source of Truth for Permissions:** The canonical list of all available permissions is defined in `backend/src/seeds.py` within the `all_permissions` list.
+*   **Role-Permission Mapping:** `backend/src/seeds.py` also defines the `role_permission_mapping`, which assigns sets of these permissions to default roles (System Administrator, CSR, LST, Member).
+*   **Backend Permission Checking:**
+    *   The `User` model (`backend/src/models/user.py`) has a `has_permission(permission_name)` method.
+    *   API routes are protected using the `@require_permission('PERMISSION_NAME')` decorator (`backend/src/utils/decorators.py`).
+*   **Frontend Permission Handling:**
+    *   `frontend/app/contexts/permission-context.tsx` and `frontend/hooks/usePermissions.ts` manage user permissions on the client-side.
+    *   Upon login, the frontend fetches the authenticated user's effective permissions from the `/api/auth/me/permissions` endpoint (see `frontend/app/services/auth-service.ts`).
+    *   UI elements are conditionally rendered or disabled based on these fetched permissions using helpers like `can()`, `canAny()`, etc., from `usePermissions`.
+*   **COMMON AI PITFALL (Inferring Permissions):**
+    *   The AI might try to infer a user's capabilities solely from their role name (e.g., "CSR can do X").
+    *   **Guidance for AI:** Stress that access control is now primarily based on *specific permissions*. While roles are collections of permissions, functionality checks should verify the presence of the required permission string (e.g., `CREATE_ORDER`), not just the role name. Refer to `seeds.py` for actual permission names.
+
+## 6. Key Files for Context
+
+*   **Backend Structure & Config:**
+    *   `backend/docker-compose.yml`: Defines services, especially `db` and `backend`.
+    *   `backend/config.py` & `backend/src/config.py`: Database URIs, secret keys.
+    *   `backend/entrypoint.sh`: Initial container setup, auto-seeding logic.
+    *   `backend/reseed_database.sh`: DB management helper.
+    *   `backend/src/app.py`: Flask app factory, blueprint registration.
+*   **Permissions & Seeding (Backend):**
+    *   `backend/src/seeds.py`: **Canonical source for permissions and initial role assignments.**
+    *   `backend/src/models/permission.py`, `backend/src/models/role.py`, `backend/src/models/user.py`: Core PBAC models.
+    *   `backend/src/utils/decorators.py`: `@require_permission` decorator.
+*   **Frontend Configuration & Auth:**
+    *   `frontend/next.config.mjs`: API proxy rewrite rules.
+    *   `frontend/app/contexts/permission-context.tsx`: Manages permissions state.
+    *   `frontend/hooks/usePermissions.ts`: Provides permission checking utilities.
+    *   `frontend/app/services/auth-service.ts`: Handles login and fetching user permissions.
+    *   `frontend/app/services/api-config.ts`: Base API URL and auth header generation.
+
+## 7. General AI Guidance & Reminders
+
+*   **Docker is Key for Backend:** Assume the backend Flask app and PostgreSQL database are always running within Docker containers managed by `docker-compose`.
+*   **Database Interaction:** For tasks involving the database (migrations, seeding, direct queries for debugging), use `docker-compose exec backend flask ...` for application-level commands, or connect to `localhost:5433` (default host mapping) if using a GUI/CLI tool from the host. The application itself connects to `db:5432`.
+*   **Frontend Port `3000`:** The primary frontend development server is expected to be on `http://localhost:3000`. Avoid starting new instances that might occupy other ports unless explicitly instructed.
+*   **API Proxy:** Frontend calls to `/api/...` are proxied to `http://localhost:5001/api/...`.
+*   **Permissions Source of Truth:** `backend/src/seeds.py` is the definitive source for available permission strings. Frontend checks should align with these names.
+*   **Idempotent Seeding:** The `flask seed run` command is designed to be safe to re-run.
+*   **Migrations:** Database schema changes are managed by Alembic using `flask db ...` commands executed within the `backend` Docker container.
+*   **Focus on Granular Permissions:** When discussing access control for features, prioritize checking for specific permissions over broad role checks.
+*   **Error Handling:** Be mindful of common errors like JWT issues, database connection problems (especially with Docker), and permission mismatches between frontend expectations and backend definitions.
