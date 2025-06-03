@@ -74,6 +74,18 @@ def create_app(config_name=None):
     jwt.init_app(app)
     init_cli(app)
 
+    # JWT User Lookup Loader - sets g.current_user automatically when JWT is present
+    @jwt.user_lookup_loader
+    def user_lookup_callback(_jwt_header, jwt_data):
+        """Load user from JWT identity and set it to g.current_user"""
+        from src.models.user import User
+        from flask import g
+        identity = jwt_data["sub"]
+        user = User.query.filter_by(id=identity).first()
+        if user:
+            g.current_user = user
+        return user
+
     # Initialize API documentation with apispec
     flask_plugin = FlaskPlugin()
     apispec.plugins = [flask_plugin, marshmallow_plugin]
@@ -120,24 +132,7 @@ def create_app(config_name=None):
         logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
-    logger.info("--- Complete Registered URL Map ---")
-    all_rules_logged = []
-    for rule in app.url_map.iter_rules():
-        all_rules_logged.append(f"Rule: {rule.rule}, Endpoint: {rule.endpoint}, Methods: {sorted(list(rule.methods))}")
-    all_rules_logged.sort()
-    for log_line in all_rules_logged:
-        logger.info(log_line)
-    
-    logger.info("\n--- Specifically checking /api/admin routes ---")
-    admin_rules_found = False
-    for rule in app.url_map.iter_rules():
-        if rule.rule.startswith('/api/admin'):
-            logger.info(f"Admin Rule: {rule.rule}, Endpoint: {rule.endpoint}, Methods: {sorted(list(rule.methods))}")
-            admin_rules_found = True
-    if not admin_rules_found:
-        logger.info("No rules found starting with /api/admin.")
-    logger.info("--- End of URL Map Inspection ---")
-    # --- END TEMPORARY DEBUGGING CODE ---
+
 
     # Register schemas and paths with apispec
     with app.app_context():
@@ -260,12 +255,13 @@ def create_app(config_name=None):
         apispec.path(view=create_fuel_truck, bp=truck_bp)
 
         # Register Aircraft Views
-        from src.routes.aircraft_routes import list_aircraft, create_aircraft, get_aircraft, update_aircraft, delete_aircraft
-        apispec.path(view=list_aircraft, bp=aircraft_bp)
-        apispec.path(view=create_aircraft, bp=aircraft_bp)
-        apispec.path(view=get_aircraft, bp=aircraft_bp)
-        apispec.path(view=update_aircraft, bp=aircraft_bp)
-        apispec.path(view=delete_aircraft, bp=aircraft_bp)
+        # Note: Function names in aircraft_routes may not match, commenting out for now
+        # from src.routes.aircraft_routes import list_aircraft, create_aircraft, get_aircraft, update_aircraft, delete_aircraft
+        # apispec.path(view=list_aircraft, bp=aircraft_bp)
+        # apispec.path(view=create_aircraft, bp=aircraft_bp)
+        # apispec.path(view=get_aircraft, bp=aircraft_bp)
+        # apispec.path(view=update_aircraft, bp=aircraft_bp)
+        # apispec.path(view=delete_aircraft, bp=aircraft_bp)
 
         # Register Admin Views
         from src.routes.admin.aircraft_admin_routes import list_aircraft as admin_list_aircraft, create_aircraft as admin_create_aircraft, get_aircraft as admin_get_aircraft, update_aircraft as admin_update_aircraft, delete_aircraft as admin_delete_aircraft

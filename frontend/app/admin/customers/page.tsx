@@ -328,7 +328,7 @@ export default function CustomerManagementPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
+            <Table data-testid="customer-list">
               <TableHeader>
                 <TableRow>
                   <TableHead>ID</TableHead>

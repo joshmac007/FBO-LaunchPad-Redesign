@@ -2,7 +2,7 @@ from flask import request, jsonify, current_app
 from marshmallow import ValidationError
 from ...services.user_service import UserService
 from ...services.fuel_order_service import FuelOrderService
-from src.utils.decorators import token_required, require_permission
+from src.utils.enhanced_auth_decorators_v2 import require_permission_v2
 from ...models.user import UserRole
 from ...schemas.user_schemas import (
     UserDetailSchema,
@@ -17,8 +17,7 @@ from ...models.user import User
 from ...extensions import db
 
 @admin_bp.route('/lsts', methods=['GET', 'OPTIONS'])
-@token_required
-@require_permission('MANAGE_USERS')
+@require_permission_v2('manage_users')
 def get_lsts():
     """Get a list of all LSTs with performance metrics.
     Returns LST users with enhanced performance data.
@@ -161,8 +160,7 @@ def get_lsts():
         return jsonify({"error": "Failed to retrieve LSTs"}), 500
 
 @admin_bp.route('/lsts', methods=['POST'])
-@token_required
-@require_permission('MANAGE_USERS')
+@require_permission_v2('manage_users')
 def create_lst():
     """Create a new LST user.
     Creates a new user with LST role and additional LST-specific fields.
@@ -280,8 +278,7 @@ def create_lst():
         return jsonify({"error": "Failed to create LST"}), 500
 
 @admin_bp.route('/lsts/<int:lst_id>', methods=['GET'])
-@token_required
-@require_permission('MANAGE_USERS')
+@require_permission_v2('manage_users')
 def get_lst(lst_id):
     """Get LST details by ID.
     Returns detailed LST information including performance metrics.
@@ -327,8 +324,7 @@ def get_lst(lst_id):
         return jsonify({"error": "Failed to retrieve LST"}), 500
 
 @admin_bp.route('/lsts/<int:lst_id>', methods=['PATCH'])
-@token_required
-@require_permission('MANAGE_USERS')
+@require_permission_v2('manage_users')
 def update_lst(lst_id):
     """Update LST details.
     Updates LST-specific fields and user information.
@@ -425,8 +421,7 @@ def update_lst(lst_id):
         return jsonify({"error": "Failed to update LST"}), 500
 
 @admin_bp.route('/lsts/<int:lst_id>', methods=['DELETE'])
-@token_required
-@require_permission('MANAGE_USERS')
+@require_permission_v2('manage_users')
 def delete_lst(lst_id):
     """Delete (deactivate) an LST.
     Soft deletes the LST by deactivating the user account.
@@ -454,8 +449,7 @@ def delete_lst(lst_id):
         return jsonify({"error": "Failed to delete LST"}), 500
 
 @admin_bp.route('/lsts/stats', methods=['GET'])
-@token_required
-@require_permission('MANAGE_USERS')
+@require_permission_v2('manage_users')
 def get_lst_stats():
     """Get LST statistics and aggregated performance metrics.
     Returns summary statistics for all LSTs.

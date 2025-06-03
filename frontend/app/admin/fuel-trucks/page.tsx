@@ -297,7 +297,7 @@ export default function FuelTruckManagementPage() {
               <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isSubmitting}>Cancel</Button>
               <Button type="button" onClick={handleCreateSubmit} disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {isSubmitting ? "Creating..." : "Create Truck"}
+                {isSubmitting ? "Creating..." : "Create Fuel Truck"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -338,7 +338,7 @@ export default function FuelTruckManagementPage() {
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Truck className="h-5 w-5" />Fuel Trucks ({filteredTrucks.length})</CardTitle><CardDescription>Monitor fuel truck status, capacity, and meter readings.</CardDescription></CardHeader>
         <CardContent>
-          <Table>
+          <Table data-testid="fuel-truck-list">
             <TableHeader><TableRow><TableHead>Truck Number</TableHead><TableHead>Fuel Type</TableHead><TableHead>Fuel Level (Meter)</TableHead><TableHead>Status</TableHead><TableHead>Created At</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
             <TableBody>
               {filteredTrucks.map((truck) => {

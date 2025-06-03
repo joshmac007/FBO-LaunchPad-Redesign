@@ -12,13 +12,12 @@ from flask import Blueprint, request, jsonify, current_app
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from ..utils.enhanced_auth_decorators import (
-    require_permission, 
-    require_any_permission,
-    admin_required,
-    get_permission_context
+from ..utils.enhanced_auth_decorators_v2 import (
+    require_permission_v2 as require_permission, 
+    require_any_permission_v2 as require_any_permission,
+    require_permission_v2  # For admin_required functionality
 )
-from ..services.permission_service import PermissionService
+from ..services.enhanced_permission_service import enhanced_permission_service
 from ..services.user_service import UserService
 from ..models.user import User
 from ..models.permission import Permission
@@ -47,12 +46,12 @@ def get_user_permissions(user_id):
             return jsonify({'error': 'User not found'}), 404
         
         # Get effective permissions with full context
-        effective_permissions = PermissionService.get_user_effective_permissions(
-            user_id, include_resource_context=True
+        effective_permissions = enhanced_permission_service.get_user_permissions(
+            user_id, include_groups=True
         )
         
         # Get permission summary
-        summary = PermissionService.get_permission_summary(user_id)
+        summary = enhanced_permission_service.get_user_permission_summary(user_id)
         
         return jsonify({
             'user_id': user_id,
@@ -591,4 +590,15 @@ def get_user_permission_summary(user_id):
         
     except Exception as e:
         current_app.logger.error(f"Error retrieving permission summary: {str(e)}")
-        return jsonify({'error': 'Failed to retrieve permission summary'}), 500 
+        return jsonify({'error': 'Failed to retrieve permission summary'}), 500
+
+# Compatibility function for get_permission_context
+def get_permission_context():
+    """Get current permission context for audit trail."""
+    from flask import g
+    return getattr(g, 'current_user', None)
+
+# Compatibility function for admin_required
+def admin_required(f):
+    """Admin required decorator using v2 system."""
+    return require_permission_v2('administrative_operations')(f) 

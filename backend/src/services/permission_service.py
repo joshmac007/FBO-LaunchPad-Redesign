@@ -113,32 +113,33 @@ class PermissionService:
     
     @classmethod
     def _get_group_permissions(cls, user: User, include_resource_context: bool) -> Dict[str, any]:
-        """Get permissions from user's permission groups."""
+        """Get permissions from user's permission groups via role assignments."""
         permissions = {}
         
-        for group in user.permission_groups:
-            if not group.is_active:
-                continue
-                
-            # Get all permissions including inherited ones
-            group_permissions = group.get_all_permissions(include_inherited=True)
-            
-            for perm in group_permissions:
-                if not perm.is_active:
-                    continue
-                
-                perm_key = perm.name
-                
-                # For group permissions, we don't have resource-specific context
-                # unless the permission itself requires it
-                if perm_key not in permissions:
-                    permissions[perm_key] = {
-                        'permission': perm.name,
-                        'resource_type': perm.resource_type,
-                        'scope': perm.scope,
-                        'source': f'group:{group.name}',
-                        'group_id': group.id
-                    }
+        # Get permission groups through user's roles
+        for role in user.roles:
+            if hasattr(role, 'get_permission_groups'):
+                for group in role.get_permission_groups():
+                    if not group.is_active:
+                        continue
+                        
+                    # Get all permissions including inherited ones
+                    group_permission_names = group.get_all_permissions()
+                    
+                    for perm_name in group_permission_names:
+                        perm_key = perm_name
+                        
+                        # For group permissions, we don't have resource-specific context
+                        # unless the permission itself requires it
+                        if perm_key not in permissions:
+                            permissions[perm_key] = {
+                                'permission': perm_name,
+                                'resource_type': 'global',  # Default for group permissions
+                                'scope': 'global',  # Default scope
+                                'source': f'role:{role.name}->group:{group.name}',
+                                'group_id': group.id,
+                                'role_id': role.id
+                            }
         
         return permissions
     

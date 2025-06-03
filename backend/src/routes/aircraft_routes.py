@@ -1,23 +1,24 @@
-from flask import Blueprint, request, jsonify
-from ..utils.decorators import token_required, require_permission
-from ..models.user import UserRole
+from flask import Blueprint, request, jsonify, g
+from ..utils.enhanced_auth_decorators_v2 import require_permission_v2
 from ..services.aircraft_service import AircraftService
-from ..schemas.aircraft_schemas import (
-    AircraftCreateSchema,
-    AircraftUpdateSchema,
+from marshmallow import ValidationError
+from ..schemas import (
+    AircraftCreateRequestSchema,
+    AircraftUpdateRequestSchema,
     AircraftResponseSchema,
-    AircraftListSchema,
+    AircraftListResponseSchema,
     ErrorResponseSchema
 )
 
+# Create blueprint for aircraft routes
 aircraft_bp = Blueprint('aircraft_bp', __name__, url_prefix='/api/aircraft')
 
 @aircraft_bp.route('', methods=['GET', 'OPTIONS'])
 @aircraft_bp.route('/', methods=['GET', 'OPTIONS'])
-@token_required
-@require_permission('VIEW_AIRCRAFT')
-def list_aircraft():
-    """Get all aircraft (VIEW_AIRCRAFT permission required).
+@require_permission_v2('view_aircraft')
+def get_aircraft():
+    """Get a list of aircraft.
+    Requires view_aircraft permission.
     ---
     tags:
       - Aircraft
@@ -25,28 +26,41 @@ def list_aircraft():
       - bearerAuth: []
     responses:
       200:
-        description: Aircraft list
+        description: List of aircraft retrieved successfully
         content:
           application/json:
-            schema: AircraftListSchema
+            schema: AircraftListResponseSchema
+      401:
+        description: Unauthorized
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      403:
+        description: Forbidden (missing permission)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      500:
+        description: Server error
+        content:
+          application/json:
+            schema: ErrorResponseSchema
     """
     if request.method == 'OPTIONS':
         return jsonify({'message': 'OPTIONS request successful'}), 200
-    filters = {}
-    if 'customer_id' in request.args:
-        filters['customer_id'] = request.args.get('customer_id', type=int)
-    aircraft, message, status_code = AircraftService.get_all_aircraft(filters)
-    return jsonify({
-        "message": message,
-        "aircraft": [AircraftResponseSchema().dump(a) for a in aircraft]
-    }), status_code
+    
+    aircraft, message, status_code = AircraftService.get_all_aircraft()
+    if aircraft is not None:
+        return jsonify({"message": message, "aircraft": aircraft}), status_code
+    else:
+        return jsonify({"error": message}), status_code
 
 @aircraft_bp.route('', methods=['POST', 'OPTIONS'])
 @aircraft_bp.route('/', methods=['POST', 'OPTIONS'])
-@token_required
-@require_permission('MANAGE_AIRCRAFT')
+@require_permission_v2('manage_aircraft')
 def create_aircraft():
-    """Create an aircraft (MANAGE_AIRCRAFT permission required).
+    """Create a new aircraft.
+    Requires manage_aircraft permission.
     ---
     tags:
       - Aircraft
@@ -56,32 +70,74 @@ def create_aircraft():
       required: true
       content:
         application/json:
-          schema: AircraftCreateSchema
+          schema: AircraftCreateRequestSchema
     responses:
       201:
-        description: Aircraft created
+        description: Aircraft created successfully
         content:
           application/json:
             schema: AircraftResponseSchema
+      400:
+        description: Bad Request (e.g., validation error)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      401:
+        description: Unauthorized
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      403:
+        description: Forbidden (missing permission)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      409:
+        description: Conflict (e.g., aircraft already exists)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      500:
+        description: Server error
+        content:
+          application/json:
+            schema: ErrorResponseSchema
     """
     if request.method == 'OPTIONS':
         return jsonify({'message': 'OPTIONS request successful'}), 200
-    schema = AircraftCreateSchema()
+    
     try:
-        data = schema.load(request.get_json())
+        schema = AircraftCreateRequestSchema()
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        try:
+            data = schema.load(data)
+        except ValidationError as e:
+            return jsonify({
+                "error": "Validation error",
+                "details": e.messages
+            }), 400
+        
+        aircraft, message, status_code = AircraftService.create_aircraft(data)
+        
+        if aircraft is not None:
+            return jsonify({"message": message, "aircraft": aircraft}), status_code
+        else:
+            return jsonify({"error": message}), status_code
+            
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
-    aircraft, message, status_code = AircraftService.create_aircraft(data)
-    if aircraft:
-        return jsonify({"message": message, "aircraft": AircraftResponseSchema().dump(aircraft)}), status_code
-    else:
-        return jsonify({"error": message}), status_code
+        from flask import current_app
+        current_app.logger.error(f"Error creating aircraft: {e}")
+        return jsonify({"error": "Server error"}), 500
 
 @aircraft_bp.route('/<string:tail_number>', methods=['GET'])
-@token_required
-@require_permission('VIEW_AIRCRAFT')
-def get_aircraft(tail_number):
-    """Get an aircraft by tail number (VIEW_AIRCRAFT permission required).
+@require_permission_v2('view_aircraft', 'aircraft', 'tail_number')
+def get_aircraft_by_tail(tail_number):
+    """Get an aircraft by tail number.
+    Requires view_aircraft permission for the specific aircraft.
     ---
     tags:
       - Aircraft
@@ -93,30 +149,52 @@ def get_aircraft(tail_number):
         schema:
           type: string
         required: true
-        description: Tail number
+        description: Tail number of the aircraft to retrieve
     responses:
       200:
-        description: Aircraft found
+        description: Aircraft retrieved successfully
         content:
           application/json:
             schema: AircraftResponseSchema
+      401:
+        description: Unauthorized
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      403:
+        description: Forbidden (missing permission)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
       404:
-        description: Not found
+        description: Aircraft not found
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      500:
+        description: Server error
         content:
           application/json:
             schema: ErrorResponseSchema
     """
-    aircraft, message, status_code = AircraftService.get_aircraft_by_tail(tail_number)
-    if aircraft:
-        return jsonify({"message": message, "aircraft": AircraftResponseSchema().dump(aircraft)}), status_code
-    else:
-        return jsonify({"error": message}), status_code
+    try:
+        aircraft, message, status_code = AircraftService.get_aircraft_by_tail(tail_number)
+        
+        if aircraft is not None:
+            return jsonify({"message": message, "aircraft": aircraft}), status_code
+        else:
+            return jsonify({"error": message}), status_code
+            
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error getting aircraft {tail_number}: {e}")
+        return jsonify({"error": "Server error"}), 500
 
 @aircraft_bp.route('/<string:tail_number>', methods=['PATCH'])
-@token_required
-@require_permission('MANAGE_AIRCRAFT')
+@require_permission_v2('manage_aircraft', 'aircraft', 'tail_number')
 def update_aircraft(tail_number):
-    """Update an aircraft (MANAGE_AIRCRAFT permission required).
+    """Update an aircraft.
+    Requires manage_aircraft permission for the specific aircraft.
     ---
     tags:
       - Aircraft
@@ -128,40 +206,136 @@ def update_aircraft(tail_number):
         schema:
           type: string
         required: true
-        description: Tail number
+        description: Tail number of the aircraft to update
     requestBody:
       required: true
       content:
         application/json:
-          schema: AircraftUpdateSchema
+          schema: AircraftUpdateRequestSchema
     responses:
       200:
-        description: Aircraft updated
+        description: Aircraft updated successfully
         content:
           application/json:
             schema: AircraftResponseSchema
+      400:
+        description: Bad Request (e.g., validation error)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      401:
+        description: Unauthorized
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      403:
+        description: Forbidden (missing permission)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
       404:
-        description: Not found
+        description: Aircraft not found
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      409:
+        description: Conflict (e.g., aircraft data conflict)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      500:
+        description: Server error
         content:
           application/json:
             schema: ErrorResponseSchema
     """
-    schema = AircraftUpdateSchema(partial=True)
     try:
-        data = schema.load(request.get_json())
+        schema = AircraftUpdateRequestSchema()
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        try:
+            data = schema.load(data)
+        except ValidationError as e:
+            return jsonify({
+                "error": "Validation error",
+                "details": e.messages
+            }), 400
+        
+        aircraft, message, status_code = AircraftService.update_aircraft(tail_number, data)
+        
+        if aircraft is not None:
+            return jsonify({"message": message, "aircraft": aircraft}), status_code
+        else:
+            return jsonify({"error": message}), status_code
+            
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
-    aircraft, message, status_code = AircraftService.update_aircraft(tail_number, data)
-    if aircraft:
-        return jsonify({"message": message, "aircraft": AircraftResponseSchema().dump(aircraft)}), status_code
-    else:
-        return jsonify({"error": message}), status_code
+        from flask import current_app
+        current_app.logger.error(f"Error updating aircraft {tail_number}: {e}")
+        return jsonify({"error": "Server error"}), 500
 
+@aircraft_bp.route('/<string:tail_number>', methods=['DELETE'])
+@require_permission_v2('manage_aircraft', 'aircraft', 'tail_number')
+def delete_aircraft(tail_number):
+    """Delete an aircraft.
+    Requires manage_aircraft permission for the specific aircraft.
+    ---
+    tags:
+      - Aircraft
+    security:
+      - bearerAuth: []
+    parameters:
+      - in: path
+        name: tail_number
+        schema:
+          type: string
+        required: true
+        description: Tail number of the aircraft to delete
+    responses:
+      204:
+        description: Aircraft deleted successfully
+      401:
+        description: Unauthorized
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      403:
+        description: Forbidden (missing permission)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      404:
+        description: Aircraft not found
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      500:
+        description: Server error
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+    """
+    try:
+        deleted, message, status_code = AircraftService.delete_aircraft(tail_number)
+        
+        if deleted:
+            return '', 204
+        else:
+            return jsonify({"error": message}), status_code
+            
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error deleting aircraft {tail_number}: {e}")
+        return jsonify({"error": "Server error"}), 500
+
+# Special endpoint for CSR quick aircraft creation during fuel order process
 @aircraft_bp.route('/quick-create', methods=['POST', 'OPTIONS'])
-@token_required
-@require_permission('MANAGE_AIRCRAFT')
-def quick_create_aircraft():
-    """Quick create an aircraft with minimal fields (MANAGE_AIRCRAFT permission required).
+@require_permission_v2('create_fuel_order')
+def create_aircraft_quick():
+    """Quick aircraft creation for CSRs during fuel order process.
+    Requires create_fuel_order permission (CSR permission).
     ---
     tags:
       - Aircraft
@@ -176,13 +350,10 @@ def quick_create_aircraft():
             properties:
               tail_number:
                 type: string
-                description: Aircraft tail number
               aircraft_type:
                 type: string
-                description: Type of aircraft
               fuel_type:
                 type: string
-                description: Type of fuel
             required:
               - tail_number
               - aircraft_type
@@ -194,12 +365,27 @@ def quick_create_aircraft():
           application/json:
             schema: AircraftResponseSchema
       400:
-        description: Bad request
+        description: Bad Request (e.g., validation error)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      401:
+        description: Unauthorized
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      403:
+        description: Forbidden (missing permission)
         content:
           application/json:
             schema: ErrorResponseSchema
       409:
-        description: Aircraft already exists
+        description: Conflict (e.g., aircraft already exists)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      500:
+        description: Server error
         content:
           application/json:
             schema: ErrorResponseSchema
@@ -207,57 +393,33 @@ def quick_create_aircraft():
     if request.method == 'OPTIONS':
         return jsonify({'message': 'OPTIONS request successful'}), 200
     
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "No data provided"}), 400
-    
-    # Validate required fields
-    required_fields = ['tail_number', 'aircraft_type', 'fuel_type']
-    for field in required_fields:
-        if field not in data or not data[field]:
-            return jsonify({"error": f"Missing required field: {field}"}), 400
-    
-    aircraft, message, status_code = AircraftService.create_aircraft(data)
-    if aircraft:
-        return jsonify({"message": message, "aircraft": AircraftResponseSchema().dump(aircraft)}), status_code
-    else:
-        return jsonify({"error": message}), status_code
-
-@aircraft_bp.route('/<string:tail_number>', methods=['DELETE'])
-@token_required
-@require_permission('MANAGE_AIRCRAFT')
-def delete_aircraft(tail_number):
-    """Delete an aircraft (MANAGE_AIRCRAFT permission required).
-    ---
-    tags:
-      - Aircraft
-    security:
-      - bearerAuth: []
-    parameters:
-      - in: path
-        name: tail_number
-        schema:
-          type: string
-        required: true
-        description: Tail number
-    responses:
-      200:
-        description: Aircraft deleted
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                message:
-                  type: string
-      404:
-        description: Not found
-        content:
-          application/json:
-            schema: ErrorResponseSchema
-    """
-    success, message, status_code = AircraftService.delete_aircraft(tail_number)
-    if success:
-        return jsonify({"message": message}), status_code
-    else:
-        return jsonify({"error": message}), status_code
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        # Validate required fields for quick create
+        required_fields = ['tail_number', 'aircraft_type', 'fuel_type']
+        for field in required_fields:
+            if field not in data or not data[field]:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+        
+        # Create aircraft with basic information
+        aircraft_data = {
+            'tail_number': data['tail_number'].strip().upper(),
+            'aircraft_type': data['aircraft_type'].strip(),
+            'fuel_type': data['fuel_type'].strip()
+        }
+        
+        aircraft, message, status_code = AircraftService.create_aircraft(aircraft_data)
+        
+        if aircraft is not None:
+            return jsonify({"message": message, "aircraft": aircraft}), status_code
+        else:
+            return jsonify({"error": message}), status_code
+            
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error in quick aircraft creation: {e}")
+        return jsonify({"error": "Server error"}), 500

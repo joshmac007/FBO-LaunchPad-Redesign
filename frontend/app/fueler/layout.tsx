@@ -38,11 +38,11 @@ export default function FuelerLayout({
 
     // Check for fueler access using backend permissions
     const fuelerPermissions = [
-      'ACCESS_FUELER_DASHBOARD',
-      'PERFORM_FUELING_TASK',
-      'UPDATE_OWN_ORDER_STATUS',
-      'VIEW_ASSIGNED_ORDERS',
-      'COMPLETE_OWN_ORDER'
+      'access_fueler_dashboard',
+      'perform_fueling_task',
+      'update_order_status',
+      'view_assigned_orders',
+      'complete_fuel_order'
     ]
 
     const hasFuelerAccess = canAny(fuelerPermissions) || isFueler
@@ -51,11 +51,11 @@ export default function FuelerLayout({
       console.log("User does not have fueler permissions, redirecting to appropriate dashboard")
       
       // Redirect to appropriate dashboard based on user's permissions
-      if (canAny(['ACCESS_ADMIN_DASHBOARD', 'MANAGE_SETTINGS', 'MANAGE_USERS', 'MANAGE_ROLES'])) {
+      if (canAny(['access_admin_dashboard', 'manage_settings', 'manage_users', 'manage_roles'])) {
         router.push("/admin/dashboard")
-      } else if (canAny(['ACCESS_CSR_DASHBOARD', 'VIEW_ALL_ORDERS', 'CREATE_ORDER'])) {
+      } else if (canAny(['access_csr_dashboard', 'view_all_orders', 'create_order'])) {
         router.push("/csr/dashboard")
-      } else if (canAny(['ACCESS_MEMBER_DASHBOARD']) || user.is_active) {
+      } else if (canAny(['access_member_dashboard']) || user.is_active) {
         router.push("/member/dashboard")
       } else {
         router.push("/login")

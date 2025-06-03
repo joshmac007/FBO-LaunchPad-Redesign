@@ -37,10 +37,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     // Check for admin access using backend permissions
     const adminPermissions = [
-      'ACCESS_ADMIN_DASHBOARD',
-      'MANAGE_SETTINGS', 
-      'MANAGE_USERS',
-      'MANAGE_ROLES'
+      'access_admin_dashboard',
+      'manage_settings', 
+      'manage_users',
+      'manage_roles'
     ]
 
     const hasAdminAccess = canAny(adminPermissions) || isAdmin
@@ -49,11 +49,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       console.log("User does not have admin permissions, redirecting to appropriate dashboard")
       
       // Redirect to appropriate dashboard based on user's permissions
-      if (canAny(['ACCESS_CSR_DASHBOARD', 'VIEW_ALL_ORDERS', 'CREATE_ORDER'])) {
+      if (canAny(['access_csr_dashboard', 'view_all_orders', 'create_order'])) {
         router.push("/csr/dashboard")
-      } else if (canAny(['ACCESS_FUELER_DASHBOARD', 'PERFORM_FUELING_TASK'])) {
+      } else if (canAny(['access_fueler_dashboard', 'perform_fueling_task'])) {
         router.push("/fueler/dashboard")
-      } else if (canAny(['ACCESS_MEMBER_DASHBOARD']) || user.is_active) {
+      } else if (canAny(['access_member_dashboard']) || user.is_active) {
         router.push("/member/dashboard")
       } else {
         router.push("/login")

@@ -88,8 +88,8 @@ export default function CSRDashboard() {
       setError(null)
 
       // Load fuel orders from backend API
-      const orders = await getFuelOrders()
-      setFuelOrders(orders)
+      const response = await getFuelOrders()
+      setFuelOrders(response.items || [])
     } catch (error) {
       console.error("Error loading fuel orders:", error)
       setError("Failed to load fuel orders. Please try again.")
@@ -104,6 +104,11 @@ export default function CSRDashboard() {
   }
 
   const getFilteredOrders = () => {
+    // Safety check to ensure fuelOrders is an array
+    if (!Array.isArray(fuelOrders)) {
+      return []
+    }
+    
     switch (activeTab) {
       case "pending":
         return fuelOrders.filter((o) => o.status === "PENDING")
@@ -118,6 +123,11 @@ export default function CSRDashboard() {
 
   // Get counts for quick statistics
   const getOrderCounts = () => {
+    // Safety check to ensure fuelOrders is an array
+    if (!Array.isArray(fuelOrders)) {
+      return { pending: 0, inProgress: 0, completed: 0, total: 0 }
+    }
+    
     const pending = fuelOrders.filter((o) => o.status === "PENDING").length
     const inProgress = fuelOrders.filter((o) => o.status === "IN_PROGRESS").length
     const completed = fuelOrders.filter((o) => o.status === "COMPLETED").length

@@ -50,6 +50,7 @@ import {
   LSTCreateRequest,
   LSTUpdateRequest
 } from "@/app/services/lst-service"
+import AdminLayout from "../layout"
 
 export default function LSTManagement() {
   const [lsts, setLsts] = useState<LST[]>([])
@@ -275,7 +276,8 @@ export default function LSTManagement() {
   }
 
   return (
-    <div className="space-y-6">
+    <AdminLayout>
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -662,6 +664,7 @@ export default function LSTManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </AdminLayout>
   )
 }

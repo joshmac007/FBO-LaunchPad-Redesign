@@ -50,7 +50,7 @@ def run_seed():
 
 @click.group()
 def migrate_cli():
-    """Permission system migration commands."""
+    """Database migration commands."""
     pass
 
 @migrate_cli.command('run')
@@ -100,8 +100,83 @@ def validate_migration():
     else:
         click.echo("✅ No validation errors found!")
 
+@migrate_cli.command('standardize-permissions')
+@click.option('--dry-run', is_flag=True, help='Show what would be changed without making actual changes')
+@with_appcontext
+def standardize_permissions(dry_run):
+    """Standardize permission names from UPPERCASE_SNAKE_CASE to snake_case.
+    
+    This is a safety migration for existing databases that may have permission names
+    in the old UPPERCASE_SNAKE_CASE format. For new databases, seeds.py handles this correctly.
+    """
+    from .migration_scripts.standardize_permission_names import run_migration
+    
+    click.echo("🚀 Starting permission name standardization migration...")
+    if dry_run:
+        click.echo("🔍 DRY RUN MODE - No changes will be made")
+    click.echo("=" * 50)
+    
+    success = run_migration(dry_run=dry_run)
+    
+    if success:
+        click.echo("✅ Permission name standardization completed successfully!")
+        if not dry_run:
+            click.echo("🔄 Next step: Run 'flask create-permission-groups run' to refresh permission groups")
+    else:
+        click.echo("❌ Permission name standardization failed!")
+        
+    return success
+
+@click.group()
+def permission_groups_cli():
+    """Permission groups management commands."""
+    pass
+
+@permission_groups_cli.command('run')
+@with_appcontext
+def run_permission_groups():
+    """Create permission groups and assign them to roles.
+    
+    This command should be run AFTER 'flask seed run' to create permission groups
+    and establish role-to-group assignments using snake_case permission names.
+    """
+    from .migration_scripts.permission_groups_schema import run_migration
+    
+    click.echo("🚀 Starting permission groups creation...")
+    click.echo("📝 This uses snake_case permissions from seeds.py")
+    click.echo("=" * 50)
+    
+    success = run_migration()
+    
+    if success:
+        click.echo("=" * 50)
+        click.echo("✅ Permission groups creation completed successfully!")
+        click.echo("🎉 Database now includes:")
+        click.echo("   • Hierarchical permission groups")
+        click.echo("   • Role-group assignments")
+        click.echo("   • Permission inheritance")
+    else:
+        click.echo("=" * 50)
+        click.echo("❌ Permission groups creation failed!")
+        click.echo("Check the logs above for details.")
+
+@permission_groups_cli.command('verify')
+@with_appcontext
+def verify_permission_groups():
+    """Verify the permission groups setup."""
+    from .migration_scripts.permission_groups_schema import verify_permission_groups_setup
+    
+    click.echo("🔍 Verifying permission groups setup...")
+    success = verify_permission_groups_setup()
+    
+    if success:
+        click.echo("✅ Permission groups verification completed!")
+    else:
+        click.echo("❌ Permission groups verification failed!")
+
 def init_app(app):
     """Register CLI commands."""
     app.cli.add_command(create_admin)
     app.cli.add_command(seed_cli, name='seed')
-    app.cli.add_command(migrate_cli, name='migrate') 
+    app.cli.add_command(migrate_cli, name='migrate')
+    app.cli.add_command(permission_groups_cli, name='create-permission-groups') 

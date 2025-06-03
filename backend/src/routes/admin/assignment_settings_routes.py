@@ -2,12 +2,11 @@
 # Deprecated: Global auto-assign setting is no longer used. All logic removed as of April 2025.
 
 from flask import Blueprint, jsonify
-from ..utils.decorators import token_required, require_permission
+from ..utils.enhanced_auth_decorators_v2 import require_permission_v2
 from . import admin_bp
 
 @admin_bp.route('/assignment-settings', methods=['GET'])
-@token_required
-@require_permission('ADMIN')
+@require_permission_v2('administrative_operations')
 def get_assignment_settings():
     """Get assignment settings.
     This endpoint is deprecated as of April 2025. Global auto-assign setting is no longer used.

@@ -13,6 +13,10 @@ class Aircraft(db.Model):
 
     # New column for fuel type
     fuel_type = db.Column(db.String(20), nullable=False)
+    
+    # Optional customer association
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True)
+    customer = db.relationship('Customer', backref=db.backref('aircraft_list', lazy='dynamic'))
 
     # Timestamps
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
@@ -23,6 +27,7 @@ class Aircraft(db.Model):
             'tail_number': self.tail_number,
             'aircraft_type': self.aircraft_type,
             'fuel_type': self.fuel_type,
+            'customer_id': self.customer_id,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

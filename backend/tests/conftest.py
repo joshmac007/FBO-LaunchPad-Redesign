@@ -97,13 +97,13 @@ def test_roles(app, db, test_permissions):
         # CSR role gets customer service permissions
         csr_role = Role(name='Customer Service Representative', description='Customer service access')
         csr_permissions = [perm_dict[n] for n in [
-            'CREATE_ORDER', 'MANAGE_ORDERS', 'VIEW_ORDERS', 'VIEW_USERS'
+            'create_fuel_order', 'manage_fuel_orders', 'view_fuel_orders', 'view_users'
         ] if n in perm_dict]
         csr_role.permissions.extend(csr_permissions)
         # LST role gets limited permissions
         lst_role = Role(name='Line Service Technician', description='Line service access')
         lst_permissions = [perm_dict[n] for n in [
-            'VIEW_ORDERS', 'COMPLETE_ORDER', 'VIEW_FUEL_TRUCKS'
+            'view_fuel_orders', 'complete_own_order', 'view_fuel_trucks'
         ] if n in perm_dict]
         lst_role.permissions.extend(lst_permissions)
         roles = [admin_role, csr_role, lst_role]

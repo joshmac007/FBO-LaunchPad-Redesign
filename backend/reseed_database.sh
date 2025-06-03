@@ -66,7 +66,9 @@ force_reseed() {
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo -e "${GREEN}Reseeding database...${NC}"
         $(get_compose_cmd) exec backend flask seed run
-        echo -e "${GREEN}Database reseeded successfully!${NC}"
+        echo -e "${GREEN}Creating permission groups and role assignments...${NC}"
+        $(get_compose_cmd) exec backend flask create-permission-groups run
+        echo -e "${GREEN}Database reseeded successfully with permission groups!${NC}"
     else
         echo -e "${YELLOW}Operation cancelled.${NC}"
     fi
@@ -82,7 +84,7 @@ fresh_start() {
         $(get_compose_cmd) down -v
         echo -e "${GREEN}Starting fresh...${NC}"
         $(get_compose_cmd) up -d
-        echo -e "${GREEN}Fresh start complete! Database will be seeded automatically.${NC}"
+        echo -e "${GREEN}Fresh start complete! Database will be seeded automatically with permission groups.${NC}"
         sleep 5
         $(get_compose_cmd) logs backend | tail -20
     else

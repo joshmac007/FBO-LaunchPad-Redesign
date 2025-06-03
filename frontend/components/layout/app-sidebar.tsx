@@ -95,43 +95,50 @@ export default function AppSidebar({ collapsed, setCollapsed, userRole = "csr" }
       title: "Admin Dashboard",
       href: "/admin/dashboard",
       icon: <Home className="h-5 w-5" />,
-      permissions: ['ACCESS_ADMIN_DASHBOARD'],
+      permissions: ['access_admin_dashboard'],
       description: "Admin overview and system management"
     },
     {
       title: "User Management",
       href: "/admin/users",
       icon: <Users className="h-5 w-5" />,
-      permissions: ['MANAGE_USERS', 'VIEW_USERS'],
+      permissions: ['manage_users'],
       description: "Manage system users and their access"
     },
     {
       title: "Permissions",
       href: "/admin/permissions",
       icon: <Shield className="h-5 w-5" />,
-      permissions: ['MANAGE_ROLES', 'VIEW_PERMISSIONS'],
+      permissions: ['view_permissions'],
       description: "Configure user permissions and roles"
     },
     {
       title: "Fuel Trucks",
       href: "/admin/fuel-trucks",
       icon: <Truck className="h-5 w-5" />,
-      permissions: ['MANAGE_FUEL_TRUCKS', 'VIEW_FUEL_TRUCKS'],
+      permissions: ['manage_fuel_trucks'],
       description: "Manage fuel truck fleet"
     },
     {
       title: "LST Management",
       href: "/admin/lst-management",
       icon: <UserCheck className="h-5 w-5" />,
-      permissions: ['MANAGE_USERS', 'VIEW_USERS'],
+      permissions: ['manage_users'],
       description: "Manage Line Service Technicians"
     },
     {
       title: "Customer Management",
       href: "/admin/customers",
       icon: <Users className="h-5 w-5" />,
-      permissions: ['MANAGE_CUSTOMERS', 'VIEW_CUSTOMERS'],
+      permissions: ['manage_customers'],
       description: "Manage customer accounts"
+    },
+    {
+      title: "Aircraft Management",
+      href: "/admin/aircraft",
+      icon: <Plane className="h-5 w-5" />,
+      permissions: ['manage_aircraft'],
+      description: "Manage aircraft records and registration"
     },
 
     // CSR Navigation
@@ -139,28 +146,28 @@ export default function AppSidebar({ collapsed, setCollapsed, userRole = "csr" }
       title: "CSR Dashboard",
       href: "/csr/dashboard",
       icon: <Home className="h-5 w-5" />,
-      permissions: ['ACCESS_CSR_DASHBOARD'],
+      permissions: ['access_csr_dashboard'],
       description: "Customer service overview"
     },
     {
       title: "Fuel Orders",
       href: "/csr/fuel-orders",
       icon: <FileText className="h-5 w-5" />,
-      permissions: ['VIEW_ALL_ORDERS', 'CREATE_ORDER', 'EDIT_FUEL_ORDER'],
+      permissions: ['view_all_orders', 'create_order', 'edit_fuel_order'],
       description: "Manage fuel orders and requests"
     },
     {
       title: "Receipts",
       href: "/csr/receipts",
       icon: <Receipt className="h-5 w-5" />,
-      permissions: ['VIEW_ALL_RECEIPTS', 'MANAGE_RECEIPTS'],
+      permissions: ['view_all_receipts'],
       description: "View and manage transaction receipts"
     },
     {
       title: "Export Data",
       href: "/csr/export",
       icon: <BarChart3 className="h-5 w-5" />,
-      permissions: ['EXPORT_ORDERS_CSV', 'VIEW_ORDER_STATS'],
+      permissions: ['export_order_data', 'view_order_statistics'],
       description: "Export data and generate reports"
     },
 
@@ -169,29 +176,8 @@ export default function AppSidebar({ collapsed, setCollapsed, userRole = "csr" }
       title: "Fueler Dashboard",
       href: "/fueler/dashboard",
       icon: <Home className="h-5 w-5" />,
-      permissions: ['ACCESS_FUELER_DASHBOARD'],
+      permissions: ['access_fueler_dashboard'],
       description: "Fueling operations overview"
-    },
-    {
-      title: "Pending Orders",
-      href: "/fueler/pending-orders",
-      icon: <Droplet className="h-5 w-5" />,
-      permissions: ['VIEW_ASSIGNED_ORDERS', 'PERFORM_FUELING_TASK'],
-      description: "Orders waiting to be fulfilled"
-    },
-    {
-      title: "In Progress",
-      href: "/fueler/in-progress",
-      icon: <Truck className="h-5 w-5" />,
-      permissions: ['VIEW_ASSIGNED_ORDERS', 'PERFORM_FUELING_TASK'],
-      description: "Currently active fueling operations"
-    },
-    {
-      title: "Completed Orders",
-      href: "/fueler/completed",
-      icon: <CheckCircle className="h-5 w-5" />,
-      permissions: ['VIEW_ASSIGNED_ORDERS', 'COMPLETE_OWN_ORDER'],
-      description: "Completed fueling operations"
     },
 
     // Member Navigation
@@ -199,7 +185,7 @@ export default function AppSidebar({ collapsed, setCollapsed, userRole = "csr" }
       title: "Member Dashboard",
       href: "/member/dashboard",
       icon: <Home className="h-5 w-5" />,
-      permissions: ['ACCESS_MEMBER_DASHBOARD'],
+      permissions: ['access_member_dashboard'],
       description: "Personal account overview"
     },
   ]

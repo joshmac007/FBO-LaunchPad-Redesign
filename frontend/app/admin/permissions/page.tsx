@@ -19,6 +19,7 @@ import {
   deleteRole,
 } from "@/app/services/permission-service"
 import ProtectedRoute from "@/app/components/protected-route"
+import AdminLayout from "../layout"
 
 export default function PermissionsPage() {
   const [isLoading, setIsLoading] = useState(true)

@@ -1,7 +1,7 @@
 from flask import request, jsonify, current_app
 from marshmallow import ValidationError
 from ...services.user_service import UserService
-from src.utils.decorators import token_required, require_permission
+from src.utils.enhanced_auth_decorators_v2 import require_permission_v2
 from ...schemas.user_schemas import (
     UserUpdateRequestSchema,
     UserDetailSchema,
@@ -21,8 +21,7 @@ from .routes import admin_bp
 # from src.extensions import apispec
 
 @admin_bp.route('/users', methods=['GET', 'OPTIONS'])
-@token_required
-@require_permission('MANAGE_USERS')
+@require_permission_v2('manage_users')
 def get_users():
     if request.method == 'OPTIONS':
         return jsonify({'message': 'OPTIONS request successful'}), 200
@@ -46,8 +45,7 @@ def get_users():
         return jsonify({"error": msg}), status
 
 @admin_bp.route('/users', methods=['POST'])
-@token_required
-@require_permission('MANAGE_USERS')
+@require_permission_v2('manage_users')
 def create_user():
     data = request.get_json()
     # Assuming UserCreateRequestSchema was intended here
@@ -71,8 +69,7 @@ def create_user():
         return jsonify({"error": "User creation failed", "details": msg}), status
 
 @admin_bp.route('/users/<int:user_id>', methods=['PATCH'])
-@token_required
-@require_permission('MANAGE_USERS')
+@require_permission_v2('manage_users', 'user', 'user_id')
 def update_user(user_id):
     """Update user details."""
     data = request.get_json()
@@ -106,8 +103,7 @@ def update_user(user_id):
         return jsonify({"error": "User update failed", "details": msg}), status
 
 @admin_bp.route("/users/<int:user_id>", methods=["GET"])
-@token_required
-@require_permission("MANAGE_USERS")
+@require_permission_v2("manage_users", 'user', 'user_id')
 def get_user(user_id):
     """Get a user by ID (admin endpoint)."""
     user, msg, status = UserService.get_user_by_id(user_id)
@@ -119,8 +115,7 @@ def get_user(user_id):
 
 
 @admin_bp.route('/users/<int:user_id>', methods=['DELETE'])
-@token_required
-@require_permission('MANAGE_USERS')
+@require_permission_v2('manage_users', 'user', 'user_id')
 def delete_user(user_id):
     """Deactivate (soft delete) a user."""
     success, msg, status = UserService.delete_user(user_id)

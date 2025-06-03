@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, current_app, g
 from ..services.auth_service import AuthService
-from flask_jwt_extended import create_access_token
+from flask_jwt_extended import create_access_token, jwt_required
 from ..schemas import (
     RegisterRequestSchema,
     RegisterResponseSchema,
@@ -19,7 +19,6 @@ from datetime import datetime, timedelta
 import jwt as pyjwt
 from src.utils.rate_limiting import rate_limit
 from flask import g
-from ..utils.decorators import token_required
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -200,7 +199,7 @@ def login():
         }), 500 
 
 @auth_bp.route('/me/permissions', methods=['GET'])
-@token_required
+@jwt_required()
 def get_my_permissions():
     """Get the effective permissions for the currently authenticated user.
     ---
@@ -225,13 +224,42 @@ def get_my_permissions():
           application/json:
             schema: ErrorResponseSchema
     """
-    current_user = g.current_user
-    permissions, message, status_code = AuthService.get_user_effective_permissions(current_user)
-    if permissions is not None:
+    try:
+        from src.services.enhanced_permission_service import enhanced_permission_service
+        from flask_jwt_extended import get_jwt_identity
+        from src.models.user import User
+        
+        # Get current user ID from JWT token
+        current_user_id = get_jwt_identity()
+        if not current_user_id:
+            return jsonify({"error": "No user identity found in token"}), 401
+            
+        # Convert to integer (JWT stores as string)
+        try:
+            current_user_id = int(current_user_id)
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid user identity in token"}), 401
+        
+        # Verify user exists and is active
+        current_user = User.query.get(current_user_id)
+        if not current_user:
+            return jsonify({"error": "User not found"}), 401
+        if not current_user.is_active:
+            return jsonify({"error": "User account is inactive"}), 401
+        
+        permission_names = enhanced_permission_service.get_user_permissions(
+            user_id=current_user.id, 
+            include_groups=True
+        )
+        
         result = UserPermissionsResponseSchema().dump({
-            "message": message,
-            "permissions": permissions
+            "message": f"Retrieved {len(permission_names)} permissions for user",
+            "permissions": permission_names
         })
-        return jsonify(result), status_code
-    else:
-        return jsonify({"error": message}), status_code 
+        return jsonify(result), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"Error in get_my_permissions: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({"error": f"Failed to retrieve permissions: {str(e)}"}), 500 

@@ -1,5 +1,6 @@
 // Import commands.js using ES2015 syntax:
 import './commands'
+import './auth-commands'
 
 // Alternatively you can use CommonJS syntax:
 // require('./commands')
@@ -14,12 +15,15 @@ Cypress.on('uncaught:exception', (err, runnable) => {
   if (err.message.includes('Non-serializable values were found')) {
     return false  
   }
+  if (err.message.includes('Authentication required')) {
+    return false // Don't fail tests for auth errors we're specifically testing
+  }
   return false
 })
 
 // Set up command defaults
 beforeEach(() => {
-  // Clear any existing auth tokens
+  // Clear any existing auth tokens before each test
   cy.clearLocalStorage()
   cy.clearCookies()
 }) 

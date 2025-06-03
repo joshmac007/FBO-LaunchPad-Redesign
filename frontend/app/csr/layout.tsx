@@ -43,15 +43,15 @@ export default function CSRLayout({ children }: { children: React.ReactNode }) {
 
     // Check for CSR access using backend permissions
     const csrPermissions = [
-      'ACCESS_CSR_DASHBOARD',   // Dashboard access permission
-      'CREATE_ORDER',           // Allows creating new fuel orders
-      'VIEW_ALL_ORDERS',        // Allows viewing all fuel orders  
-      'REVIEW_ORDERS',          // Allows CSR/Admin to mark orders as reviewed
-      'EXPORT_ORDERS_CSV',      // Allows exporting order data to CSV
-      'VIEW_ORDER_STATS',       // Allows viewing order statistics
-      'EDIT_FUEL_ORDER',        // Allows editing fuel order details
-      'VIEW_CUSTOMERS',         // Allows viewing customer list
-      'MANAGE_CUSTOMERS',       // Allows creating, updating, deleting customers
+      'access_csr_dashboard',   // Dashboard access permission
+      'create_order',           // Allows creating new fuel orders
+      'view_all_orders',        // Allows viewing all fuel orders  
+      'review_fuel_order',      // Allows CSR/Admin to mark orders as reviewed
+      'export_orders_csv',      // Allows exporting order data to CSV
+      'view_order_statistics',  // Allows viewing order statistics
+      'edit_fuel_order',        // Allows editing fuel order details
+      'view_customers',         // Allows viewing customer list
+      'manage_customers',       // Allows creating, updating, deleting customers
     ]
 
     const hasCSRAccess = canAny(csrPermissions) || isCSR
@@ -74,10 +74,10 @@ export default function CSRLayout({ children }: { children: React.ReactNode }) {
         hasCSRAccess
       },
       checks: {
-        canAny_ACCESS_CSR_DASHBOARD: canAny(['ACCESS_CSR_DASHBOARD']),
-        canAny_CREATE_ORDER: canAny(['CREATE_ORDER']),
-        canAny_VIEW_ALL_ORDERS: canAny(['VIEW_ALL_ORDERS']),
-        canAny_REVIEW_ORDERS: canAny(['REVIEW_ORDERS']),
+        canAny_access_csr_dashboard: canAny(['access_csr_dashboard']),
+        canAny_create_order: canAny(['create_order']),
+        canAny_view_all_orders: canAny(['view_all_orders']),
+        canAny_review_fuel_order: canAny(['review_fuel_order']),
       }
     }
 
@@ -95,13 +95,13 @@ export default function CSRLayout({ children }: { children: React.ReactNode }) {
       }
       
       // Redirect to appropriate dashboard based on user's permissions
-      if (canAny(['ACCESS_ADMIN_DASHBOARD', 'MANAGE_USERS', 'MANAGE_SETTINGS', 'MANAGE_ROLES'])) {
+      if (canAny(['access_admin_dashboard', 'manage_users', 'manage_settings', 'manage_roles'])) {
         console.log("CSR Layout: Redirecting to admin dashboard")
         router.push("/admin/dashboard")
-      } else if (canAny(['ACCESS_FUELER_DASHBOARD', 'PERFORM_FUELING_TASK', 'UPDATE_OWN_ORDER_STATUS'])) {
+      } else if (canAny(['access_fueler_dashboard', 'perform_fueling_task', 'update_order_status'])) {
         console.log("CSR Layout: Redirecting to fueler dashboard")
         router.push("/fueler/dashboard")
-      } else if (canAny(['ACCESS_MEMBER_DASHBOARD']) || user.is_active) {
+      } else if (canAny(['access_member_dashboard']) || user.is_active) {
         console.log("CSR Layout: Redirecting to member dashboard")
         router.push("/member/dashboard")
       } else {

@@ -30,19 +30,19 @@ export const usePermissions = () => {
 
   // Common role-based checks - Updated to use backend permissions
   const isAdmin = useMemo(() => {
-    return canAny(['ACCESS_ADMIN_DASHBOARD', 'MANAGE_SETTINGS', 'MANAGE_USERS', 'MANAGE_ROLES'])
+    return canAny(['access_admin_dashboard', 'manage_settings', 'manage_users', 'manage_roles'])
   }, [canAny])
 
   const isCSR = useMemo(() => {
-    return canAny(['ACCESS_CSR_DASHBOARD', 'VIEW_ALL_ORDERS', 'CREATE_ORDER', 'REVIEW_ORDERS'])
+    return canAny(['access_csr_dashboard', 'view_all_orders', 'create_order', 'review_fuel_order'])
   }, [canAny])
 
   const isFueler = useMemo(() => {
-    return canAny(['ACCESS_FUELER_DASHBOARD', 'PERFORM_FUELING_TASK', 'UPDATE_OWN_ORDER_STATUS', 'VIEW_ASSIGNED_ORDERS'])
+    return canAny(['access_fueler_dashboard', 'perform_fueling_task', 'update_order_status', 'view_assigned_orders'])
   }, [canAny])
 
   const isMember = useMemo(() => {
-    return canAny(['ACCESS_MEMBER_DASHBOARD']) || (context.user?.is_active ?? false)
+    return canAny(['access_member_dashboard']) || (context.user?.is_active ?? false)
   }, [canAny, context.user])
 
   // Permission metadata

@@ -17,8 +17,15 @@ module.exports = defineConfig({
     },
     env: {
       apiUrl: 'http://localhost:5001/api',
-      adminEmail: 'admin@test.com',
-      adminPassword: 'admin123'
+      // Default users from DATABASE_SETUP.md
+      adminEmail: 'admin@fbolaunchpad.com',
+      adminPassword: 'Admin123!',
+      csrEmail: 'csr@fbolaunchpad.com',
+      csrPassword: 'CSR123!',
+      fuelerEmail: 'fueler@fbolaunchpad.com',
+      fuelerPassword: 'Fueler123!',
+      memberEmail: 'member@fbolaunchpad.com',
+      memberPassword: 'Member123!'
     },
     defaultCommandTimeout: 10000,
     requestTimeout: 10000,

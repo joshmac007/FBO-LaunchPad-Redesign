@@ -221,7 +221,7 @@ class FuelOrderService:
             
             # Use eager loading for optimization of denormalized fields
             query = FuelOrder.query.options(
-                joinedload(FuelOrder.assigned_lst_user),
+                joinedload(FuelOrder.assigned_lst),
                 joinedload(FuelOrder.assigned_truck)
             )
 
@@ -333,7 +333,7 @@ class FuelOrderService:
         """
         # Use eager loading for optimization of denormalized fields
         order = FuelOrder.query.options(
-            joinedload(FuelOrder.assigned_lst_user),
+            joinedload(FuelOrder.assigned_lst),
             joinedload(FuelOrder.assigned_truck)
         ).get(order_id)
         

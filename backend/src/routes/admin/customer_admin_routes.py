@@ -1,19 +1,18 @@
 from flask import request, jsonify
 from ...services.customer_service import CustomerService
-from src.utils.decorators import token_required, require_permission
+from src.utils.enhanced_auth_decorators_v2 import require_permission_v2
 from ...models.user import UserRole
 from ...schemas.admin_schemas import AdminCustomerSchema, AdminCustomerListResponseSchema, ErrorResponseSchema
 from src.extensions import apispec
 from .routes import admin_bp
 
 @admin_bp.route('/customers', methods=['GET', 'OPTIONS'])
-@token_required
-@require_permission('MANAGE_CUSTOMERS')
+@require_permission_v2('manage_customers')
 def list_customers():
     """
     ---
     get:
-      summary: List all customers (admin, MANAGE_CUSTOMERS permission required)
+      summary: List all customers (admin, manage_customers permission required)
       tags:
         - Admin - Customers
       responses:
@@ -34,13 +33,12 @@ def list_customers():
     return jsonify({"customers": schema.dump(customers)}), status
 
 @admin_bp.route('/customers', methods=['POST', 'OPTIONS'])
-@token_required
-@require_permission('MANAGE_CUSTOMERS')
+@require_permission_v2('manage_customers')
 def create_customer():
     """
     ---
     post:
-      summary: Create a new customer (admin, MANAGE_CUSTOMERS permission required)
+      summary: Create a new customer (admin, manage_customers permission required)
       tags:
         - Admin - Customers
       requestBody:
@@ -69,13 +67,12 @@ def create_customer():
     return jsonify(schema.dump(customer)), status
 
 @admin_bp.route('/customers/<int:customer_id>', methods=['GET'])
-@token_required
-@require_permission('MANAGE_CUSTOMERS')
+@require_permission_v2('manage_customers', 'customer', 'customer_id')
 def get_customer(customer_id):
     """
     ---
     get:
-      summary: Get a customer by ID (admin, MANAGE_CUSTOMERS permission required)
+      summary: Get a customer by ID (admin, manage_customers permission required)
       tags:
         - Admin - Customers
       parameters:
@@ -100,13 +97,12 @@ def get_customer(customer_id):
     return jsonify(schema.dump(customer)), status
 
 @admin_bp.route('/customers/<int:customer_id>', methods=['PATCH'])
-@token_required
-@require_permission('MANAGE_CUSTOMERS')
+@require_permission_v2('manage_customers', 'customer', 'customer_id')
 def update_customer(customer_id):
     """
     ---
     patch:
-      summary: Update a customer by ID (admin, MANAGE_CUSTOMERS permission required)
+      summary: Update a customer by ID (admin, manage_customers permission required)
       tags:
         - Admin - Customers
       parameters:
@@ -139,13 +135,12 @@ def update_customer(customer_id):
     return jsonify(schema.dump(customer)), status
 
 @admin_bp.route('/customers/<int:customer_id>', methods=['DELETE'])
-@token_required
-@require_permission('MANAGE_CUSTOMERS')
+@require_permission_v2('manage_customers', 'customer', 'customer_id')
 def delete_customer(customer_id):
     """
     ---
     delete:
-      summary: Delete a customer by ID (admin, MANAGE_CUSTOMERS permission required)
+      summary: Delete a customer by ID (admin, manage_customers permission required)
       tags:
         - Admin - Customers
       parameters:

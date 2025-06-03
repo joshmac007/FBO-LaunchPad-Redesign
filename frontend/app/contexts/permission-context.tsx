@@ -93,15 +93,11 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const loadPermissions = useCallback(async () => {
     try {
-      // Check if we're in a browser environment
-      if (typeof window === 'undefined') {
-        setLoading(false)
-        return
-      }
+      setLoading(true)
 
       if (isAuthenticated()) {
         const currentUser = getCurrentUser()
-        if (currentUser) {
+        if (currentUser && currentUser.access_token) {
           setUser(currentUser)
           
           // Set legacy roles for backward compatibility
@@ -154,7 +150,7 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             setLastRefresh(currentUser.permissions_loaded_at || null)
           }
         } else {
-          // User data not found
+          // User data not found or missing token
           setUser(null)
           setUserPermissions([])
           setUserRoles([])

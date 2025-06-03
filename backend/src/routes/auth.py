@@ -1,10 +1,12 @@
-from flask import g, jsonify
+from flask import g, jsonify, Blueprint
 from flask_jwt_extended import jwt_required
 from flask_restful import Resource
 from flask import current_app
 
+auth_bp = Blueprint('auth_legacy', __name__)
+
 @auth_bp.route('/me/permissions', methods=['GET'])
-@token_required
+@jwt_required()
 def get_current_user_permissions():
     """
     Get effective permissions for the current authenticated user.

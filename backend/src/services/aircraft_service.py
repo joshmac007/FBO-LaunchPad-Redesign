@@ -18,7 +18,8 @@ class AircraftService:
             aircraft = Aircraft(
                 tail_number=data['tail_number'],
                 aircraft_type=data['aircraft_type'],
-                fuel_type=data['fuel_type']
+                fuel_type=data['fuel_type'],
+                customer_id=data.get('customer_id')
             )
             db.session.add(aircraft)
             db.session.commit()

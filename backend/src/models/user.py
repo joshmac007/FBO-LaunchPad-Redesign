@@ -11,6 +11,12 @@ from ..models.permission import Permission
 from ..models.role import Role
 from ..models.role_permission import role_permissions, user_roles
 
+# Association table for user-permission group relationships
+user_permission_groups = db.Table('user_permission_groups',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
+    db.Column('permission_group_id', db.Integer, db.ForeignKey('permission_groups.id'), primary_key=True)
+)
+
 class UserRole(Enum):
     """
     Enumeration of user roles for backward compatibility with role-based decorators.
@@ -52,6 +58,14 @@ class User(db.Model):
     # Note: These relationships are defined in the respective model files
     # direct_permissions - defined in UserPermission model
     # permission_groups - defined in PermissionGroup model via user_permission_groups table
+    
+    # Add the actual relationships
+    permission_groups = db.relationship(
+        'PermissionGroup',
+        secondary=user_permission_groups,
+        backref=db.backref('users', lazy='dynamic'),
+        lazy='dynamic'
+    )
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')

@@ -72,24 +72,27 @@ interface UserBriefResponse {
 
 export async function getActiveLSTs(): Promise<User[]> {
   try {
-    // First, get all roles to find the LST role ID
-    const roles = await getRoles()
-    const lstRole = roles.find(role => role.name === "Line Service Technician")
-    
-    if (!lstRole) {
-      throw new Error("Line Service Technician role not found")
-    }
-
-    // Use the role_ids parameter with the LST role ID
-    const response = await fetch(`${API_BASE_URL}/admin/users?role_ids=${lstRole.id}&is_active=true`, {
+    // Use the non-admin users endpoint with role filter
+    // This only requires view_users permission instead of manage_roles
+    const response = await fetch(`${API_BASE_URL}/users?role=LST&is_active=true`, {
       method: "GET",
       headers: getAuthHeaders(),
     })
 
-    const data = await handleApiResponse<UsersResponse>(response)
+    const data = await handleApiResponse<UserBriefResponse>(response)
 
-    // Return the users directly since they already have the standardized roles structure
-    return data.users
+    // Transform the brief user response to match the User interface
+    const users: User[] = data.users.map(briefUser => ({
+      id: briefUser.id,
+      username: briefUser.username || briefUser.email,
+      fullName: briefUser.name,
+      email: briefUser.email,
+      roles: [{ id: 0, name: briefUser.role }], // Brief response only has role string
+      is_active: briefUser.is_active,
+      created_at: undefined // Not included in brief response
+    }))
+
+    return users
   } catch (error) {
     console.error("Error fetching LSTs:", error) 
     throw error

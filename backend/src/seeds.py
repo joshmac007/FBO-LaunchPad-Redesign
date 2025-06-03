@@ -6,54 +6,59 @@ from sqlalchemy import text
 # --- Data Definitions ---
 all_permissions = [
     # Fuel Orders
-    {'name': 'CREATE_ORDER', 'description': 'Allows creating new fuel orders', 'category': 'fuel_orders'},
-    {'name': 'VIEW_ASSIGNED_ORDERS', 'description': 'Allows viewing orders assigned to self', 'category': 'fuel_orders'},
-    {'name': 'VIEW_ALL_ORDERS', 'description': 'Allows viewing all fuel orders', 'category': 'fuel_orders'},
-    {'name': 'UPDATE_OWN_ORDER_STATUS', 'description': 'Allows LST to update status of own orders', 'category': 'fuel_orders'},
-    {'name': 'COMPLETE_OWN_ORDER', 'description': 'Allows LST to complete own orders', 'category': 'fuel_orders'},
-    {'name': 'REVIEW_ORDERS', 'description': 'Allows CSR/Admin to mark orders as reviewed', 'category': 'fuel_orders'},
-    {'name': 'EXPORT_ORDERS_CSV', 'description': 'Allows exporting order data to CSV', 'category': 'fuel_orders'},
-    {'name': 'VIEW_ORDER_STATS', 'description': 'Allows viewing order statistics', 'category': 'fuel_orders'},
-    {'name': 'EDIT_FUEL_ORDER', 'description': 'Allows editing fuel order details', 'category': 'fuel_orders'},
-    {'name': 'DELETE_FUEL_ORDER', 'description': 'Allows deleting fuel orders', 'category': 'fuel_orders'},
-    {'name': 'PERFORM_FUELING_TASK', 'description': 'Allows performing fueling operations and task management', 'category': 'fuel_orders'},
+    {'name': 'create_order', 'description': 'Allows creating new fuel orders', 'category': 'fuel_orders'},
+    {'name': 'view_assigned_orders', 'description': 'Allows viewing orders assigned to self', 'category': 'fuel_orders'},
+    {'name': 'view_all_orders', 'description': 'Allows viewing all fuel orders', 'category': 'fuel_orders'},
+    {'name': 'update_order_status', 'description': 'Allows LST to update status of own orders', 'category': 'fuel_orders'},
+    {'name': 'complete_fuel_order', 'description': 'Allows LST to complete own orders', 'category': 'fuel_orders'},
+    {'name': 'review_fuel_order', 'description': 'Allows CSR/Admin to mark orders as reviewed', 'category': 'fuel_orders'},
+    {'name': 'export_orders_csv', 'description': 'Allows exporting order data to CSV', 'category': 'fuel_orders'},
+    {'name': 'view_order_statistics', 'description': 'Allows viewing order statistics', 'category': 'fuel_orders'},
+    {'name': 'edit_fuel_order', 'description': 'Allows editing fuel order details', 'category': 'fuel_orders'},
+    {'name': 'assign_fuel_order', 'description': 'Allows assigning fuel orders to LST staff', 'category': 'fuel_orders'},
+    {'name': 'delete_fuel_order', 'description': 'Allows deleting fuel orders', 'category': 'fuel_orders'},
+    {'name': 'perform_fueling_task', 'description': 'Allows performing fueling operations and task management', 'category': 'fuel_orders'},
     
     # Users
-    {'name': 'VIEW_USERS', 'description': 'Allows viewing user list', 'category': 'users'},
-    {'name': 'MANAGE_USERS', 'description': 'Allows creating, updating, deleting users and assigning roles', 'category': 'users'},
+    {'name': 'view_users', 'description': 'Allows viewing user list', 'category': 'users'},
+    {'name': 'manage_users', 'description': 'Allows creating, updating, deleting users and assigning roles', 'category': 'users'},
     
     # Fuel Trucks (renamed for consistency)
-    {'name': 'VIEW_FUEL_TRUCKS', 'description': 'Allows viewing fuel truck list', 'category': 'fuel_trucks'},
-    {'name': 'MANAGE_FUEL_TRUCKS', 'description': 'Allows creating, updating, deleting fuel trucks', 'category': 'fuel_trucks'},
+    {'name': 'view_fuel_trucks', 'description': 'Allows viewing fuel truck list', 'category': 'fuel_trucks'},
+    {'name': 'manage_fuel_trucks', 'description': 'Allows creating, updating, deleting fuel trucks', 'category': 'fuel_trucks'},
     
     # Aircraft
-    {'name': 'VIEW_AIRCRAFT', 'description': 'Allows viewing aircraft list', 'category': 'aircraft'},
-    {'name': 'MANAGE_AIRCRAFT', 'description': 'Allows creating, updating, deleting aircraft', 'category': 'aircraft'},
+    {'name': 'view_aircraft', 'description': 'Allows viewing aircraft list', 'category': 'aircraft'},
+    {'name': 'manage_aircraft', 'description': 'Allows creating, updating, deleting aircraft', 'category': 'aircraft'},
     
     # Customers
-    {'name': 'VIEW_CUSTOMERS', 'description': 'Allows viewing customer list', 'category': 'customers'},
-    {'name': 'MANAGE_CUSTOMERS', 'description': 'Allows creating, updating, deleting customers', 'category': 'customers'},
+    {'name': 'view_customers', 'description': 'Allows viewing customer list', 'category': 'customers'},
+    {'name': 'manage_customers', 'description': 'Allows creating, updating, deleting customers', 'category': 'customers'},
     
     # System
-    {'name': 'MANAGE_ROLES', 'description': 'Allows managing roles and their permissions', 'category': 'system'},
-    {'name': 'VIEW_PERMISSIONS', 'description': 'Allows viewing available system permissions', 'category': 'system'},
-    {'name': 'MANAGE_SETTINGS', 'description': 'Allows managing global application settings', 'category': 'system'},
+    {'name': 'manage_roles', 'description': 'Allows managing roles and their permissions', 'category': 'system'},
+    {'name': 'view_permissions', 'description': 'Allows viewing available system permissions', 'category': 'system'},
+    {'name': 'view_role_permissions', 'description': 'Allows viewing permissions assigned to roles', 'category': 'system'},
+    {'name': 'view_roles', 'description': 'Allows viewing all system roles', 'category': 'system'},
+    {'name': 'manage_settings', 'description': 'Allows managing global application settings', 'category': 'system'},
+    {'name': 'admin', 'description': 'General administrative access for specific system functions', 'category': 'system'},
+    {'name': 'administrative_operations', 'description': 'Allows performing administrative operations and system configuration', 'category': 'system'},
     
     # Dashboard Access Permissions
-    {'name': 'ACCESS_ADMIN_DASHBOARD', 'description': 'Allows access to admin dashboard', 'category': 'dashboard_access'},
-    {'name': 'ACCESS_CSR_DASHBOARD', 'description': 'Allows access to CSR dashboard', 'category': 'dashboard_access'},
-    {'name': 'ACCESS_FUELER_DASHBOARD', 'description': 'Allows access to fueler dashboard', 'category': 'dashboard_access'},
-    {'name': 'ACCESS_MEMBER_DASHBOARD', 'description': 'Allows access to member dashboard', 'category': 'dashboard_access'},
+    {'name': 'access_admin_dashboard', 'description': 'Allows access to admin dashboard', 'category': 'dashboard_access'},
+    {'name': 'access_csr_dashboard', 'description': 'Allows access to CSR dashboard', 'category': 'dashboard_access'},
+    {'name': 'access_fueler_dashboard', 'description': 'Allows access to fueler dashboard', 'category': 'dashboard_access'},
+    {'name': 'access_member_dashboard', 'description': 'Allows access to member dashboard', 'category': 'dashboard_access'},
     
     # Billing/Fees Permissions
-    {'name': 'VIEW_BILLING_INFO', 'description': 'Allows viewing billing information and fee calculations', 'category': 'billing'},
-    {'name': 'CALCULATE_FEES', 'description': 'Allows calculating fees and charges', 'category': 'billing'},
+    {'name': 'view_billing_info', 'description': 'Allows viewing billing information and fee calculations', 'category': 'billing'},
+    {'name': 'calculate_fees', 'description': 'Allows calculating fees and charges', 'category': 'billing'},
     
     # Fuel Receipt System Permissions
-    {'name': 'VIEW_ALL_RECEIPTS', 'description': 'Allows viewing all fuel receipts', 'category': 'receipts'},
-    {'name': 'VIEW_OWN_RECEIPTS', 'description': 'Allows viewing own fuel receipts', 'category': 'receipts'},
-    {'name': 'MANAGE_RECEIPTS', 'description': 'Allows creating, editing, and managing fuel receipts', 'category': 'receipts'},
-    {'name': 'EXPORT_RECEIPTS_CSV', 'description': 'Allows exporting receipt data to CSV', 'category': 'receipts'},
+    {'name': 'view_all_receipts', 'description': 'Allows viewing all fuel receipts', 'category': 'receipts'},
+    {'name': 'view_own_receipts', 'description': 'Allows viewing own fuel receipts', 'category': 'receipts'},
+    {'name': 'manage_receipts', 'description': 'Allows creating, editing, and managing fuel receipts', 'category': 'receipts'},
+    {'name': 'export_receipts_csv', 'description': 'Allows exporting receipt data to CSV', 'category': 'receipts'},
 ]
 
 default_roles = [
@@ -63,66 +68,52 @@ default_roles = [
     {"name": "Member", "description": "Basic member with limited view access"},
 ]
 
-role_permission_mapping = {
-    'System Administrator': [p['name'] for p in all_permissions],  # All permissions
-    'Customer Service Representative': [
-        # Dashboard Access
-        'ACCESS_CSR_DASHBOARD',
-        # Fuel Orders
-        'CREATE_ORDER', 'VIEW_ALL_ORDERS', 'REVIEW_ORDERS', 'EXPORT_ORDERS_CSV',
-        'VIEW_ORDER_STATS', 'EDIT_FUEL_ORDER',
-        # Users and Resources
-        'VIEW_USERS', 'VIEW_FUEL_TRUCKS', 'VIEW_AIRCRAFT', 'VIEW_CUSTOMERS',
-        'MANAGE_AIRCRAFT', 'MANAGE_CUSTOMERS',
-        # System
-        'VIEW_PERMISSIONS',
-        # Billing
-        'VIEW_BILLING_INFO'
-    ],
-    'Line Service Technician': [
-        # Dashboard Access
-        'ACCESS_FUELER_DASHBOARD',
-        # Fuel Orders
-        'CREATE_ORDER', 'VIEW_ASSIGNED_ORDERS', 'UPDATE_OWN_ORDER_STATUS', 'COMPLETE_OWN_ORDER',
-        'VIEW_ORDER_STATS', 'PERFORM_FUELING_TASK',
-        # Receipts
-        'VIEW_OWN_RECEIPTS'
-    ],
-    'Member': [
-        # Dashboard Access
-        'ACCESS_MEMBER_DASHBOARD',
-        # Limited View Access
-        'VIEW_ORDER_STATS', 'VIEW_CUSTOMERS', 'VIEW_AIRCRAFT',
-        # Receipts
-        'VIEW_OWN_RECEIPTS'
-    ]
-}
-
 def seed_data():
-    """Seeds the database with initial permissions, roles, assignments, and admin user."""
+    """Seeds the database with initial permissions, roles, and default users.
+    
+    Note: Direct role-permission assignments have been removed. Roles will receive 
+    permissions via permission groups managed by permission_groups_schema.py.
+    """
     print("Starting database seeding...")
     try:
         # Clear existing data respecting FK constraints (in correct order)
         print("Clearing existing PBAC data (if any)...")
         
         # Clear all dependent tables first (in order of dependencies)
-        db.session.execute(text('DELETE FROM user_permission_group_assignments'))
-        db.session.execute(text('DELETE FROM permission_group_permissions'))
-        db.session.execute(text('DELETE FROM user_permission_groups'))
-        db.session.execute(text('DELETE FROM permission_groups'))
-        db.session.execute(text('DELETE FROM user_permissions'))
-        db.session.execute(text('DELETE FROM user_roles'))
-        db.session.execute(text('DELETE FROM role_permissions'))
-        db.session.execute(text('DELETE FROM fuel_orders'))
-        db.session.execute(text('DELETE FROM users'))
-        db.session.execute(text('DELETE FROM roles'))
-        db.session.execute(text('DELETE FROM permissions'))
+        # Only delete from tables that definitely exist
+        tables_to_clear = [
+            'user_permission_group_assignments',
+            'permission_group_permissions', 
+            'user_permission_groups',
+            'permission_groups',
+            'user_permissions',
+            'user_roles',
+            'role_permissions',
+            'fuel_orders',
+            'users',
+            'roles',
+            'permissions'
+        ]
+        
+        for table in tables_to_clear:
+            try:
+                db.session.execute(text(f'DELETE FROM {table}'))
+                print(f"Cleared table: {table}")
+            except Exception as e:
+                print(f"Table {table} doesn't exist or couldn't be cleared, skipping... ({e})")
+                db.session.rollback()  # Rollback and continue
+        
         db.session.commit()
 
         # Seed Permissions
         print("Seeding Permissions...")
-        permission_objects = [Permission(name=p['name'], description=p.get('description'), category=p.get('category', 'system')) for p in all_permissions]
-        db.session.add_all(permission_objects)
+        # Ensure all_permissions uses snake_case
+        for p_def in all_permissions:
+            if not p_def['name'].islower() or '_' not in p_def['name']:
+                print(f"Warning: Permission name '{p_def['name']}' might not be snake_case.")
+
+        permission_objects = [Permission(name=p['name'], description=p.get('description')) for p in all_permissions]
+        db.session.bulk_save_objects(permission_objects)
         db.session.commit()
         print(f"Seeded {len(permission_objects)} permissions.")
 
@@ -133,21 +124,11 @@ def seed_data():
         db.session.commit()
         print(f"Seeded {len(role_objects)} roles.")
 
-        # Assign Permissions to Roles
-        print("Assigning Permissions to Roles...")
-        permission_map = {p.name: p for p in Permission.query.all()}
-        role_map = {r.name: r for r in Role.query.all()}
-        assignments_count = 0
-        for role_name, permission_names in role_permission_mapping.items():
-            role = role_map.get(role_name)
-            if role:
-                for perm_name in permission_names:
-                    permission = permission_map.get(perm_name)
-                    if permission and permission not in role.permissions:
-                        role.permissions.append(permission)
-                        assignments_count += 1
-        db.session.commit()
-        print(f"Assigned {assignments_count} permissions to roles.")
+        # --- Role-Permission Assignment Section Removed ---
+        # Direct role-permission assignments have been removed.
+        # Roles will receive permissions via permission groups defined in permission_groups_schema.py.
+        # This must be run after seeds.py via the 'flask create-permission-groups run' command.
+        print("Role-permission assignments will be handled by permission_groups_schema.py.")
 
         # Create Default Users
         print("Creating Default Users...")
@@ -182,6 +163,8 @@ def seed_data():
             }
         ]
 
+        # Create a role map for user assignment
+        role_map = {r.name: r for r in Role.query.all()}
         users_created = 0
         for user_data in default_users:
             if not User.query.filter_by(email=user_data['email']).first():
@@ -205,9 +188,10 @@ def seed_data():
 
         if users_created > 0:
             db.session.commit()
-            print(f"Successfully created {users_created} default users.")
+            print(f"Successfully assigned roles to {users_created} default users.")
 
         print("Database seeding completed successfully.")
+        print("Next step: Run 'flask create-permission-groups run' to configure permission groups and role assignments.")
     except Exception as e:
         db.session.rollback()
         print(f"An error occurred during seeding: {str(e)}")

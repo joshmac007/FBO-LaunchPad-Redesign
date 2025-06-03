@@ -36,6 +36,9 @@ with app.app_context():
 " && echo "Database already seeded" || {
     echo "Seeding database with default data..."
     flask seed run
+    echo "Creating permission groups and role assignments..."
+    flask create-permission-groups run
+    echo "Database initialization complete!"
 }
 
 echo "Database setup complete - starting application..."

@@ -4,7 +4,7 @@ from .role import Role
 from .role_permission import role_permissions, user_roles
 from .user import User
 from .user_permission import UserPermission
-from .permission_group import PermissionGroup
+from .permission_group import PermissionGroup, PermissionGroupMembership, RolePermissionGroup
 from .user_permission_group import UserPermissionGroup
 from .aircraft import Aircraft
 from .customer import Customer
@@ -20,6 +20,8 @@ __all__ = [
     'User',
     'UserPermission',
     'PermissionGroup',
+    'PermissionGroupMembership',
+    'RolePermissionGroup',
     'UserPermissionGroup',
     'Aircraft',
     'Customer',

@@ -18,6 +18,20 @@ from .fuel_truck_schemas import (
     FuelTruckCreateResponseSchema
 )
 
+from .aircraft_schemas import (
+    AircraftCreateSchema as AircraftCreateRequestSchema,
+    AircraftUpdateSchema as AircraftUpdateRequestSchema,
+    AircraftResponseSchema,
+    AircraftListSchema as AircraftListResponseSchema
+)
+
+from .customer_schemas import (
+    CustomerCreateSchema as CustomerCreateRequestSchema,
+    CustomerUpdateSchema as CustomerUpdateRequestSchema,
+    CustomerResponseSchema,
+    CustomerListSchema as CustomerListResponseSchema
+)
+
 from .admin_schemas import (
     AdminAircraftSchema, AdminAircraftListResponseSchema,
     AdminCustomerSchema, AdminCustomerListResponseSchema
@@ -52,6 +66,10 @@ __all__ = [
     'FuelTruckSchema', 'FuelTruckListResponseSchema',
     'FuelTruckCreateRequestSchema', 'FuelTruckUpdateRequestSchema',
     'FuelTruckCreateResponseSchema',
+    'AircraftCreateRequestSchema', 'AircraftUpdateRequestSchema',
+    'AircraftResponseSchema', 'AircraftListResponseSchema',
+    'CustomerCreateRequestSchema', 'CustomerUpdateRequestSchema',
+    'CustomerResponseSchema', 'CustomerListResponseSchema',
     'UserCreateRequestSchema',
     'UserUpdateRequestSchema',
     'UserDetailSchema',

@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify, g, Response, current_app
+from flask_jwt_extended import jwt_required
 from decimal import Decimal
 from datetime import datetime
-from ..utils.decorators import token_required, require_permission
+from ..utils.enhanced_auth_decorators_v2 import require_permission_v2, require_permission_or_ownership_v2
 from ..models.user import UserRole
 from ..models.fuel_order import FuelOrder, FuelOrderStatus
 from ..services.fuel_order_service import FuelOrderService
@@ -25,8 +26,8 @@ logger = logging.getLogger(__name__)
 
 @fuel_order_bp.route('/stats/status-counts', methods=['GET', 'OPTIONS'])
 @fuel_order_bp.route('/stats/status-counts/', methods=['GET', 'OPTIONS'])
-@token_required
-@require_permission('VIEW_ORDER_STATS')
+@jwt_required()
+@require_permission_v2('view_order_statistics')
 def get_status_counts():
     if request.method == 'OPTIONS':
         return jsonify({'message': 'OPTIONS request successful'}), 200
@@ -43,8 +44,8 @@ def get_status_counts():
 
 @fuel_order_bp.route('', methods=['POST', 'OPTIONS'])
 @fuel_order_bp.route('/', methods=['POST', 'OPTIONS'])
-@token_required
-@require_permission('CREATE_ORDER')
+@jwt_required()
+@require_permission_v2('create_fuel_order')
 def create_fuel_order():
     if request.method == 'OPTIONS':
         # Pre-flight request. Reply successfully:
@@ -57,7 +58,7 @@ def create_fuel_order():
     logger.info('Entered create_fuel_order')
     logger.info('Request data: %s', request.get_json())
     """Create a new fuel order.
-    Requires CREATE_ORDER permission. If assigned_lst_user_id is -1, the backend will auto-assign the least busy active LST.
+    Requires create_fuel_order permission. If assigned_lst_user_id is -1, the backend will auto-assign the least busy active LST.
     ---
     tags:
       - Fuel Orders
@@ -321,8 +322,8 @@ def create_fuel_order():
 
 @fuel_order_bp.route('', methods=['GET', 'OPTIONS'])
 @fuel_order_bp.route('/', methods=['GET', 'OPTIONS'])
-@token_required
-@require_permission('VIEW_ASSIGNED_ORDERS')
+@jwt_required()
+@require_permission_v2('view_assigned_orders')
 def get_fuel_orders():
     import traceback
     try:
@@ -371,11 +372,11 @@ def get_fuel_orders():
         return jsonify({"error": "An internal server error occurred in get_fuel_orders route.", "details": str(e)}), 500
 
 @fuel_order_bp.route('/<int:order_id>', methods=['GET'])
-@token_required
-@require_permission('VIEW_ASSIGNED_ORDERS')
+@jwt_required()
+@require_permission_or_ownership_v2('view_all_orders', 'fuel_order', 'order_id')
 def get_fuel_order(order_id):
     """Get details of a specific fuel order.
-    LST must be assigned to the order. CSR/Admin can view any.
+    Requires view_all_orders permission OR ownership of the order.
     ---
     tags:
       - Fuel Orders
@@ -393,19 +394,25 @@ def get_fuel_order(order_id):
         description: Fuel order details retrieved successfully
         content:
           application/json:
-            schema: FuelOrderResponseSchema # Use full schema here
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                fuel_order:
+                  type: object
       401:
-        description: Unauthorized (invalid/missing token)
+        description: Unauthorized
         content:
           application/json:
             schema: ErrorResponseSchema
       403:
-        description: Forbidden (user not allowed to view this order)
+        description: Forbidden (missing permission or not order owner)
         content:
           application/json:
             schema: ErrorResponseSchema
       404:
-        description: Not Found (fuel order with the given ID does not exist)
+        description: Fuel order not found
         content:
           application/json:
             schema: ErrorResponseSchema
@@ -415,50 +422,22 @@ def get_fuel_order(order_id):
           application/json:
             schema: ErrorResponseSchema
     """
-    # Call service method to get the fuel order
-    order, message, status_code = FuelOrderService.get_fuel_order_by_id(
-        order_id=order_id,
-        current_user=g.current_user
-    )
-
-    # Handle the result based on whether the order was found
-    if order is not None:
-        # Serialize the full order details
-        order_details = {
-            "id": order.id,
-            "status": order.status.value,
-            "tail_number": order.tail_number,
-            "customer_id": order.customer_id,  # Consider joining/fetching customer name later
-            "fuel_type": order.fuel_type,
-            "additive_requested": order.additive_requested,
-            "requested_amount": str(order.requested_amount) if order.requested_amount else None,
-            "assigned_lst_user_id": order.assigned_lst_user_id,  # Consider joining/fetching LST name later
-            "assigned_truck_id": order.assigned_truck_id,  # Consider joining/fetching truck name later
-            "location_on_ramp": order.location_on_ramp,
-            "csr_notes": order.csr_notes,
-            "start_meter_reading": str(order.start_meter_reading) if order.start_meter_reading else None,
-            "end_meter_reading": str(order.end_meter_reading) if order.end_meter_reading else None,
-            "calculated_gallons_dispensed": str(order.calculated_gallons_dispensed) if order.calculated_gallons_dispensed else None,
-            "lst_notes": order.lst_notes,
-            "created_at": order.created_at.isoformat(),
-            "dispatch_timestamp": order.dispatch_timestamp.isoformat() if order.dispatch_timestamp else None,
-            "acknowledge_timestamp": order.acknowledge_timestamp.isoformat() if order.acknowledge_timestamp else None,
-            "en_route_timestamp": order.en_route_timestamp.isoformat() if order.en_route_timestamp else None,
-            "fueling_start_timestamp": order.fueling_start_timestamp.isoformat() if order.fueling_start_timestamp else None,
-            "completion_timestamp": order.completion_timestamp.isoformat() if order.completion_timestamp else None,
-            "reviewed_timestamp": order.reviewed_timestamp.isoformat() if order.reviewed_timestamp else None,
-            "reviewed_by_csr_user_id": order.reviewed_by_csr_user_id  # Consider joining/fetching CSR name later
-        }
-        return jsonify({"message": message, "fuel_order": order_details}), status_code
-    else:
-        # Return error message and status code from service
-        return jsonify({"error": message}), status_code
+    try:
+        fuel_order, message, status_code = FuelOrderService.get_fuel_order_by_id(order_id, current_user=g.current_user)
+        if fuel_order is not None:
+            return jsonify({"message": message, "fuel_order": fuel_order}), status_code
+        else:
+            return jsonify({"error": message}), status_code
+    except Exception as e:
+        current_app.logger.error(f"Unhandled exception in get_fuel_order: {str(e)}")
+        return jsonify({"error": "Internal server error in get_fuel_order.", "details": str(e)}), 500
 
 @fuel_order_bp.route('/<int:order_id>/status', methods=['PATCH'])
-@token_required
-@require_permission('UPDATE_OWN_ORDER_STATUS')
+@jwt_required()
+@require_permission_v2('update_order_status', 'fuel_order', 'order_id')
 def update_fuel_order_status(order_id):
     """Update a fuel order's status.
+    Requires update_order_status permission for the specific order.
     ---
     tags:
       - Fuel Orders
@@ -475,20 +454,40 @@ def update_fuel_order_status(order_id):
       required: true
       content:
         application/json:
-          schema: FuelOrderUpdateRequestSchema
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pending, fueling, completed, cancelled]
+              lst_notes:
+                type: string
+            required:
+              - status
     responses:
       200:
-        description: Fuel order updated successfully
+        description: Status updated successfully
         content:
           application/json:
-            schema: FuelOrderUpdateResponseSchema
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                fuel_order:
+                  type: object
       400:
-        description: Bad Request (e.g., invalid status)
+        description: Bad Request
         content:
           application/json:
             schema: ErrorResponseSchema
       401:
-        description: Unauthorized (invalid/missing token)
+        description: Unauthorized
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      403:
+        description: Forbidden (missing permission)
         content:
           application/json:
             schema: ErrorResponseSchema
@@ -498,7 +497,7 @@ def update_fuel_order_status(order_id):
           application/json:
             schema: ErrorResponseSchema
       500:
-        description: Server error (e.g., database error)
+        description: Server error
         content:
           application/json:
             schema: ErrorResponseSchema
@@ -548,6 +547,7 @@ def update_fuel_order_status(order_id):
             
         fuel_order.status = FuelOrderStatus[status_value]
         fuel_order.assigned_truck_id = data['assigned_truck_id']
+        fuel_order.lst_notes = data.get('lst_notes')
         db.session.commit()
         
         return jsonify({
@@ -572,11 +572,11 @@ def update_fuel_order_status(order_id):
         return jsonify({"error": f"Error updating fuel order: {str(e)}"}), 500
 
 @fuel_order_bp.route('/<int:order_id>/submit-data', methods=['PUT'])
-@token_required
-@require_permission('COMPLETE_OWN_ORDER')
+@jwt_required()
+@require_permission_v2('complete_fuel_order', 'fuel_order', 'order_id')
 def submit_fuel_data(order_id):
     """Submit fuel meter readings and notes for a fuel order.
-    Requires COMPLETE_OWN_ORDER permission. Order must be in FUELING status.
+    Requires complete_fuel_order permission for the specific order. Order must be in FUELING status.
     ---
     tags:
       - Fuel Orders
@@ -588,40 +588,58 @@ def submit_fuel_data(order_id):
         schema:
           type: integer
         required: true
-        description: ID of the fuel order
+        description: ID of the fuel order to complete
     requestBody:
       required: true
       content:
         application/json:
-          schema: FuelOrderCompleteRequestSchema
+          schema:
+            type: object
+            properties:
+              fuel_delivered:
+                type: number
+                format: float
+              start_meter_reading:
+                type: number
+                format: float
+              end_meter_reading:
+                type: number
+                format: float
+              lst_notes:
+                type: string
+            required:
+              - fuel_delivered
+              - start_meter_reading
+              - end_meter_reading
     responses:
       200:
         description: Fuel data submitted successfully
         content:
           application/json:
-            schema: FuelOrderUpdateResponseSchema
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                fuel_order:
+                  type: object
       400:
-        description: Bad Request (e.g., invalid meter readings, validation error)
+        description: Bad Request
         content:
           application/json:
             schema: ErrorResponseSchema
       401:
-        description: Unauthorized (invalid/missing token)
+        description: Unauthorized
         content:
           application/json:
             schema: ErrorResponseSchema
       403:
-        description: Forbidden (missing permission or not assigned to order)
+        description: Forbidden (missing permission)
         content:
           application/json:
             schema: ErrorResponseSchema
       404:
         description: Fuel order not found
-        content:
-          application/json:
-            schema: ErrorResponseSchema
-      422:
-        description: Order not in correct status
         content:
           application/json:
             schema: ErrorResponseSchema
@@ -653,6 +671,7 @@ def submit_fuel_data(order_id):
         
     # Validate required fields
     required_fields = {
+        'fuel_delivered': float,
         'start_meter_reading': float,
         'end_meter_reading': float
     }
@@ -676,9 +695,10 @@ def submit_fuel_data(order_id):
     
     try:
         # Update the fuel order
+        fuel_order.fuel_delivered = data['fuel_delivered']
         fuel_order.start_meter_reading = data['start_meter_reading']
         fuel_order.end_meter_reading = data['end_meter_reading']
-        fuel_order.lst_notes = data.get('lst_notes')  # Optional field
+        fuel_order.lst_notes = data.get('lst_notes')
         fuel_order.status = FuelOrderStatus.COMPLETED
         fuel_order.completion_timestamp = datetime.utcnow()
         
@@ -690,6 +710,7 @@ def submit_fuel_data(order_id):
                 "id": fuel_order.id,
                 "status": fuel_order.status.value,
                 "tail_number": fuel_order.tail_number,
+                "fuel_delivered": fuel_order.fuel_delivered,
                 "start_meter_reading": str(fuel_order.start_meter_reading),
                 "end_meter_reading": str(fuel_order.end_meter_reading),
                 "calculated_gallons_dispensed": str(fuel_order.calculated_gallons_dispensed),
@@ -703,11 +724,11 @@ def submit_fuel_data(order_id):
         return jsonify({"error": f"Error submitting fuel data: {str(e)}"}), 500
 
 @fuel_order_bp.route('/<int:order_id>/review', methods=['PATCH'])
-@token_required
-@require_permission('REVIEW_ORDERS')
+@jwt_required()
+@require_permission_v2('review_fuel_order')
 def review_fuel_order(order_id):
     """Mark a completed fuel order as reviewed.
-    Requires REVIEW_ORDERS permission. Order must be in COMPLETED state.
+    Requires review_fuel_order permission. Order must be in COMPLETED state.
     ---
     tags:
       - Fuel Orders
@@ -772,11 +793,11 @@ def review_fuel_order(order_id):
         return jsonify({"error": message}), status_code  # Use status_code from service (e.g., 400, 404, 500) 
 
 @fuel_order_bp.route('/export', methods=['GET'])
-@token_required
-@require_permission('EXPORT_ORDERS_CSV')
+@jwt_required()
+@require_permission_v2('export_orders_csv')
 def export_fuel_orders_csv():
     """Export fuel orders to a CSV file.
-    Requires EXPORT_ORDERS_CSV permission.
+    Requires export_orders_csv permission.
     ---
     tags:
       - Fuel Orders

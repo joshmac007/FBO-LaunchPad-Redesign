@@ -2,8 +2,11 @@ from marshmallow import Schema, fields
 
 class AdminAircraftSchema(Schema):
     tail_number = fields.String(required=True)
-    aircraft_type = fields.String()
+    aircraft_type = fields.String(required=True)
+    fuel_type = fields.String(required=True)
     customer_id = fields.Integer(allow_none=True)
+    created_at = fields.DateTime(dump_only=True)
+    updated_at = fields.DateTime(dump_only=True)
 
 class AdminAircraftListResponseSchema(Schema):
     aircraft = fields.List(fields.Nested(AdminAircraftSchema))

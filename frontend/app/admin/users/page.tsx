@@ -411,7 +411,7 @@ export default function UserManagement() {
           <CardDescription>Manage user accounts and their access permissions</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table data-testid="user-list">
             <TableHeader>
               <TableRow>
                 <TableHead>User</TableHead>
