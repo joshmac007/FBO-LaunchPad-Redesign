@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 import { 
   fetchAndStoreUserPermissions, 
   getCurrentUser, 
-  isAuthenticated,
+  logout,
   hasPermission,
   hasAnyPermission,
   hasAllPermissions,
@@ -45,6 +45,9 @@ interface PermissionContextType {
   refreshPermissions: () => Promise<boolean>
   getAccessibleResources: (permissionName: string, resourceType: string) => string[]
   canPerformAction: (action: string, resourceType: string, resourceId?: string) => boolean
+  
+  // Authentication method
+  isAuthenticated: () => boolean
 }
 
 const PermissionContext = createContext<PermissionContextType>({
@@ -75,6 +78,9 @@ const PermissionContext = createContext<PermissionContextType>({
   refreshPermissions: async () => false,
   getAccessibleResources: () => [],
   canPerformAction: () => false,
+  
+  // Authentication
+  isAuthenticated: () => false,
 })
 
 export const usePermissions = () => useContext(PermissionContext)
@@ -91,95 +97,96 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [user, setUser] = useState<EnhancedUser | null>(null)
   const [lastRefresh, setLastRefresh] = useState<string | null>(null)
 
-  const loadPermissions = useCallback(async () => {
-    try {
-      setLoading(true)
+  // ADDED: state to track why loading finished
+  const [loadingStatus, setLoadingStatus] = useState<string>("Initializing...")
 
-      if (isAuthenticated()) {
-        const currentUser = getCurrentUser()
-        if (currentUser && currentUser.access_token) {
-          setUser(currentUser)
-          
-          // Set legacy roles for backward compatibility
-          if (currentUser.roles) {
-            setUserRoles(currentUser.roles)
-          } else {
-            setUserRoles([])
-          }
+  const loadUserAndPermissions = useCallback(async () => {
+    console.log("%c[PermissionProvider] Starting loadUserAndPermissions...", "color: blue; font-weight: bold;")
+    setLoading(true)
+    setLoadingStatus("Checking for authentication token...")
 
-          // If permissions are already loaded and recent, use them
-          const permissionsAge = currentUser.permissions_loaded_at 
-            ? Date.now() - new Date(currentUser.permissions_loaded_at).getTime()
-            : Infinity
-          
-          // Refresh if permissions are older than 5 minutes or not loaded
-          if (permissionsAge > 5 * 60 * 1000 || !currentUser.permissions) {
-            try {
-              const permissionData = await fetchAndStoreUserPermissions()
-              
-              // Update state with fresh data
-              setUserPermissions(permissionData.permissions || [])
-              setEffectivePermissions(permissionData.effective_permissions || {})
-              setPermissionSummary(permissionData.summary || null)
-              setLastRefresh(new Date().toISOString())
-              
-              // Update user state with fresh data
-              const updatedUser = getCurrentUser()
-              if (updatedUser) {
-                setUser(updatedUser)
-              }
-            } catch (error) {
-              console.error("Failed to fetch fresh permissions:", error)
-              
-              // Fall back to cached permissions if available
-              if (currentUser.permissions) {
-                setUserPermissions(currentUser.permissions)
-                setEffectivePermissions(currentUser.effective_permissions || {})
-                setPermissionSummary(currentUser.permission_summary || null)
-              } else {
-                setUserPermissions([])
-                setEffectivePermissions({})
-                setPermissionSummary(null)
-              }
-            }
-          } else {
-            // Use cached permissions
-            setUserPermissions(currentUser.permissions || [])
-            setEffectivePermissions(currentUser.effective_permissions || {})
-            setPermissionSummary(currentUser.permission_summary || null)
-            setLastRefresh(currentUser.permissions_loaded_at || null)
-          }
-        } else {
-          // User data not found or missing token
-          setUser(null)
-          setUserPermissions([])
-          setUserRoles([])
-          setEffectivePermissions({})
-          setPermissionSummary(null)
-        }
-      } else {
-        // Not authenticated
-        setUser(null)
-        setUserPermissions([])
-        setUserRoles([])
-        setEffectivePermissions({})
-        setPermissionSummary(null)
-      }
-    } catch (error) {
-      console.error("Error loading permissions and roles:", error)
+    // START OF THE FIX
+    // We no longer check isAuthenticated() here. We will rely on the API call's outcome.
+    // The presence of a token is checked inside the service before the fetch.
+    const currentUser = getCurrentUser()
+    if (!currentUser || !currentUser.access_token) {
+      console.warn("[PermissionProvider] No token found in localStorage. User is not logged in.")
       setUser(null)
       setUserPermissions([])
       setUserRoles([])
       setEffectivePermissions({})
       setPermissionSummary(null)
+      setLoadingStatus("User not authenticated.")
+      setLoading(false)
+      return
+    }
+
+    try {
+      console.log("%c[PermissionProvider] Attempting to fetch permissions from API...", "color: blue;")
+      const response = await fetchAndStoreUserPermissions()
+      
+      const updatedUser = getCurrentUser()
+      console.log("%c[PermissionProvider] Permissions fetched and user updated.", "color: green;", updatedUser)
+      setUser(updatedUser)
+
+      // Update state with fresh data
+      setUserPermissions(response.permissions || [])
+      setEffectivePermissions(response.effective_permissions || {})
+      setPermissionSummary(response.summary || null)
+      setLastRefresh(new Date().toISOString())
+      
+      // Set legacy roles for backward compatibility
+      if (updatedUser && updatedUser.roles && Array.isArray(updatedUser.roles)) {
+        const rolesAsObjects = updatedUser.roles.map((role, index) => ({ 
+          id: index + 1, 
+          name: role 
+        }))
+        setUserRoles(rolesAsObjects)
+      } else {
+        setUserRoles([])
+      }
+
+      setLoadingStatus("Permissions loaded successfully.")
+
+    } catch (error: any) {
+      console.error("%c[PermissionProvider] FAILED to fetch permissions.", "color: red; font-weight: bold;", error)
+      
+      // If the API call fails (e.g., 401 Unauthorized), it means the token is invalid.
+      // We must log the user out.
+      if (error.message.includes("401") || error.message.includes("403")) {
+        console.error("[PermissionProvider] Authentication error detected. Logging out.")
+        logout() // This will clear localStorage and redirect
+        setUser(null)
+        setUserPermissions([])
+        setUserRoles([])
+        setEffectivePermissions({})
+        setPermissionSummary(null)
+        setLoadingStatus("Authentication failed.")
+      } else {
+        // For other errors, fall back to cached permissions if available
+        if (currentUser.permissions) {
+          setUserPermissions(currentUser.permissions)
+          setEffectivePermissions(currentUser.effective_permissions || {})
+          setPermissionSummary(currentUser.permission_summary || null)
+          console.log("[PermissionProvider] Using cached permissions:", currentUser.permissions)
+          setLoadingStatus("Using cached permissions.")
+        } else {
+          setUserPermissions([])
+          setEffectivePermissions({})
+          setPermissionSummary(null)
+          setLoadingStatus("Failed to load permissions.")
+        }
+      }
     } finally {
       setLoading(false)
+      console.log("%c[PermissionProvider] Loading finished.", "color: blue; font-weight: bold;")
     }
+    // END OF THE FIX
   }, [])
 
   useEffect(() => {
-    loadPermissions()
-  }, [loadPermissions])
+    loadUserAndPermissions()
+  }, [loadUserAndPermissions])
 
   // Legacy permission checking for backward compatibility
   const checkPermission = useCallback((permissionId: string): boolean => {
@@ -233,7 +240,7 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     try {
       const success = await refreshUserPermissions()
       if (success) {
-        await loadPermissions()
+        await loadUserAndPermissions()
       }
       return success
     } catch (error) {
@@ -242,7 +249,7 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
       setLoading(false)
     }
-  }, [loadPermissions])
+  }, [loadUserAndPermissions])
 
   const getAccessibleResources = useCallback((permissionName: string, resourceType: string): string[] => {
     if (!effectivePermissions) return []
@@ -288,6 +295,15 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return hasAnyPermission(permissionPatterns, user)
   }, [user])
 
+  // Authentication check that depends on the provider's own state
+  const isAuthenticated = useCallback(() => {
+    // This check is now more reliable because it's based on the user state
+    // which is only set after a successful API call.
+    const result = !loading && !!user && !!user.access_token
+    console.log(`[PermissionProvider] isAuthenticated() called. Loading: ${loading}, User: ${user?.email}, Token exists: ${!!user?.access_token}, Result: ${result}`)
+    return result
+  }, [loading, user])
+
   const contextValue: PermissionContextType = {
     // Legacy compatibility
     userPermissions,
@@ -316,6 +332,9 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     refreshPermissions,
     getAccessibleResources,
     canPerformAction,
+    
+    // Authentication
+    isAuthenticated,
   }
 
   return (

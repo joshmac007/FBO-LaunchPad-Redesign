@@ -1,8 +1,8 @@
 from flask import Blueprint, request, jsonify, g, Response, current_app
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from decimal import Decimal
 from datetime import datetime
-from ..utils.enhanced_auth_decorators_v2 import require_permission_v2, require_permission_or_ownership_v2
+from ..utils.enhanced_auth_decorators_v2 import require_permission_v2, require_permission_or_ownership_v2, require_any_permission_v2
 from ..models.user import UserRole
 from ..models.fuel_order import FuelOrder, FuelOrderStatus
 from ..services.fuel_order_service import FuelOrderService
@@ -425,7 +425,10 @@ def get_fuel_order(order_id):
     try:
         fuel_order, message, status_code = FuelOrderService.get_fuel_order_by_id(order_id, current_user=g.current_user)
         if fuel_order is not None:
-            return jsonify({"message": message, "fuel_order": fuel_order}), status_code
+            # Use the schema for consistent serialization with receipt_id and is_locked fields
+            from ..schemas.fuel_order_schemas import FuelOrderResponseSchema
+            schema = FuelOrderResponseSchema()
+            return jsonify({"message": message, "fuel_order": schema.dump(fuel_order)}), status_code
         else:
             return jsonify({"error": message}), status_code
     except Exception as e:
@@ -434,10 +437,10 @@ def get_fuel_order(order_id):
 
 @fuel_order_bp.route('/<int:order_id>/status', methods=['PATCH'])
 @jwt_required()
-@require_permission_v2('update_order_status', 'fuel_order', 'order_id')
+@require_any_permission_v2('update_order_status', 'edit_fuel_order', resource_context={'resource_type': 'fuel_order', 'id_param': 'order_id'})
 def update_fuel_order_status(order_id):
-    """Update a fuel order's status.
-    Requires update_order_status permission for the specific order.
+    """Update a fuel order's status with auditing.
+    Requires update_order_status or edit_fuel_order permission for the specific order.
     ---
     tags:
       - Fuel Orders
@@ -459,9 +462,18 @@ def update_fuel_order_status(order_id):
             properties:
               status:
                 type: string
-                enum: [pending, fueling, completed, cancelled]
-              lst_notes:
+                enum: [Dispatched, Acknowledged, "En Route", Fueling, Completed, Reviewed, Cancelled]
+              start_meter_reading:
+                type: number
+                format: float
+                description: Required when status is COMPLETED
+              end_meter_reading:
+                type: number
+                format: float
+                description: Required when status is COMPLETED
+              reason:
                 type: string
+                description: Optional reason for the status change
             required:
               - status
     responses:
@@ -503,72 +515,27 @@ def update_fuel_order_status(order_id):
             schema: ErrorResponseSchema
     """
     data = request.get_json()
-    
-    # Check if data exists and is a dictionary
-    if not data or not isinstance(data, dict):
-        return jsonify({"error": "Invalid request data"}), 400
-    
-    # Required fields validation
-    required_fields = {
-        'status': str,
-        'assigned_truck_id': int
-    }
-    
-    for field, field_type in required_fields.items():
-        if field not in data:
-            return jsonify({"error": f"Missing required field: {field}"}), 400
-        try:
-            # Convert to expected type if necessary
-            if field_type == int:
-                data[field] = int(data[field])
-            elif field_type == str and not isinstance(data[field], str):
-                data[field] = str(data[field])
-            
-            # Additional validation for specific fields
-            if field_type == str and not data[field].strip():
-                return jsonify({"error": f"Field {field} cannot be empty"}), 400
-        except (ValueError, TypeError):
-            return jsonify({"error": f"Invalid type for field {field}. Expected {field_type.__name__}"}), 400
-    
-    # Get the fuel order
-    fuel_order = FuelOrder.query.get(order_id)
-    if not fuel_order:
-        return jsonify({"error": "Fuel order not found"}), 404
-    
-    # Update the fuel order
+    if not data or 'status' not in data:
+        return jsonify({"error": "Missing 'status' in request body"}), 400
+
     try:
-        # Convert status to uppercase for enum lookup
-        status_value = data['status'].upper()
-        print(f"Attempting to update status to: {status_value}")
-        if status_value not in FuelOrderStatus.__members__:
-            print(f"Invalid status value: {data['status']}")
-            print(f"Valid status values: {list(FuelOrderStatus.__members__.keys())}")
-            return jsonify({"error": f"Invalid status value: {data['status']}"}), 400
-            
-        fuel_order.status = FuelOrderStatus[status_value]
-        fuel_order.assigned_truck_id = data['assigned_truck_id']
-        fuel_order.lst_notes = data.get('lst_notes')
-        db.session.commit()
-        
+        updated_order = FuelOrderService.manual_update_order_status(
+            order_id=order_id,
+            user_id=get_jwt_identity(),
+            update_data=data
+        )
         return jsonify({
-            'id': fuel_order.id,
-            'tail_number': fuel_order.tail_number,
-            'customer_id': fuel_order.customer_id,
-            'fuel_type': fuel_order.fuel_type,
-            'additive_requested': fuel_order.additive_requested,
-            'requested_amount': fuel_order.requested_amount,
-            'assigned_lst_user_id': fuel_order.assigned_lst_user_id,
-            'assigned_truck_id': fuel_order.assigned_truck_id,
-            'location_on_ramp': fuel_order.location_on_ramp,
-            'csr_notes': fuel_order.csr_notes,
-            'status': fuel_order.status.value,
-            'updated_at': fuel_order.updated_at.isoformat()
+            "message": "Status updated successfully.",
+            "fuel_order": updated_order.to_dict()
         }), 200
+    except ValueError as e:
+        # Distinguish between 404 and 400 errors
+        if "not found" in str(e).lower():
+            return jsonify({"error": str(e)}), 404
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         db.session.rollback()
-        print(f"Error updating fuel order: {str(e)}")
-        print(f"Data: {data}")
-        print(f"Status value: {data['status']}")
+        current_app.logger.error(f"Error updating fuel order status: {str(e)}")
         return jsonify({"error": f"Error updating fuel order: {str(e)}"}), 500
 
 @fuel_order_bp.route('/<int:order_id>/submit-data', methods=['PUT'])
@@ -847,3 +814,32 @@ def export_fuel_orders_csv():
     else:
         # Return error message and status code from service
         return jsonify({"error": message}), status_code 
+
+@fuel_order_bp.route('/statuses', methods=['GET'])
+@jwt_required()
+def get_fuel_order_statuses():
+    """Get all possible fuel order status values.
+    Accessible by any authenticated user.
+    ---
+    tags:
+      - Fuel Orders
+    security:
+      - bearerAuth: []
+    responses:
+      200:
+        description: List of fuel order statuses
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+              example: ["Dispatched", "Acknowledged", "En Route", "Fueling", "Completed", "Reviewed", "Cancelled"]
+      401:
+        description: Unauthorized (invalid/missing token)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+    """
+    statuses = [status.value for status in FuelOrderStatus]
+    return jsonify(statuses), 200 

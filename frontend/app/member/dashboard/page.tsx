@@ -53,16 +53,22 @@ export default function MemberDashboard() {
       return
     }
 
-    const parsedUser = JSON.parse(userData)
-    if (!parsedUser.isLoggedIn) {
+    try {
+      const parsedUser = JSON.parse(userData)
+      if (!parsedUser.isLoggedIn) {
+        router.push("/login")
+        return
+      }
+
+      setUser(parsedUser)
+
+      // Load mock data
+      loadMockData()
+    } catch (error) {
+      console.error("Error parsing user data:", error)
       router.push("/login")
       return
     }
-
-    setUser(parsedUser)
-
-    // Load mock data
-    loadMockData()
 
     setIsLoading(false)
   }, [router])

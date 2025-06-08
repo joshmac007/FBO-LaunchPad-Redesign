@@ -14,6 +14,7 @@ interface PermissionActionButtonProps {
   disabled?: boolean
   onClick?: () => void
   type?: "button" | "submit" | "reset"
+  title?: string
   
   // Permission requirements
   requiredPermission?: string
@@ -44,6 +45,7 @@ const PermissionActionButton: React.FC<PermissionActionButtonProps> = ({
   hideIfNoAccess = false,
   fallbackComponent,
   loadingText = "Loading...",
+  title,
 }) => {
   const { 
     loading, 
@@ -114,6 +116,7 @@ const PermissionActionButton: React.FC<PermissionActionButtonProps> = ({
       onClick={onClick}
       type={type}
       className={cn(className)}
+      title={title}
     >
       {children}
     </Button>
@@ -126,34 +129,34 @@ export default PermissionActionButton
 export const AdminActionButton: React.FC<Omit<PermissionActionButtonProps, 'anyOfPermissions'>> = (props) => (
   <PermissionActionButton 
     {...props} 
-    anyOfPermissions={['ACCESS_ADMIN_DASHBOARD', 'MANAGE_SETTINGS']}
+    anyOfPermissions={['access_admin_dashboard', 'manage_settings']}
   />
 )
 
 export const CSRActionButton: React.FC<Omit<PermissionActionButtonProps, 'anyOfPermissions'>> = (props) => (
   <PermissionActionButton 
     {...props} 
-    anyOfPermissions={['ACCESS_CSR_DASHBOARD', 'VIEW_ALL_ORDERS']}
+    anyOfPermissions={['access_csr_dashboard', 'view_all_orders']}
   />
 )
 
 export const FuelerActionButton: React.FC<Omit<PermissionActionButtonProps, 'anyOfPermissions'>> = (props) => (
   <PermissionActionButton 
     {...props} 
-    anyOfPermissions={['ACCESS_FUELER_DASHBOARD', 'PERFORM_FUELING_TASK']}
+    anyOfPermissions={['access_fueler_dashboard', 'perform_fueling_task']}
   />
 )
 
 export const CreateOrderButton: React.FC<Omit<PermissionActionButtonProps, 'anyOfPermissions'>> = (props) => (
   <PermissionActionButton 
     {...props} 
-    anyOfPermissions={['CREATE_ORDER', 'EDIT_FUEL_ORDER']}
+    anyOfPermissions={['create_fuel_order', 'edit_fuel_order']}
   />
 )
 
 export const ManageUsersButton: React.FC<Omit<PermissionActionButtonProps, 'anyOfPermissions'>> = (props) => (
   <PermissionActionButton 
     {...props} 
-    anyOfPermissions={['MANAGE_USERS', 'VIEW_USERS']}
+    anyOfPermissions={['manage_users', 'view_users']}
   />
 ) 

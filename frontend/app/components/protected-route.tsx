@@ -40,7 +40,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   csrOnly = false,
   fuelerOnly = false,
   memberOnly = false,
-  fallback = <AccessDenied />,
+  fallback,
   loadingFallback,
   redirectTo = "/login"
 }) => {
@@ -157,8 +157,27 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     )
   }
 
-  // Show children if authorized, otherwise show fallback
-  return isAuthorized ? <>{children}</> : <>{fallback}</>
+  // Show children if authorized, otherwise show fallback or default AccessDenied
+  if (isAuthorized) {
+    return <>{children}</>
+  }
+
+  // If no custom fallback provided, use the enhanced AccessDenied component
+  if (!fallback) {
+    return (
+      <AccessDenied
+        adminOnly={adminOnly}
+        csrOnly={csrOnly}
+        fuelerOnly={fuelerOnly}
+        memberOnly={memberOnly}
+        requiredPermissions={requiredPermissions}
+        anyOfPermissions={anyOfPermissions}
+        resourcePermission={resourcePermission}
+      />
+    )
+  }
+
+  return <>{fallback}</>
 }
 
 export default ProtectedRoute

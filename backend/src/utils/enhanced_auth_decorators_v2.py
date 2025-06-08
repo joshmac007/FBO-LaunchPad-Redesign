@@ -21,49 +21,61 @@ def require_permission_v2(permission: str,
                          allow_self: bool = False,
                          cache_ttl: Optional[int] = None):
     """
-    Enhanced permission decorator with advanced resource context support.
+    Enhanced permission decorator with comprehensive context support.
     
     Args:
-        permission: Permission name to check
-        resource_context: Resource context configuration or dict
-        allow_self: Allow access if user is accessing their own resource
-        cache_ttl: Custom cache TTL for this permission check
-        
-    Examples:
-        # Basic permission
-        @require_permission_v2('manage_users')
-        
-        # Resource-specific with ownership
-        @require_permission_v2('edit_fuel_order', {
-            'type': 'fuel_order',
-            'id_param': 'order_id', 
-            'ownership_check': True
-        })
-        
-        # Advanced resource context
-        @require_permission_v2('manage_users', ResourceContext(
-            resource_type='user',
-            id_param='user_id',
-            ownership_check=True,
-            department_scope=True,
-            cascade_permissions=['view_user_details']
-        ))
+        permission: The permission name to check
+        resource_context: Optional resource context (Dict or ResourceContext)
+        allow_self: Allow access if user is accessing their own data
+        cache_ttl: Cache time-to-live for permission checks
+    
+    Example:
+        @require_permission_v2('create_fuel_order')
+        def create_fuel_order():
+            # User needs create_fuel_order permission
+            
+        @require_permission_v2('view_fuel_order', {'resource_type': 'fuel_order', 'id_param': 'order_id'})
+        def get_fuel_order(order_id):
+            # User needs view_fuel_order permission for specific order
     """
     def decorator(f):
         @functools.wraps(f)
         def decorated_function(*args, **kwargs):
+            print("--- DECORATOR: START ---", flush=True)
             try:
                 # Verify JWT token and get current user
                 try:
                     verify_jwt_in_request()
                     current_user_id = get_jwt_identity()
+                    print(f"--- DECORATOR: JWT identity is '{current_user_id}'", flush=True)
                 except Exception as jwt_error:
+                    print(f"--- DECORATOR: JWT verification failed: {jwt_error}", flush=True)
                     logger.warning(f"JWT verification failed for permission check: {permission} - {jwt_error}")
                     return jsonify({'error': 'Authentication required'}), 401
                     
                 if not current_user_id:
+                    print("--- DECORATOR: No authenticated user!", flush=True)
                     logger.warning(f"No authenticated user for permission check: {permission}")
                     return jsonify({'error': 'Authentication required'}), 401
+                
+                # Convert user_id to integer and get user object
+                try:
+                    current_user_id = int(current_user_id)
+                    from ..models.user import User
+                    current_user = User.query.get(current_user_id)
+                    if not current_user:
+                        print("--- DECORATOR: User not found in DB!", flush=True)
+                        logger.warning(f"User {current_user_id} not found during permission check")
+                        return jsonify({'error': 'User not found'}), 401
+                    
+                    # Set g.current_user for routes that expect it
+                    g.current_user = current_user
+                    print(f"--- DECORATOR: Set g.current_user to {current_user.email}", flush=True)
+                    
+                except (ValueError, TypeError) as e:
+                    print(f"--- DECORATOR: Invalid user ID format: {current_user_id} - {e}", flush=True)
+                    logger.warning(f"Invalid user ID format: {current_user_id} - {e}")
+                    return jsonify({'error': 'Invalid user identifier'}), 401
                 
                 # Process resource context
                 context = None
@@ -84,6 +96,7 @@ def require_permission_v2(permission: str,
                 )
                 
                 if not has_permission:
+                    print(f"--- DECORATOR: Permission denied for {current_user.email} (permission: {permission})", flush=True)
                     logger.warning(f"Permission denied: user {current_user_id} lacks '{permission}'")
                     return jsonify({
                         'error': 'Insufficient permissions',
@@ -98,11 +111,15 @@ def require_permission_v2(permission: str,
                 g.permission_context = context
                 g.verified_permission = permission
                 
+                print("--- DECORATOR: Permission granted. Calling route function.", flush=True)
                 return f(*args, **kwargs)
                 
             except Exception as e:
+                print(f"--- DECORATOR: EXCEPTION! {type(e).__name__}: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
                 logger.error(f"Error in permission decorator: {e}")
-                return jsonify({'error': 'Permission check failed'}), 500
+                return jsonify({"error": "Authentication error in decorator"}), 401
                 
         return decorated_function
     return decorator
@@ -124,18 +141,41 @@ def require_any_permission_v2(*permissions: str,
     def decorator(f):
         @functools.wraps(f)
         def decorated_function(*args, **kwargs):
+            print("--- ANY_PERMISSION DECORATOR: START ---", flush=True)
             try:
                 # Verify JWT token and get current user
                 try:
                     verify_jwt_in_request()
                     current_user_id = get_jwt_identity()
+                    print(f"--- ANY_PERMISSION DECORATOR: JWT identity is '{current_user_id}'", flush=True)
                 except Exception as jwt_error:
+                    print(f"--- ANY_PERMISSION DECORATOR: JWT verification failed: {jwt_error}", flush=True)
                     logger.warning(f"JWT verification failed for permission check: {permissions} - {jwt_error}")
                     return jsonify({'error': 'Authentication required'}), 401
                     
                 if not current_user_id:
+                    print("--- ANY_PERMISSION DECORATOR: No authenticated user!", flush=True)
                     logger.warning(f"No authenticated user for permission check: {permissions}")
                     return jsonify({'error': 'Authentication required'}), 401
+                
+                # Convert user_id to integer and get user object
+                try:
+                    current_user_id = int(current_user_id)
+                    from ..models.user import User
+                    current_user = User.query.get(current_user_id)
+                    if not current_user:
+                        print("--- ANY_PERMISSION DECORATOR: User not found in DB!", flush=True)
+                        logger.warning(f"User {current_user_id} not found during permission check")
+                        return jsonify({'error': 'User not found'}), 401
+                    
+                    # Set g.current_user for routes that expect it
+                    g.current_user = current_user
+                    print(f"--- ANY_PERMISSION DECORATOR: Set g.current_user to {current_user.email}", flush=True)
+                    
+                except (ValueError, TypeError) as e:
+                    print(f"--- ANY_PERMISSION DECORATOR: Invalid user ID format: {current_user_id} - {e}", flush=True)
+                    logger.warning(f"Invalid user ID format: {current_user_id} - {e}")
+                    return jsonify({'error': 'Invalid user identifier'}), 401
                 
                 # Process resource context if provided
                 context = None
@@ -157,6 +197,7 @@ def require_any_permission_v2(*permissions: str,
                         break
                 
                 if not has_any_permission:
+                    print(f"--- ANY_PERMISSION DECORATOR: Permission denied for {current_user.email} (permissions: {permissions})", flush=True)
                     logger.warning(f"Permission denied: user {current_user_id} lacks any of {permissions}")
                     return jsonify({
                         'error': 'Insufficient permissions',
@@ -168,11 +209,15 @@ def require_any_permission_v2(*permissions: str,
                 g.permission_context = context
                 g.verified_permission = granted_permission
                 
+                print(f"--- ANY_PERMISSION DECORATOR: Permission granted ({granted_permission}). Calling route function.", flush=True)
                 return f(*args, **kwargs)
                 
             except Exception as e:
+                print(f"--- ANY_PERMISSION DECORATOR: EXCEPTION! {type(e).__name__}: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
                 logger.error(f"Error in any-permission decorator: {e}")
-                return jsonify({'error': 'Permission check failed'}), 500
+                return jsonify({"error": "Authentication error in decorator"}), 401
                 
         return decorated_function
     return decorator
@@ -194,18 +239,41 @@ def require_all_permissions_v2(*permissions: str,
     def decorator(f):
         @functools.wraps(f)
         def decorated_function(*args, **kwargs):
+            print("--- ALL_PERMISSIONS DECORATOR: START ---", flush=True)
             try:
                 # Verify JWT token and get current user
                 try:
                     verify_jwt_in_request()
                     current_user_id = get_jwt_identity()
+                    print(f"--- ALL_PERMISSIONS DECORATOR: JWT identity is '{current_user_id}'", flush=True)
                 except Exception as jwt_error:
+                    print(f"--- ALL_PERMISSIONS DECORATOR: JWT verification failed: {jwt_error}", flush=True)
                     logger.warning(f"JWT verification failed for permission check: {permissions} - {jwt_error}")
                     return jsonify({'error': 'Authentication required'}), 401
                     
                 if not current_user_id:
+                    print("--- ALL_PERMISSIONS DECORATOR: No authenticated user!", flush=True)
                     logger.warning(f"No authenticated user for permission check: {permissions}")
                     return jsonify({'error': 'Authentication required'}), 401
+                
+                # Convert user_id to integer and get user object
+                try:
+                    current_user_id = int(current_user_id)
+                    from ..models.user import User
+                    current_user = User.query.get(current_user_id)
+                    if not current_user:
+                        print("--- ALL_PERMISSIONS DECORATOR: User not found in DB!", flush=True)
+                        logger.warning(f"User {current_user_id} not found during permission check")
+                        return jsonify({'error': 'User not found'}), 401
+                    
+                    # Set g.current_user for routes that expect it
+                    g.current_user = current_user
+                    print(f"--- ALL_PERMISSIONS DECORATOR: Set g.current_user to {current_user.email}", flush=True)
+                    
+                except (ValueError, TypeError) as e:
+                    print(f"--- ALL_PERMISSIONS DECORATOR: Invalid user ID format: {current_user_id} - {e}", flush=True)
+                    logger.warning(f"Invalid user ID format: {current_user_id} - {e}")
+                    return jsonify({'error': 'Invalid user identifier'}), 401
                 
                 # Process resource context if provided
                 context = None
@@ -224,6 +292,7 @@ def require_all_permissions_v2(*permissions: str,
                         missing_permissions.append(permission)
                 
                 if missing_permissions:
+                    print(f"--- ALL_PERMISSIONS DECORATOR: Permission denied for {current_user.email} (missing: {missing_permissions})", flush=True)
                     logger.warning(f"Permission denied: user {current_user_id} missing {missing_permissions}")
                     return jsonify({
                         'error': 'Insufficient permissions',
@@ -235,11 +304,15 @@ def require_all_permissions_v2(*permissions: str,
                 g.permission_context = context
                 g.verified_permissions = list(permissions)
                 
+                print(f"--- ALL_PERMISSIONS DECORATOR: All permissions granted ({permissions}). Calling route function.", flush=True)
                 return f(*args, **kwargs)
                 
             except Exception as e:
+                print(f"--- ALL_PERMISSIONS DECORATOR: EXCEPTION! {type(e).__name__}: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
                 logger.error(f"Error in all-permissions decorator: {e}")
-                return jsonify({'error': 'Permission check failed'}), 500
+                return jsonify({"error": "Authentication error in decorator"}), 401
                 
         return decorated_function
     return decorator
@@ -249,35 +322,57 @@ def require_permission_or_ownership_v2(permission: str,
                                       id_param: str,
                                       allow_admin_override: bool = True):
     """
-    Enhanced decorator for permission OR ownership checking.
-    User can access if they have the permission OR own the resource.
+    Enhanced decorator for permission OR ownership checks.
     
     Args:
-        permission: Permission name to check
+        permission: General permission that grants access
         resource_type: Type of resource (e.g., 'fuel_order', 'user')
-        id_param: Parameter name containing resource ID
-        allow_admin_override: Allow admin users to override ownership
+        id_param: URL parameter name containing resource ID
+        allow_admin_override: Allow admin users to bypass ownership
         
     Example:
         @require_permission_or_ownership_v2('view_any_fuel_order', 'fuel_order', 'order_id')
         def get_fuel_order(order_id):
-            # User can access if they have view_any_fuel_order OR own the order
+            # User needs view_any_fuel_order OR owns this specific order
     """
     def decorator(f):
         @functools.wraps(f)
         def decorated_function(*args, **kwargs):
+            print("--- OWNERSHIP DECORATOR: START ---", flush=True)
             try:
                 # Verify JWT token and get current user
                 try:
                     verify_jwt_in_request()
                     current_user_id = get_jwt_identity()
+                    print(f"--- OWNERSHIP DECORATOR: JWT identity is '{current_user_id}'", flush=True)
                 except Exception as jwt_error:
+                    print(f"--- OWNERSHIP DECORATOR: JWT verification failed: {jwt_error}", flush=True)
                     logger.warning(f"JWT verification failed for permission check: {permission} - {jwt_error}")
                     return jsonify({'error': 'Authentication required'}), 401
                     
                 if not current_user_id:
+                    print("--- OWNERSHIP DECORATOR: No authenticated user!", flush=True)
                     logger.warning(f"No authenticated user for permission check: {permission}")
                     return jsonify({'error': 'Authentication required'}), 401
+                
+                # Convert user_id to integer and get user object
+                try:
+                    current_user_id = int(current_user_id)
+                    from ..models.user import User
+                    current_user = User.query.get(current_user_id)
+                    if not current_user:
+                        print("--- OWNERSHIP DECORATOR: User not found in DB!", flush=True)
+                        logger.warning(f"User {current_user_id} not found during permission check")
+                        return jsonify({'error': 'User not found'}), 401
+                    
+                    # Set g.current_user for routes that expect it
+                    g.current_user = current_user
+                    print(f"--- OWNERSHIP DECORATOR: Set g.current_user to {current_user.email}", flush=True)
+                    
+                except (ValueError, TypeError) as e:
+                    print(f"--- OWNERSHIP DECORATOR: Invalid user ID format: {current_user_id} - {e}", flush=True)
+                    logger.warning(f"Invalid user ID format: {current_user_id} - {e}")
+                    return jsonify({'error': 'Invalid user identifier'}), 401
                 
                 # Get resource ID from URL parameters
                 resource_id = kwargs.get(id_param)
@@ -292,6 +387,7 @@ def require_permission_or_ownership_v2(permission: str,
                 )
                 
                 if has_general_permission:
+                    print(f"--- OWNERSHIP DECORATOR: User has general permission '{permission}'. Calling route function.", flush=True)
                     logger.debug(f"User {current_user_id} has general permission '{permission}'")
                     g.access_method = 'permission'
                     g.verified_permission = permission
@@ -304,20 +400,20 @@ def require_permission_or_ownership_v2(permission: str,
                     ownership_check=True
                 )
                 
-                user = enhanced_permission_service._get_user(current_user_id)
-                if user:
-                    has_ownership = enhanced_permission_service._check_resource_ownership(
-                        user=user,
-                        context=ownership_context
-                    )
-                    
-                    if has_ownership:
-                        logger.debug(f"User {current_user_id} owns {resource_type} {resource_id}")
-                        g.access_method = 'ownership'
-                        g.resource_context = ownership_context
-                        return f(*args, **kwargs)
+                has_ownership = enhanced_permission_service.user_has_permission(
+                    user_id=current_user_id,
+                    permission=f"view_own_{resource_type}",  # Ownership permission pattern
+                    resource_context=ownership_context
+                )
                 
-                # Third check: Admin override (if enabled)
+                if has_ownership:
+                    print(f"--- OWNERSHIP DECORATOR: User has ownership access to {resource_type} {resource_id}. Calling route function.", flush=True)
+                    logger.debug(f"User {current_user_id} has ownership access to {resource_type} {resource_id}")
+                    g.access_method = 'ownership'
+                    g.verified_permission = f"view_own_{resource_type}"
+                    return f(*args, **kwargs)
+                
+                # Admin override check
                 if allow_admin_override:
                     is_admin = enhanced_permission_service.user_has_permission(
                         user_id=current_user_id,
@@ -325,23 +421,26 @@ def require_permission_or_ownership_v2(permission: str,
                     )
                     
                     if is_admin:
-                        logger.debug(f"Admin user {current_user_id} accessing {resource_type} {resource_id}")
+                        print(f"--- OWNERSHIP DECORATOR: Admin user granted access via admin override. Calling route function.", flush=True)
+                        logger.debug(f"Admin user {current_user_id} granted access via admin override")
                         g.access_method = 'admin_override'
                         g.verified_permission = 'admin'
                         return f(*args, **kwargs)
                 
                 # Access denied
-                logger.warning(f"Access denied: user {current_user_id} lacks permission '{permission}' and doesn't own {resource_type} {resource_id}")
+                print(f"--- OWNERSHIP DECORATOR: Access denied for {current_user.email} (lacks {permission} and doesn't own {resource_type} {resource_id})", flush=True)
+                logger.warning(f"Access denied: user {current_user_id} lacks '{permission}' and doesn't own {resource_type} {resource_id}")
                 return jsonify({
-                    'error': 'Insufficient permissions',
-                    'message': f'You need the "{permission}" permission or ownership of this resource',
-                    'resource_type': resource_type,
-                    'resource_id': resource_id
+                    'error': 'Access denied',
+                    'message': f'You need {permission} permission or ownership of this {resource_type}'
                 }), 403
                 
             except Exception as e:
+                print(f"--- OWNERSHIP DECORATOR: EXCEPTION! {type(e).__name__}: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
                 logger.error(f"Error in permission-or-ownership decorator: {e}")
-                return jsonify({'error': 'Permission check failed'}), 500
+                return jsonify({"error": "Authentication error in decorator"}), 401
                 
         return decorated_function
     return decorator

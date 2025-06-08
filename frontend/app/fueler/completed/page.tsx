@@ -1,47 +1,63 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { CheckCircle, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
+import { usePermissions } from "@/app/contexts/permission-context"
+import { getCurrentUser } from "@/app/services/auth-service"
 
 // Local storage key for fuel orders
 const FUEL_ORDERS_STORAGE_KEY = "fboFuelOrders"
 
 export default function CompletedOrdersPage() {
-  const [user, setUser] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
+  const { user, loading: permissionsLoading, isAuthenticated } = usePermissions()
   const [completedOrders, setCompletedOrders] = useState<any[]>([])
   const [timeFilter, setTimeFilter] = useState<"today" | "week" | "all">("all")
+  const [dataLoaded, setDataLoaded] = useState(false)
 
+  // Check authentication and redirect if necessary
   useEffect(() => {
-    // Check if user is logged in and is Fueler
-    const userData = localStorage.getItem("fboUser")
-    if (!userData) {
+    if (!permissionsLoading && !isAuthenticated()) {
+      router.push("/login")
       return
     }
 
-    const parsedUser = JSON.parse(userData)
-    if (!parsedUser.isLoggedIn || parsedUser.role !== "fueler") {
-      return
+    // Check if user has fueler role (using correct role names from backend)
+    if (!permissionsLoading && user) {
+      const currentUser = getCurrentUser()
+      const hasRequiredRole = currentUser?.roles?.includes('Line Service Technician')
+      
+      if (!hasRequiredRole) {
+        // Redirect to appropriate dashboard based on their role
+        if (currentUser?.roles?.includes('System Administrator')) {
+          router.push("/admin/dashboard")
+        } else if (currentUser?.roles?.includes('Customer Service Representative')) {
+          router.push("/csr/dashboard")
+        } else {
+          router.push("/member/dashboard")
+        }
+        return
+      }
     }
+  }, [permissionsLoading, isAuthenticated, user, router])
 
-    setUser(parsedUser)
-    setIsLoading(false)
-  }, [])
-
+  // Load completed orders data
   useEffect(() => {
-    if (!isLoading) {
+    if (!permissionsLoading && isAuthenticated() && user && !dataLoaded) {
       // Load fuel orders from localStorage
       const storedOrders = localStorage.getItem(FUEL_ORDERS_STORAGE_KEY)
       if (storedOrders) {
         const allOrders = JSON.parse(storedOrders)
         setCompletedOrders(allOrders.filter((order: any) => order.status === "COMPLETED"))
       }
+      setDataLoaded(true)
     }
-  }, [isLoading])
+  }, [permissionsLoading, isAuthenticated, user, dataLoaded])
 
   const getFilteredOrders = () => {
     const now = new Date()
@@ -61,7 +77,7 @@ export default function CompletedOrdersPage() {
 
   const filteredOrders = getFilteredOrders()
 
-  if (isLoading) {
+  if (permissionsLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="flex flex-col items-center gap-4">

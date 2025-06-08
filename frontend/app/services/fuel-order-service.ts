@@ -19,15 +19,35 @@ export interface FuelOrderDisplay {
   priority: 'normal' | 'high' | 'urgent'
   csr_notes: string
   lst_notes: string
+  notes: string // General notes field for backward compatibility
   additive_requested: boolean
   location_on_ramp: string
   assigned_lst_name: string
   assigned_truck_name: string
+  assigned_truck_id: string // Added for backward compatibility
   created_at: string
   estimated_completion: string
   completed_at?: string
   reviewed_at?: string
+  review_notes?: string // Notes from CSR review
   fees?: FeeCalculationResult
+  // Receipt linking and order locking fields
+  receipt_id?: number | null
+  is_locked: boolean
+  // Nested objects for detailed access
+  aircraft?: {
+    tail_number: string
+    registration?: string
+    type?: string
+  }
+  customer?: {
+    id: number
+    name: string
+  }
+  assigned_lst?: {
+    id: number
+    name: string
+  }
 }
 
 // Backend Communication Interface (aligned with API contracts)
@@ -41,6 +61,7 @@ export interface FuelOrderBackend {
   priority?: string
   csr_notes?: string
   lst_notes?: string
+  review_notes?: string // Notes from CSR review
   additive_requested?: boolean
   location_on_ramp?: string
   assigned_lst_user_id?: number // -1 for auto-assign
@@ -52,6 +73,9 @@ export interface FuelOrderBackend {
   assigned_lst_username?: string;
   assigned_lst_fullName?: string;
   assigned_truck_number?: string;
+  // Receipt linking and order locking fields
+  receipt_id?: number | null;
+  is_locked?: boolean;
 }
 
 // Request interfaces for different operations
@@ -71,6 +95,13 @@ export interface FuelOrderCreateRequest {
 export interface FuelOrderUpdateStatusRequest {
   status: string
   lst_notes?: string
+}
+
+export interface FuelOrderManualStatusUpdateRequest {
+  status: string
+  start_meter_reading?: number
+  end_meter_reading?: number
+  reason?: string
 }
 
 export interface FuelOrderSubmitDataRequest {
@@ -106,14 +137,14 @@ export interface FuelOrderStats {
   status_distribution: Record<string, number>
 }
 
-// Status enumeration
+// Status enumeration (matches backend API response format)
 export type FuelOrderStatus = 
-  | 'PENDING'
-  | 'ASSIGNED'
-  | 'IN_PROGRESS'
-  | 'COMPLETED'
-  | 'REVIEWED'
-  | 'CANCELLED'
+  | 'Pending'
+  | 'Assigned'
+  | 'In Progress'
+  | 'Completed'
+  | 'Reviewed'
+  | 'Cancelled'
 
 // Lookup data interfaces for transformations
 export interface Aircraft {
@@ -232,14 +263,33 @@ export async function transformToDisplay(
     priority: (backend.priority as 'normal' | 'high' | 'urgent') || 'normal',
     csr_notes: backend.csr_notes || '',
     lst_notes: backend.lst_notes || '',
+    notes: backend.csr_notes || backend.lst_notes || '', // General notes field combining csr and lst notes
     additive_requested: backend.additive_requested || false,
     location_on_ramp: backend.location_on_ramp || '',
     assigned_lst_name: backend.assigned_lst_fullName || backend.assigned_lst_username || (backend.assigned_lst_user_id ? getLSTNameById(backend.assigned_lst_user_id) : 'N/A'),
     assigned_truck_name: backend.assigned_truck_number || (backend.assigned_truck_id ? getTruckNameById(backend.assigned_truck_id) : 'N/A'),
+    assigned_truck_id: backend.assigned_truck_id?.toString() || '',
     created_at: backend.created_at || '',
     estimated_completion: backend.estimated_completion_time || '',
     completed_at: backend.completed_at,
     reviewed_at: backend.reviewed_at,
+    review_notes: backend.review_notes || '',
+    // Receipt linking and order locking fields
+    receipt_id: backend.receipt_id || null,
+    is_locked: backend.is_locked || false,
+    // Nested objects for detailed access
+    aircraft: {
+      tail_number: backend.tail_number,
+      registration: backend.tail_number,
+    },
+    customer: {
+      id: backend.customer_id,
+      name: `Customer ${backend.customer_id}`,
+    },
+    assigned_lst: backend.assigned_lst_user_id ? {
+      id: backend.assigned_lst_user_id,
+      name: backend.assigned_lst_fullName || backend.assigned_lst_username || getLSTNameById(backend.assigned_lst_user_id),
+    } : undefined,
   }
 }
 
@@ -407,6 +457,28 @@ export async function updateFuelOrderStatus(id: number, statusData: FuelOrderUpd
 
   const backendOrder = await handleApiResponse<FuelOrderBackend>(response)
   return transformToDisplay(backendOrder)
+}
+
+// Get all possible fuel order status values
+export async function getFuelOrderStatuses(): Promise<string[]> {
+  const response = await fetch(`${API_BASE_URL}/fuel-orders/statuses`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  })
+
+  return handleApiResponse<string[]>(response)
+}
+
+// Manual status update (CSR operations with meter readings and reason)
+export async function updateOrderStatus(orderId: number, payload: FuelOrderManualStatusUpdateRequest): Promise<FuelOrderDisplay> {
+  const response = await fetch(`${API_BASE_URL}/fuel-orders/${orderId}/status`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  })
+
+  const responseData = await handleApiResponse<{ message: string; fuel_order: FuelOrderBackend }>(response)
+  return transformToDisplay(responseData.fuel_order)
 }
 
 // Submit fuel order completion data (LST completion)

@@ -154,16 +154,16 @@ describe('Fueler (LST) User Access Tests', () => {
       
       // Fueler should have execution permissions but not creation/admin permissions
       expect(user.permissions).to.include.oneOf([
-        'EXECUTE_ORDER',
-        'UPDATE_ORDER_STATUS',
-        'VIEW_ASSIGNED_ORDERS',
-        'RECORD_FUEL_DELIVERY'
+        'execute_order',
+        'update_order_status',
+        'view_assigned_orders',
+        'record_fuel_delivery'
       ])
       
       // Should NOT have admin or creation permissions
       expect(user.permissions).to.not.include.oneOf([
-        'MANAGE_USERS',
-        'CREATE_ORDER',
+        'manage_users',
+        'create_fuel_order',
         'administrative_operations'
       ])
     })

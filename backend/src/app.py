@@ -4,6 +4,7 @@ from flask_cors import CORS
 from apispec.ext.marshmallow import MarshmallowPlugin
 from apispec_webframeworks.flask import FlaskPlugin
 import logging
+from datetime import datetime
 
 from src.config import config
 from src.extensions import db, migrate, jwt, apispec, marshmallow_plugin
@@ -80,11 +81,18 @@ def create_app(config_name=None):
         """Load user from JWT identity and set it to g.current_user"""
         from src.models.user import User
         from flask import g
-        identity = jwt_data["sub"]
-        user = User.query.filter_by(id=identity).first()
-        if user:
-            g.current_user = user
-        return user
+        
+        try:
+            identity = jwt_data["sub"]
+            # Explicitly cast to integer for lookup to be safe
+            user_id = int(identity)
+            user = User.query.get(user_id)  # .get() is faster for PK lookup
+            
+            if user:
+                g.current_user = user
+            return user
+        except (ValueError, KeyError, TypeError):
+            return None
 
     # Initialize API documentation with apispec
     flask_plugin = FlaskPlugin()
@@ -111,7 +119,9 @@ def create_app(config_name=None):
     from src.routes.aircraft_routes import aircraft_bp
     from src.routes.customer_routes import customer_bp
     from src.routes.admin.routes import admin_bp
+    from src.routes.admin.fee_config_routes import admin_fee_config_bp
     from src.routes.enhanced_user_routes import enhanced_user_bp
+    from src.routes.receipt_routes import receipt_bp
 
     # Register blueprints with strict_slashes=False to prevent 308 redirects for both /api/resource and /api/resource/
     app.register_blueprint(auth_bp, url_prefix='/api/auth', strict_slashes=False)
@@ -121,186 +131,9 @@ def create_app(config_name=None):
     app.register_blueprint(aircraft_bp, url_prefix='/api/aircraft', strict_slashes=False)
     app.register_blueprint(customer_bp, url_prefix='/api/customers', strict_slashes=False)
     app.register_blueprint(admin_bp, url_prefix='/api/admin', strict_slashes=False)
+    app.register_blueprint(admin_fee_config_bp, strict_slashes=False)
     app.register_blueprint(enhanced_user_bp, url_prefix='/api/admin/users', strict_slashes=False)
-
-    # --- TEMPORARY DEBUGGING CODE ---
-    logger = logging.getLogger(__name__)
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-
-
-
-    # Register schemas and paths with apispec
-    with app.app_context():
-        # Attach spec to app for use in other modules
-        app.spec = apispec
-
-        # Register Auth Schemas
-        apispec.components.schema("RegisterRequestSchema", schema=RegisterRequestSchema)
-        apispec.components.schema("UserResponseSchema", schema=UserResponseSchema)
-        apispec.components.schema("RegisterResponseSchema", schema=RegisterResponseSchema)
-        apispec.components.schema("LoginRequestSchema", schema=LoginRequestSchema)
-        apispec.components.schema("LoginSuccessResponseSchema", schema=LoginSuccessResponseSchema)
-        apispec.components.schema("ErrorResponseSchema", schema=ErrorResponseSchema)
-        apispec.components.schema("UserPermissionsResponseSchema", schema=UserPermissionsResponseSchema)
-
-        # Register User Admin Schemas
-        from src.schemas.user_schemas import (
-            UserCreateRequestSchema, UserUpdateRequestSchema,
-            UserDetailSchema, UserListResponseSchema, UserBriefSchema,
-            RoleBriefSchema
-        )
-        apispec.components.schema("RoleBriefSchema", schema=RoleBriefSchema)
-        apispec.components.schema("UserBriefSchema", schema=UserBriefSchema)
-        apispec.components.schema("UserCreateRequestSchema", schema=UserCreateRequestSchema)
-        apispec.components.schema("UserUpdateRequestSchema", schema=UserUpdateRequestSchema)
-        apispec.components.schema("UserDetailSchema", schema=UserDetailSchema)
-        apispec.components.schema("UserListResponseSchema", schema=UserListResponseSchema)
-
-        # Register Fuel Order Schemas
-        apispec.components.schema("FuelOrderCreateRequestSchema", schema=FuelOrderCreateRequestSchema)
-        apispec.components.schema("FuelOrderStatusUpdateRequestSchema", schema=FuelOrderStatusUpdateRequestSchema)
-        apispec.components.schema("FuelOrderCompleteRequestSchema", schema=FuelOrderCompleteRequestSchema)
-        apispec.components.schema("FuelOrderResponseSchema", schema=FuelOrderResponseSchema)
-        apispec.components.schema("FuelOrderBriefResponseSchema", schema=FuelOrderBriefResponseSchema)
-        apispec.components.schema("FuelOrderCreateResponseSchema", schema=FuelOrderCreateResponseSchema)
-        apispec.components.schema("FuelOrderUpdateResponseSchema", schema=FuelOrderUpdateResponseSchema)
-        apispec.components.schema("PaginationSchema", schema=PaginationSchema)
-        apispec.components.schema("FuelOrderListResponseSchema", schema=FuelOrderListResponseSchema)
-        apispec.components.schema("OrderStatusCountsSchema", schema=OrderStatusCountsSchema)
-        apispec.components.schema("OrderStatusCountsResponseSchema", schema=OrderStatusCountsResponseSchema)
-
-        # Register Fuel Truck Schemas
-        apispec.components.schema("FuelTruckSchema", schema=FuelTruckSchema)
-        apispec.components.schema("FuelTruckListResponseSchema", schema=FuelTruckListResponseSchema)
-        apispec.components.schema("FuelTruckCreateRequestSchema", schema=FuelTruckCreateRequestSchema)
-        apispec.components.schema("FuelTruckCreateResponseSchema", schema=FuelTruckCreateResponseSchema)
-
-        # Register Aircraft Schemas
-        from src.schemas.aircraft_schemas import (
-            AircraftCreateSchema,
-            AircraftUpdateSchema,
-            AircraftResponseSchema,
-            AircraftListSchema,
-            ErrorResponseSchema as AircraftErrorResponseSchema
-        )
-        apispec.components.schema("AircraftCreateSchema", schema=AircraftCreateSchema)
-        apispec.components.schema("AircraftUpdateSchema", schema=AircraftUpdateSchema)
-        apispec.components.schema("AircraftResponseSchema", schema=AircraftResponseSchema)
-        apispec.components.schema("AircraftListSchema", schema=AircraftListSchema)
-        apispec.components.schema("AircraftErrorResponseSchema", schema=AircraftErrorResponseSchema)
-
-        # Register Customer Schemas
-        from src.schemas.customer_schemas import (
-            CustomerCreateSchema,
-            CustomerUpdateSchema,
-            CustomerResponseSchema,
-            CustomerListSchema,
-            ErrorResponseSchema as CustomerErrorResponseSchema
-        )
-        apispec.components.schema("CustomerCreateSchema", schema=CustomerCreateSchema)
-        apispec.components.schema("CustomerUpdateSchema", schema=CustomerUpdateSchema)
-        apispec.components.schema("CustomerResponseSchema", schema=CustomerResponseSchema)
-        apispec.components.schema("CustomerListSchema", schema=CustomerListSchema)
-        apispec.components.schema("CustomerErrorResponseSchema", schema=CustomerErrorResponseSchema)
-
-        # Register Admin Schemas
-        from src.schemas.admin_schemas import (
-            AdminAircraftSchema, AdminAircraftListResponseSchema,
-            AdminCustomerSchema, AdminCustomerListResponseSchema
-        )
-        apispec.components.schema("AdminAircraftSchema", schema=AdminAircraftSchema)
-        apispec.components.schema("AdminAircraftListResponseSchema", schema=AdminAircraftListResponseSchema)
-        apispec.components.schema("AdminCustomerSchema", schema=AdminCustomerSchema)
-        apispec.components.schema("AdminCustomerListResponseSchema", schema=AdminCustomerListResponseSchema)
-
-        # Register Permission Schemas
-        from src.routes.admin.permission_admin_routes import PermissionListResponseSchema
-        from src.schemas import PermissionSchema
-        apispec.components.schema("PermissionSchema", schema=PermissionSchema)
-        apispec.components.schema("PermissionListResponseSchema", schema=PermissionListResponseSchema)
-
-        # Register Auth Views
-        from src.routes.auth_routes import register, login, get_my_permissions
-        apispec.path(view=register, bp=auth_bp)
-        apispec.path(view=login, bp=auth_bp)
-        apispec.path(view=get_my_permissions, bp=auth_bp)
-
-        # Register User Views
-        from src.routes.user_routes import get_users
-        apispec.path(view=get_users, bp=user_bp)
-
-        # Register Fuel Order Views
-        from src.routes.fuel_order_routes import (
-            create_fuel_order, get_fuel_orders, get_fuel_order,
-            update_fuel_order_status, submit_fuel_data, review_fuel_order,
-            export_fuel_orders_csv, get_status_counts
-        )
-        apispec.path(view=create_fuel_order, bp=fuel_order_bp)
-        apispec.path(view=get_fuel_orders, bp=fuel_order_bp)
-        apispec.path(view=get_fuel_order, bp=fuel_order_bp)
-        apispec.path(view=update_fuel_order_status, bp=fuel_order_bp)
-        apispec.path(view=submit_fuel_data, bp=fuel_order_bp)
-        apispec.path(view=review_fuel_order, bp=fuel_order_bp)
-        apispec.path(view=export_fuel_orders_csv, bp=fuel_order_bp)
-        apispec.path(view=get_status_counts, bp=fuel_order_bp)
-
-        # Register Fuel Truck Views
-        from src.routes.fuel_truck_routes import get_fuel_trucks, create_fuel_truck
-        apispec.path(view=get_fuel_trucks, bp=truck_bp)
-        apispec.path(view=create_fuel_truck, bp=truck_bp)
-
-        # Register Aircraft Views
-        # Note: Function names in aircraft_routes may not match, commenting out for now
-        # from src.routes.aircraft_routes import list_aircraft, create_aircraft, get_aircraft, update_aircraft, delete_aircraft
-        # apispec.path(view=list_aircraft, bp=aircraft_bp)
-        # apispec.path(view=create_aircraft, bp=aircraft_bp)
-        # apispec.path(view=get_aircraft, bp=aircraft_bp)
-        # apispec.path(view=update_aircraft, bp=aircraft_bp)
-        # apispec.path(view=delete_aircraft, bp=aircraft_bp)
-
-        # Register Admin Views
-        from src.routes.admin.aircraft_admin_routes import list_aircraft as admin_list_aircraft, create_aircraft as admin_create_aircraft, get_aircraft as admin_get_aircraft, update_aircraft as admin_update_aircraft, delete_aircraft as admin_delete_aircraft
-        from src.routes.admin.customer_admin_routes import list_customers as admin_list_customers, create_customer as admin_create_customer, get_customer as admin_get_customer, update_customer as admin_update_customer, delete_customer as admin_delete_customer
-        from src.routes.admin.permission_admin_routes import get_permissions
-        from src.routes.admin.user_admin_routes import get_users as admin_get_users
-        from src.routes.admin.role_admin_routes import get_roles, create_role, get_role, update_role, delete_role, get_role_permissions
-
-        # Register Admin Aircraft Views
-        apispec.path(view=admin_list_aircraft, bp=admin_bp)
-        apispec.path(view=admin_create_aircraft, bp=admin_bp)
-        apispec.path(view=admin_get_aircraft, bp=admin_bp)
-        apispec.path(view=admin_update_aircraft, bp=admin_bp)
-        apispec.path(view=admin_delete_aircraft, bp=admin_bp)
-
-        # Register Admin Customer Views
-        apispec.path(view=admin_list_customers, bp=admin_bp)
-        apispec.path(view=admin_create_customer, bp=admin_bp)
-        apispec.path(view=admin_get_customer, bp=admin_bp)
-        apispec.path(view=admin_update_customer, bp=admin_bp)
-        apispec.path(view=admin_delete_customer, bp=admin_bp)
-
-        # Register Admin User Views
-        apispec.path(view=admin_get_users, bp=admin_bp)
-        # apispec.path(view=admin_create_user, bp=admin_bp)
-        # apispec.path(view=admin_get_user, bp=admin_bp)
-        # apispec.path(view=admin_update_user, bp=admin_bp)
-        # apispec.path(view=admin_delete_user, bp=admin_bp)
-
-        # Register Admin Role Views
-        apispec.path(view=get_roles, bp=admin_bp)
-        apispec.path(view=create_role, bp=admin_bp)
-        apispec.path(view=get_role, bp=admin_bp)
-        apispec.path(view=update_role, bp=admin_bp)
-        apispec.path(view=delete_role, bp=admin_bp)
-        apispec.path(view=get_role_permissions, bp=admin_bp)
-
-        # Register Admin Permission Views
-        apispec.path(view=get_permissions, bp=admin_bp)
+    app.register_blueprint(receipt_bp, strict_slashes=False)
 
     @app.route('/')
     def root():

@@ -140,6 +140,34 @@ export default function AppSidebar({ collapsed, setCollapsed, userRole = "csr" }
       permissions: ['manage_aircraft'],
       description: "Manage aircraft records and registration"
     },
+    {
+      title: "Fee Categories",
+      href: "/admin/fbo-config/fee-categories",
+      icon: <Settings className="h-5 w-5" />,
+      permissions: ['manage_fbo_fee_schedules'],
+      description: "Manage aircraft fee categories"
+    },
+    {
+      title: "Fee Rules",
+      href: "/admin/fbo-config/fee-rules",
+      icon: <Receipt className="h-5 w-5" />,
+      permissions: ['manage_fbo_fee_schedules'],
+      description: "Configure fee rules and CAA overrides"
+    },
+    {
+      title: "Aircraft Mappings",
+      href: "/admin/fbo-config/aircraft-mappings",
+      icon: <Plane className="h-5 w-5" />,
+      permissions: ['manage_fbo_fee_schedules'],
+      description: "Map aircraft types to fee categories"
+    },
+    {
+      title: "Waiver Tiers",
+      href: "/admin/fbo-config/waiver-tiers",
+      icon: <CheckCircle className="h-5 w-5" />,
+      permissions: ['manage_fbo_fee_schedules'],
+      description: "Configure waiver tier strategies"
+    },
 
     // CSR Navigation
     {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Droplet, CheckCircle, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
@@ -18,6 +19,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
+import { usePermissions } from "@/app/contexts/permission-context"
+import { getCurrentUser } from "@/app/services/auth-service"
 
 // Mock fuel orders for demo
 const MOCK_FUEL_ORDERS = [
@@ -95,8 +98,8 @@ const MOCK_FUEL_ORDERS = [
 const FUEL_ORDERS_STORAGE_KEY = "fboFuelOrders"
 
 export default function FuelerDashboard() {
-  const [user, setUser] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
+  const { user, loading: permissionsLoading, isAuthenticated } = usePermissions()
   const [fuelOrders, setFuelOrders] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState("pending")
   const [selectedOrder, setSelectedOrder] = useState<any>(null)
@@ -104,25 +107,37 @@ export default function FuelerDashboard() {
   const [actualQuantity, setActualQuantity] = useState("")
   const [completionNotes, setCompletionNotes] = useState("")
   const [error, setError] = useState("")
+  const [dataLoaded, setDataLoaded] = useState(false)
 
+  // Check authentication and redirect if necessary
   useEffect(() => {
-    // Check if user is logged in and is Fueler
-    const userData = localStorage.getItem("fboUser")
-    if (!userData) {
+    if (!permissionsLoading && !isAuthenticated()) {
+      router.push("/login")
       return
     }
 
-    const parsedUser = JSON.parse(userData)
-    if (!parsedUser.isLoggedIn || parsedUser.role !== "fueler") {
-      return
+    // Check if user has fueler role (using correct role names from backend)
+    if (!permissionsLoading && user) {
+      const currentUser = getCurrentUser()
+      const hasRequiredRole = currentUser?.roles?.includes('Line Service Technician')
+      
+      if (!hasRequiredRole) {
+        // Redirect to appropriate dashboard based on their role
+        if (currentUser?.roles?.includes('System Administrator')) {
+          router.push("/admin/dashboard")
+        } else if (currentUser?.roles?.includes('Customer Service Representative')) {
+          router.push("/csr/dashboard")
+        } else {
+          router.push("/member/dashboard")
+        }
+        return
+      }
     }
+  }, [permissionsLoading, isAuthenticated, user, router])
 
-    setUser(parsedUser)
-    setIsLoading(false)
-  }, [])
-
+  // Load fuel orders data
   useEffect(() => {
-    if (!isLoading) {
+    if (!permissionsLoading && isAuthenticated() && user && !dataLoaded) {
       // Load fuel orders from localStorage or use mock data
       const storedOrders = localStorage.getItem(FUEL_ORDERS_STORAGE_KEY)
       if (storedOrders) {
@@ -132,8 +147,9 @@ export default function FuelerDashboard() {
         setFuelOrders(MOCK_FUEL_ORDERS)
         localStorage.setItem(FUEL_ORDERS_STORAGE_KEY, JSON.stringify(MOCK_FUEL_ORDERS))
       }
+      setDataLoaded(true)
     }
-  }, [isLoading])
+  }, [permissionsLoading, isAuthenticated, user, dataLoaded])
 
   const handleTabChange = (value: string) => {
     setActiveTab(value)
@@ -170,7 +186,7 @@ export default function FuelerDashboard() {
             completedAt: now,
             actualQuantity,
             completionNotes,
-            fuelerId: 1,
+            fuelerId: user?.id || 1,
             fuelerName: user?.name || "Fueler",
           }
         : o,
@@ -220,7 +236,8 @@ export default function FuelerDashboard() {
     }
   }
 
-  if (isLoading) {
+  // Show loading while permissions are being fetched or user is being authenticated
+  if (permissionsLoading || !dataLoaded) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="flex flex-col items-center gap-4">
@@ -229,6 +246,11 @@ export default function FuelerDashboard() {
         </div>
       </div>
     )
+  }
+
+  // If not authenticated, don't render the dashboard (useEffect will handle redirect)
+  if (!isAuthenticated()) {
+    return null
   }
 
   const filteredOrders = getFilteredOrders()

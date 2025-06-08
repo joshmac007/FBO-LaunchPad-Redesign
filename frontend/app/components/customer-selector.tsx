@@ -162,6 +162,7 @@ export default function CustomerSelector({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="border-0 focus:ring-0 focus:outline-none bg-transparent"
+                  data-cy="customer-search"
                 />
                 {isLoading && (
                   <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin opacity-50" />
@@ -203,6 +204,7 @@ export default function CustomerSelector({
                         value={`${customer.name} ${customer.email} ${customer.id}`}
                         onSelect={() => handleCustomerSelect(customer)}
                         className="cursor-pointer"
+                        data-cy="customer-option"
                       >
                         <div className="flex items-center gap-3 w-full">
                           <User className="h-4 w-4 text-gray-500" />

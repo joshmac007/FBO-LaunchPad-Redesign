@@ -1,12 +1,13 @@
 from src.extensions import db
 from src.models import Permission, Role, User
+from src.models.fuel_truck import FuelTruck
 from datetime import datetime
 from sqlalchemy import text
 
 # --- Data Definitions ---
 all_permissions = [
     # Fuel Orders
-    {'name': 'create_order', 'description': 'Allows creating new fuel orders', 'category': 'fuel_orders'},
+    {'name': 'create_fuel_order', 'description': 'Allows creating new fuel orders', 'category': 'fuel_orders'},
     {'name': 'view_assigned_orders', 'description': 'Allows viewing orders assigned to self', 'category': 'fuel_orders'},
     {'name': 'view_all_orders', 'description': 'Allows viewing all fuel orders', 'category': 'fuel_orders'},
     {'name': 'update_order_status', 'description': 'Allows LST to update status of own orders', 'category': 'fuel_orders'},
@@ -53,10 +54,18 @@ all_permissions = [
     # Billing/Fees Permissions
     {'name': 'view_billing_info', 'description': 'Allows viewing billing information and fee calculations', 'category': 'billing'},
     {'name': 'calculate_fees', 'description': 'Allows calculating fees and charges', 'category': 'billing'},
+    {'name': 'manage_fbo_fee_schedules', 'description': 'Allows managing FBO fee schedules, categories, rules, and waiver tiers', 'category': 'billing'},
     
     # Fuel Receipt System Permissions
+    {'name': 'view_receipts', 'description': 'Allows viewing fuel receipts', 'category': 'receipts'},
     {'name': 'view_all_receipts', 'description': 'Allows viewing all fuel receipts', 'category': 'receipts'},
     {'name': 'view_own_receipts', 'description': 'Allows viewing own fuel receipts', 'category': 'receipts'},
+    {'name': 'create_receipt', 'description': 'Allows creating new fuel receipts from completed orders', 'category': 'receipts'},
+    {'name': 'update_receipt', 'description': 'Allows updating draft fuel receipts', 'category': 'receipts'},
+    {'name': 'calculate_receipt_fees', 'description': 'Allows calculating fees for fuel receipts', 'category': 'receipts'},
+    {'name': 'generate_receipt', 'description': 'Allows generating final fuel receipts', 'category': 'receipts'},
+    {'name': 'mark_receipt_paid', 'description': 'Allows marking fuel receipts as paid', 'category': 'receipts'},
+    {'name': 'void_receipt', 'description': 'Allows voiding generated or paid fuel receipts', 'category': 'receipts'},
     {'name': 'manage_receipts', 'description': 'Allows creating, editing, and managing fuel receipts', 'category': 'receipts'},
     {'name': 'export_receipts_csv', 'description': 'Allows exporting receipt data to CSV', 'category': 'receipts'},
 ]
@@ -66,6 +75,23 @@ default_roles = [
     {"name": "Customer Service Representative", "description": "Handles customer orders and assignments"},
     {"name": "Line Service Technician", "description": "Executes fuel orders and updates status"},
     {"name": "Member", "description": "Basic member with limited view access"},
+]
+
+default_fuel_trucks = [
+    {
+        "truck_number": "FT-001",
+        "fuel_type": "Jet A",
+        "capacity": 5000.00,
+        "current_meter_reading": 12345.67,
+        "is_active": True
+    },
+    {
+        "truck_number": "FT-002",
+        "fuel_type": "Jet A",
+        "capacity": 5000.00,
+        "current_meter_reading": 0.00,
+        "is_active": False  # Inactive truck for testing
+    }
 ]
 
 def seed_data():
@@ -83,16 +109,18 @@ def seed_data():
         # Only delete from tables that definitely exist
         tables_to_clear = [
             'user_permission_group_assignments',
-            'permission_group_permissions', 
-            'user_permission_groups',
-            'permission_groups',
+            'permission_group_memberships',
+            'role_permission_groups',
             'user_permissions',
             'user_roles',
-            'role_permissions',
             'fuel_orders',
+            'aircraft',
+            'customers',
+            'fuel_trucks',
             'users',
+            'permission_groups',
             'roles',
-            'permissions'
+            'permissions',
         ]
         
         for table in tables_to_clear:
@@ -190,9 +218,32 @@ def seed_data():
             db.session.commit()
             print(f"Successfully assigned roles to {users_created} default users.")
 
+        # Create Default Fuel Trucks
+        print("Creating Default Fuel Trucks...")
+        trucks_created = 0
+        for truck_data in default_fuel_trucks:
+            if not FuelTruck.query.filter_by(truck_number=truck_data['truck_number']).first():
+                truck = FuelTruck(
+                    truck_number=truck_data['truck_number'],
+                    fuel_type=truck_data['fuel_type'],
+                    capacity=truck_data['capacity'],
+                    current_meter_reading=truck_data['current_meter_reading'],
+                    is_active=truck_data['is_active']
+                )
+                db.session.add(truck)
+                trucks_created += 1
+                status = "active" if truck_data['is_active'] else "inactive"
+                print(f"Default Fuel Truck '{truck_data['truck_number']}' ({truck_data['fuel_type']}, {truck_data['capacity']}L, {status}) created.")
+            else:
+                print(f"Fuel Truck '{truck_data['truck_number']}' already exists.")
+
+        if trucks_created > 0:
+            db.session.commit()
+            print(f"Successfully created {trucks_created} default fuel trucks.")
+
         print("Database seeding completed successfully.")
         print("Next step: Run 'flask create-permission-groups run' to configure permission groups and role assignments.")
     except Exception as e:
         db.session.rollback()
         print(f"An error occurred during seeding: {str(e)}")
-        raise 
+        raise

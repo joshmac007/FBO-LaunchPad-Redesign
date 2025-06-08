@@ -79,6 +79,7 @@ export default function LoginPage() {
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
+                data-cy="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -92,6 +93,7 @@ export default function LoginPage() {
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
+                data-cy="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -103,6 +105,7 @@ export default function LoginPage() {
             
             <Button 
               type="submit" 
+              data-cy="login-submit"
               className="w-full" 
               disabled={isLoading}
             >

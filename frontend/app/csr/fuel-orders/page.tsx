@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Plus, Search, Download, Eye, Edit, Trash2, MoreHorizontal } from "lucide-react"
+import { getFuelOrders, type FuelOrderDisplay } from "@/app/services/fuel-order-service"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -27,6 +28,20 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+
+// Map backend status to frontend status
+function mapBackendStatus(backendStatus: string): string {
+  const statusMap: Record<string, string> = {
+    'DISPATCHED': 'pending',
+    'ACKNOWLEDGED': 'in-progress', 
+    'EN_ROUTE': 'in-progress',
+    'FUELING': 'in-progress',
+    'COMPLETED': 'completed',
+    'REVIEWED': 'completed',
+    'CANCELLED': 'cancelled',
+  }
+  return statusMap[backendStatus] || 'pending'
+}
 
 interface FuelOrder {
   id: string
@@ -55,6 +70,8 @@ export default function FuelOrdersPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string>("")
+  const [pagination, setPagination] = useState<any>(null)
   const [isNewOrderDialogOpen, setIsNewOrderDialogOpen] = useState(false)
 
   // New order form state
@@ -70,59 +87,54 @@ export default function FuelOrdersPage() {
   })
 
   useEffect(() => {
-    // Simulate API call
     const fetchFuelOrders = async () => {
       setIsLoading(true)
-      // Mock data
-      const mockOrders: FuelOrder[] = [
-        {
-          id: "1",
-          orderNumber: "FO-2024-001",
-          aircraft: { tailNumber: "N123AB", type: "Cessna 172" },
-          customer: { name: "John Smith", company: "Smith Aviation" },
-          fuelType: "100LL",
-          quantity: 50,
-          unitPrice: 6.5,
-          totalAmount: 325.0,
-          status: "completed",
-          requestedDate: "2024-01-15",
-          completedDate: "2024-01-15",
-          notes: "Standard refuel",
-        },
-        {
-          id: "2",
-          orderNumber: "FO-2024-002",
-          aircraft: { tailNumber: "N456CD", type: "Piper Cherokee" },
-          customer: { name: "Jane Doe", company: "Doe Flying Club" },
-          fuelType: "100LL",
-          quantity: 75,
-          unitPrice: 6.5,
-          totalAmount: 487.5,
-          status: "in-progress",
-          requestedDate: "2024-01-16",
-          notes: "Priority fuel request",
-        },
-        {
-          id: "3",
-          orderNumber: "FO-2024-003",
-          aircraft: { tailNumber: "N789EF", type: "Beechcraft Bonanza" },
-          customer: { name: "Mike Johnson", company: "Johnson Enterprises" },
-          fuelType: "Jet A",
-          quantity: 200,
-          unitPrice: 5.75,
-          totalAmount: 1150.0,
-          status: "pending",
-          requestedDate: "2024-01-17",
-        },
-      ]
+      setError("")
+      
+      try {
+        const filters = {
+          status: statusFilter !== "all" ? statusFilter : undefined,
+        }
+        
+        const result = await getFuelOrders(Object.keys(filters).length > 0 ? filters : undefined)
+        
+                 // Transform backend data to frontend interface
+         const transformedOrders: FuelOrder[] = result.items.map((order: FuelOrderDisplay) => ({
+          id: order.id.toString(),
+          orderNumber: `FO-${order.id.toString().padStart(6, '0')}`,
+          aircraft: { 
+            tailNumber: order.aircraft_tail_number || order.aircraft_registration,
+            type: order.aircraft?.type || "Unknown"
+          },
+          customer: { 
+            name: order.customer_name, 
+            company: order.customer?.name || ""
+          },
+          fuelType: order.fuel_type,
+          quantity: parseFloat(order.quantity) || 0,
+          unitPrice: 6.5, // Default unit price - would come from pricing service
+          totalAmount: (parseFloat(order.quantity) || 0) * 6.5,
+                     status: mapBackendStatus(order.status) as "pending" | "in-progress" | "completed" | "cancelled",
+          requestedDate: order.created_at ? new Date(order.created_at).toISOString().split('T')[0] : "",
+          completedDate: order.completed_at ? new Date(order.completed_at).toISOString().split('T')[0] : undefined,
+          notes: order.csr_notes || order.notes || "",
+        }))
 
-      setFuelOrders(mockOrders)
-      setFilteredOrders(mockOrders)
-      setIsLoading(false)
+        setFuelOrders(transformedOrders)
+        setFilteredOrders(transformedOrders)
+        setPagination(result.pagination)
+      } catch (err) {
+        console.error('Failed to fetch fuel orders:', err)
+        setError("Failed to load fuel orders. Please try again.")
+        setFuelOrders([])
+        setFilteredOrders([])
+      } finally {
+        setIsLoading(false)
+      }
     }
 
     fetchFuelOrders()
-  }, [])
+  }, [statusFilter])
 
   useEffect(() => {
     let filtered = fuelOrders
@@ -247,6 +259,17 @@ export default function FuelOrdersPage() {
         <div className="flex flex-col items-center gap-4">
           <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
           <p>Loading fuel orders...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <p className="text-red-600">{error}</p>
+          <Button onClick={() => window.location.reload()}>Try Again</Button>
         </div>
       </div>
     )

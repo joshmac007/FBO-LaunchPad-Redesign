@@ -12,7 +12,6 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { isAuthenticated } from "@/app/services/auth-service"
 import { type User, getActiveLSTs } from "@/app/services/user-service"
 import { type FuelTruck, getActiveFuelTrucks } from "@/app/services/fuel-truck-service"
 import { 
@@ -52,6 +51,11 @@ export default function NewFuelOrderPage() {
   const [selectedAircraft, setSelectedAircraft] = useState<Aircraft | null>(null)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
 
+  // Clear the error on component mount
+  useEffect(() => {
+    setError(null)
+  }, [])
+
   // Enhanced form state with new fields
   const [formData, setFormData] = useState<EnhancedFormData>({
     aircraft_id: "",
@@ -66,28 +70,6 @@ export default function NewFuelOrderPage() {
   })
 
   useEffect(() => {
-    // Check if user is logged in and is CSR
-    if (!isAuthenticated()) {
-      router.push("/login")
-      return
-    }
-
-    const userData = localStorage.getItem("fboUser")
-    if (userData) {
-      const parsedUser = JSON.parse(userData)
-      
-      // Check if user has CSR role - handle both array and string formats (same as CSR layout)
-      const userRoles = parsedUser.roles || []
-      const hasCSRRole = Array.isArray(userRoles) 
-        ? userRoles.some(role => role.toLowerCase().includes("customer service") || role.toLowerCase().includes("csr"))
-        : false
-        
-      if (!parsedUser.isLoggedIn || !hasCSRRole) {
-        router.push("/login")
-        return
-      }
-    }
-
     // Load LSTs and fuel trucks
     const loadData = async () => {
       try {
@@ -134,7 +116,7 @@ export default function NewFuelOrderPage() {
     }
 
     loadData()
-  }, [router])
+  }, [])
 
   // DEBUG: Track state changes
   useEffect(() => {
@@ -317,18 +299,6 @@ export default function NewFuelOrderPage() {
               <CardDescription>Fill in the details to create a new fuel order</CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Error Display */}
-              {error && (
-                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
-                  <div className="flex items-center gap-2 text-red-800">
-                    <AlertCircle className="h-4 w-4" />
-                    <span className="font-medium">Error</span>
-                  </div>
-                  <p className="text-red-700 mt-1">{error}</p>
-                </div>
-              )}
-
-
               
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Aircraft Information Section */}
@@ -435,8 +405,8 @@ export default function NewFuelOrderPage() {
                             </div>
                           </SelectItem>
                           {lsts.map((lst) => (
-                            <SelectItem key={lst.id} value={lst.name || `User ${lst.id}`}>
-                              {lst.name || `User ${lst.id}`}
+                            <SelectItem key={lst.id} value={lst.fullName || lst.username || `User ${lst.id}`}>
+                              {lst.fullName || lst.username || `User ${lst.id}`}
                             </SelectItem>
                           ))}
                         </SelectContent>

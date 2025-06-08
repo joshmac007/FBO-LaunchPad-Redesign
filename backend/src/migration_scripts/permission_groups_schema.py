@@ -61,7 +61,7 @@ def create_system_permission_groups():
                 'description': 'Basic fuel operations permissions for LST staff',
                 'is_system_group': True,
                 'sort_order': 100,
-                'permissions': ['create_order', 'view_assigned_orders', 'update_order_status', 'complete_fuel_order', 'perform_fueling_task']
+                'permissions': ['create_fuel_order', 'view_assigned_orders', 'update_order_status', 'complete_fuel_order', 'perform_fueling_task']
             },
             {
                 'name': 'fuel_operations_advanced',
@@ -156,7 +156,9 @@ def create_system_permission_groups():
                 'parent': 'receipts_management_basic',
                 'is_system_group': True,
                 'sort_order': 560,
-                'permissions': ['view_all_receipts', 'manage_receipts', 'export_receipts_csv']
+                'permissions': ['view_receipts', 'view_all_receipts', 'create_receipt', 'update_receipt', 
+                             'calculate_receipt_fees', 'generate_receipt', 'mark_receipt_paid', 
+                             'manage_receipts', 'export_receipts_csv', 'void_receipt']
             },
             {
                 'name': 'billing_operations',
@@ -315,13 +317,14 @@ def assign_groups_to_roles():
                 'groups': ['fuel_operations_advanced', 'user_management_advanced', 
                           'aircraft_management_advanced', 'customer_management_advanced',
                           'fleet_management_advanced', 'receipts_management_advanced',
-                          'billing_operations', 'dashboard_access_admin', 'administrative_operations']
+                          'billing_operations', 'dashboard_access_admin', 'dashboard_access_csr', 
+                          'administrative_operations']
             },
             {
                 'role_name': 'Customer Service Representative',
                 'groups': ['fuel_operations_advanced', 'aircraft_management_advanced',
                           'customer_management_advanced', 'user_management_basic',
-                          'fleet_management_basic', 'receipts_management_basic', 
+                          'fleet_management_basic', 'receipts_management_advanced', 
                           'billing_operations', 'dashboard_access_csr']
             },
             {

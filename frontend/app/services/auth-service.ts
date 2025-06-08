@@ -19,7 +19,7 @@ export interface LoginResponse {
     email: string
     username: string
     name: string
-    roles: Array<{ id: number; name: string }>
+    roles: string[]
     is_active: boolean
     created_at: string
   }
@@ -72,7 +72,7 @@ export interface EnhancedUser {
   email: string
   username: string
   name: string
-  roles: Array<{ id: number; name: string }>
+  roles: string[]
   is_active: boolean
   created_at: string
   access_token: string
@@ -137,8 +137,11 @@ export function logout() {
     return
   }
 
+  console.log("Logging out, clearing user data from localStorage.")
   localStorage.removeItem("fboUser")
-  // Could also clear other permission-related cache here
+  localStorage.removeItem("token") // Clear any separate token storage if it exists
+  // Redirect to login page
+  window.location.href = "/login"
 }
 
 export function getCurrentUser(): EnhancedUser | null {
@@ -202,38 +205,41 @@ export async function fetchUserPermissions(): Promise<string[]> {
 
 // New function to fetch and store comprehensive permission data
 export async function fetchAndStoreUserPermissions(): Promise<UserPermissionsResponse> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/auth/me/permissions`, {
-      method: "GET",
-      headers: getAuthHeaders(),
-    })
+  const headers = getAuthHeaders()
+  if (!headers.Authorization) {
+    // If there's no token, there's no need to make an API call.
+    throw new Error("401 - No authorization token found")
+  }
 
-    const data: UserPermissionsResponse = await handleApiResponse(response)
-    
-    // Update the stored user data with permission information
-    const currentUser = getCurrentUser()
-    if (currentUser) {
-      const updatedUser: EnhancedUser = {
-        ...currentUser,
-        permissions: data.permissions || [],
-        effective_permissions: data.effective_permissions || {},
-        permission_summary: data.summary || {
-          total_permissions: 0,
-          by_source: { direct: [], groups: [], roles: [] },
-          by_category: {},
-          resource_specific: []
-        },
-        permissions_loaded_at: new Date().toISOString()
-      }
-      
-      localStorage.setItem("fboUser", JSON.stringify(updatedUser))
+  const response = await fetch(`${API_BASE_URL}/auth/me/permissions`, { 
+    method: "GET",
+    headers 
+  })
+  
+  // handleApiResponse will throw an error for non-2xx responses, which will be caught
+  // by the calling function in PermissionProvider.
+  const data = await handleApiResponse<UserPermissionsResponse>(response)
+
+  // Update the stored user data with permission information
+  const currentUser = getCurrentUser()
+  if (currentUser) {
+    const updatedUser: EnhancedUser = {
+      ...currentUser,
+      permissions: data.permissions || [],
+      effective_permissions: data.effective_permissions || {},
+      permission_summary: data.summary || {
+        total_permissions: 0,
+        by_source: { direct: [], groups: [], roles: [] },
+        by_category: {},
+        resource_specific: []
+      },
+      permissions_loaded_at: new Date().toISOString()
     }
     
-    return data
-  } catch (error) {
-    console.error("Error fetching comprehensive permissions:", error)
-    throw error
+    localStorage.setItem("fboUser", JSON.stringify(updatedUser))
   }
+  
+  return data
 }
 
 // New utility functions for permission checking

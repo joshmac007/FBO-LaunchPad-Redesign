@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import {
   ArrowLeft,
@@ -9,7 +9,7 @@ import {
   Download,
   Calendar,
   WifiOff,
-  Receipt,
+  Receipt as ReceiptIcon,
   CheckCircle,
   Clock,
   RefreshCw,
@@ -44,7 +44,6 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
-import { isAuthenticated } from "@/app/services/auth-service"
 import {
   getReceipts,
   filterReceipts,
@@ -52,6 +51,7 @@ import {
   convertReceiptsToCSV,
   downloadReceiptsCSV,
   getReceiptStatistics,
+  type Receipt,
 } from "@/app/services/receipt-service"
 import { isOfflineMode, formatCurrency, formatDateTime } from "@/app/services/utils"
 import Link from "next/link"
@@ -60,64 +60,59 @@ const ITEMS_PER_PAGE = 10
 
 export default function ReceiptsPage() {
   const router = useRouter()
+  
+  // Core data state - separated as per the implementation guide
   const [isLoading, setIsLoading] = useState(true)
-  const [receipts, setReceipts] = useState([])
-  const [filteredReceipts, setFilteredReceipts] = useState([])
+  const [allReceipts, setAllReceipts] = useState<Receipt[]>([])
+  const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([])
+  const [error, setError] = useState<string | null>(null)
 
   // Search and filter state
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("ALL")
   const [paymentMethodFilter, setPaymentMethodFilter] = useState("ALL")
-  const [startDate, setStartDate] = useState()
-  const [endDate, setEndDate] = useState()
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [showFilters, setShowFilters] = useState(false)
 
   // Sorting state
   const [sortBy, setSortBy] = useState("createdAt")
-  const [sortOrder, setSortOrder] = useState("asc")
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
 
   // UI state
   const [isExporting, setIsExporting] = useState(false)
-  const [selectedReceipt, setSelectedReceipt] = useState(null)
+  const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null)
 
-  useEffect(() => {
-    // Check if user is logged in and is CSR
-    if (!isAuthenticated()) {
-      router.push("/login")
-      return
-    }
-
-    const userData = localStorage.getItem("fboUser")
-    if (userData) {
-      const parsedUser = JSON.parse(userData)
-      if (!parsedUser.isLoggedIn || parsedUser.role !== "csr") {
-        router.push("/login")
-        return
-      }
-    }
-
-    loadReceipts()
-  }, [router])
-
-  const loadReceipts = async () => {
+  // Robust data fetching function with proper error handling
+  const loadReceipts = useCallback(async () => {
     try {
       setIsLoading(true)
+      setError(null) // Clear any previous errors
+      
       const receiptData = await getReceipts()
-      setReceipts(receiptData)
+      setAllReceipts(receiptData)
     } catch (error) {
       console.error("Error loading receipts:", error)
+      setError("Failed to load receipts. Please try again.")
+      setAllReceipts([]) // Reset to empty array on error
     } finally {
+      // This ALWAYS executes, ensuring loading state is properly reset
       setIsLoading(false)
     }
-  }
+  }, []) // Empty dependency array as loadReceipts doesn't depend on any props/state
 
-  // Apply filters and search
+  // Initial data loading - runs once on component mount
+  useEffect(() => {
+    loadReceipts()
+  }, [loadReceipts])
+
+  // Separate effect for data processing - runs when data or filters change
   useEffect(() => {
     let filtered = filterReceipts(
-      receipts,
+      allReceipts,
       searchTerm,
       startDate ? format(startDate, "yyyy-MM-dd") : undefined,
       endDate ? format(endDate, "yyyy-MM-dd") : undefined,
@@ -128,7 +123,7 @@ export default function ReceiptsPage() {
     filtered = sortReceipts(filtered, sortBy, sortOrder)
     setFilteredReceipts(filtered)
     setCurrentPage(1) // Reset to first page when filters change
-  }, [receipts, searchTerm, startDate, endDate, statusFilter, paymentMethodFilter, sortBy, sortOrder])
+  }, [allReceipts, searchTerm, startDate, endDate, statusFilter, paymentMethodFilter, sortBy, sortOrder])
 
   // Pagination
   const totalPages = Math.ceil(filteredReceipts.length / ITEMS_PER_PAGE)
@@ -140,7 +135,7 @@ export default function ReceiptsPage() {
   // Statistics
   const statistics = useMemo(() => getReceiptStatistics(filteredReceipts), [filteredReceipts])
 
-  const handleSort = (column) => {
+  const handleSort = (column: string) => {
     if (sortBy === column) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc")
     } else {
@@ -171,7 +166,11 @@ export default function ReceiptsPage() {
     setEndDate(undefined)
   }
 
-  const getStatusBadge = (status) => {
+  const handleRetry = () => {
+    loadReceipts()
+  }
+
+  const getStatusBadge = (status: string) => {
     switch (status) {
       case "PAID":
         return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Paid</Badge>
@@ -184,7 +183,7 @@ export default function ReceiptsPage() {
     }
   }
 
-  const getSortIcon = (column) => {
+  const getSortIcon = (column: string) => {
     if (sortBy !== column) {
       return <ArrowUpDown className="h-4 w-4" />
     }
@@ -199,6 +198,7 @@ export default function ReceiptsPage() {
     endDate,
   ].filter(Boolean).length
 
+  // Declarative UI rendering based on state
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -220,6 +220,31 @@ export default function ReceiptsPage() {
             }}
           />
           <p className="text-[#3A4356] dark:text-[#CBD5E0]">Loading receipts...</p>
+        </motion.div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <motion.div
+          className="flex flex-col items-center gap-4 text-center"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+        >
+          <div className="p-4 bg-red-50 rounded-full">
+            <X className="h-8 w-8 text-red-500" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-[#3A4356] dark:text-[#F8FAFC] mb-2">Error Loading Receipts</h2>
+            <p className="text-[#3A4356] dark:text-[#CBD5E0] mb-4">{error}</p>
+            <Button onClick={handleRetry} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Try Again
+            </Button>
+          </div>
         </motion.div>
       </div>
     )
@@ -331,7 +356,7 @@ export default function ReceiptsPage() {
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-[#2A628F]/10 rounded-lg">
-                    <Receipt className="h-5 w-5 text-[#2A628F]" />
+                    <ReceiptIcon className="h-5 w-5 text-[#2A628F]" />
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">{statistics.total}</p>
@@ -424,7 +449,7 @@ export default function ReceiptsPage() {
                       {showFilters ? "Hide" : "Show"} Filters
                     </Button>
                     {activeFiltersCount > 0 && (
-                      <Button variant="outline" size="sm" onClick={clearFilters} className="gap-2">
+                      <Button variant="outline" size="sm" onClick={clearFilters} className="gap-2" data-testid="clear-filters-button">
                         <X className="h-4 w-4" />
                         Clear
                       </Button>
@@ -441,6 +466,7 @@ export default function ReceiptsPage() {
                     className="pl-10"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
+                    data-testid="search-input"
                   />
                 </div>
 
@@ -492,14 +518,16 @@ export default function ReceiptsPage() {
                       <div className="space-y-2">
                         <Label>Status</Label>
                         <Select value={statusFilter} onValueChange={setStatusFilter}>
-                          <SelectTrigger>
+                          <SelectTrigger data-testid="status-filter">
                             <SelectValue placeholder="All statuses" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="ALL">All statuses</SelectItem>
-                            <SelectItem value="PAID">Paid</SelectItem>
-                            <SelectItem value="PENDING">Pending</SelectItem>
-                            <SelectItem value="REFUNDED">Refunded</SelectItem>
+                            <SelectItem value="ALL" data-testid="status-filter-option-ALL">All statuses</SelectItem>
+                            <SelectItem value="PAID" data-testid="status-filter-option-PAID">Paid</SelectItem>
+                            <SelectItem value="PENDING" data-testid="status-filter-option-PENDING">Pending</SelectItem>
+                            <SelectItem value="REFUNDED" data-testid="status-filter-option-REFUNDED">Refunded</SelectItem>
+                            <SelectItem value="DRAFT" data-testid="status-filter-option-DRAFT">Draft</SelectItem>
+                            <SelectItem value="GENERATED" data-testid="status-filter-option-GENERATED">Generated</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -535,7 +563,7 @@ export default function ReceiptsPage() {
           >
             <span>
               Showing {paginatedReceipts.length} of {filteredReceipts.length} receipts
-              {activeFiltersCount > 0 && ` (filtered from ${receipts.length} total)`}
+              {activeFiltersCount > 0 && ` (filtered from ${allReceipts.length} total)`}
             </span>
             <span>Total Value: {formatCurrency(statistics.totalAmount)}</span>
           </motion.div>
@@ -549,7 +577,7 @@ export default function ReceiptsPage() {
             <Card>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
-                  <Table>
+                  <Table data-testid="receipts-table">
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-[120px]">
@@ -628,7 +656,7 @@ export default function ReceiptsPage() {
                         <TableRow>
                           <TableCell colSpan={10} className="text-center py-8">
                             <div className="flex flex-col items-center gap-2">
-                              <Receipt className="h-8 w-8 text-muted-foreground" />
+                              <ReceiptIcon className="h-8 w-8 text-muted-foreground" />
                               <p className="text-muted-foreground">
                                 {activeFiltersCount > 0 ? "No receipts match your filters" : "No receipts found"}
                               </p>
@@ -648,15 +676,16 @@ export default function ReceiptsPage() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.3, delay: index * 0.05 }}
                             className="hover:bg-muted/50"
+                            data-testid="receipt-row"
                           >
                             <TableCell className="font-medium">{receipt.receiptNumber}</TableCell>
-                            <TableCell>{receipt.tailNumber}</TableCell>
+                            <TableCell><span data-testid="receipt-tail-number">{receipt.tailNumber}</span></TableCell>
                             <TableCell>{receipt.customer}</TableCell>
                             <TableCell>{receipt.fuelType}</TableCell>
                             <TableCell className="text-right">{receipt.quantity.toLocaleString()} gal</TableCell>
                             <TableCell className="text-right font-medium">{formatCurrency(receipt.amount)}</TableCell>
                             <TableCell>{receipt.paymentMethod}</TableCell>
-                            <TableCell>{getStatusBadge(receipt.status)}</TableCell>
+                            <TableCell><span data-testid="receipt-status-badge">{getStatusBadge(receipt.status)}</span></TableCell>
                             <TableCell>{formatDateTime(receipt.createdAt)}</TableCell>
                             <TableCell>
                               <DropdownMenu>
@@ -671,7 +700,7 @@ export default function ReceiptsPage() {
                                     View Details
                                   </DropdownMenuItem>
                                   <DropdownMenuItem asChild>
-                                    <Link href={`/csr/receipts/${receipt.id}`}>
+                                    <Link href={`/csr/receipts/${receipt.id}`} data-testid="view-receipt-button">
                                       <FileText className="h-4 w-4 mr-2" />
                                       Edit Receipt
                                     </Link>
@@ -697,7 +726,7 @@ export default function ReceiptsPage() {
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3, delay: 0.5 }}
             >
-              <div className="text-sm text-muted-foreground">
+              <div className="text-sm text-muted-foreground" data-testid="current-page-indicator">
                 Page {currentPage} of {totalPages}
               </div>
               <div className="flex items-center gap-2">
@@ -706,6 +735,7 @@ export default function ReceiptsPage() {
                   size="sm"
                   onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                   disabled={currentPage === 1}
+                  data-testid="previous-page-button"
                 >
                   Previous
                 </Button>
@@ -714,6 +744,7 @@ export default function ReceiptsPage() {
                   size="sm"
                   onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                   disabled={currentPage === totalPages}
+                  data-testid="next-page-button"
                 >
                   Next
                 </Button>

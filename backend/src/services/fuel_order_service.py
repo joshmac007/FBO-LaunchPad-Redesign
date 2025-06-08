@@ -15,7 +15,8 @@ from src.models import (
     Customer,
     Permission,
     PermissionGroup,
-    UserPermission
+    UserPermission,
+    AuditLog
 )
 from src.models.user_permission_group import UserPermissionGroup
 from src.extensions import db
@@ -62,7 +63,7 @@ class FuelOrderService:
     @classmethod
     def get_status_counts(cls, current_user):
         """
-        PBAC: Permission-based, not role-based. Only users with 'VIEW_ORDER_STATS' permission should access this.
+        PBAC: Permission-based, not role-based. Only users with 'view_order_statistics' permission should access this.
         Returns: (dict, message, status_code)
         """
         try:
@@ -212,7 +213,7 @@ class FuelOrderService:
     ) -> Tuple[Optional[Any], str]:
         """
         Retrieve paginated fuel orders based on user PBAC and optional filters.
-        PBAC: If user lacks 'VIEW_ALL_ORDERS', only show orders assigned to them.
+        PBAC: If user lacks 'view_all_orders', only show orders assigned to them.
         Optimized with eager loading for denormalized fields.
         """
         logger = logging.getLogger(__name__)
@@ -226,7 +227,7 @@ class FuelOrderService:
             )
 
             # PBAC: Only show all orders if user has permission
-            if not current_user.has_permission('VIEW_ALL_ORDERS'):
+            if not current_user.has_permission('view_all_orders'):
                 # Only see their assigned orders
                 query = query.filter(FuelOrder.assigned_lst_user_id == current_user.id)
 
@@ -649,7 +650,7 @@ class FuelOrderService:
     def get_active_lsts():
         """Get active Line Service Technicians based on permissions and roles."""
         # Find users who have LST permissions through permission groups or direct assignments
-        lst_permissions = ['access_fueler_module', 'start_fueling_task', 'perform_fueling']
+        lst_permissions = ['perform_fueling_task', 'complete_fuel_order', 'access_fueler_dashboard']
         
         # Get users with LST permission groups
         lst_group = PermissionGroup.query.filter_by(name='LST_Default_Permissions').first()
@@ -716,20 +717,20 @@ class FuelOrderService:
             return False
         
         # Check for admin permissions (System Administrator role)
-        admin_permissions = ['MANAGE_SETTINGS', 'MANAGE_ROLES', 'ACCESS_ADMIN_DASHBOARD']
+        admin_permissions = ['manage_settings', 'manage_roles', 'access_admin_dashboard']
         for perm_name in admin_permissions:
             if user.has_permission(perm_name):
                 return True
         
         # Check for CSR permissions - CSRs can view/edit fuel orders
-        csr_permissions = ['VIEW_ALL_ORDERS', 'EDIT_FUEL_ORDER', 'ACCESS_CSR_DASHBOARD']
+        csr_permissions = ['view_all_orders', 'edit_fuel_order', 'access_csr_dashboard']
         for perm_name in csr_permissions:
             if user.has_permission(perm_name):
                 return True
         
         # Check if LST can modify their own assigned orders
         if (order.assigned_lst_user_id == user.id and 
-            user.has_permission('PERFORM_FUELING_TASK')):
+            user.has_permission('perform_fueling_task')):
             return True
         
         return False
@@ -741,12 +742,111 @@ class FuelOrderService:
             return False
         
         # Check for admin permissions
-        if user.has_permission('MANAGE_SETTINGS') or user.has_permission('ACCESS_ADMIN_DASHBOARD'):
+        if user.has_permission('manage_settings') or user.has_permission('access_admin_dashboard'):
             return True
         
         # Check if LST can complete their own assigned orders
         if (order.assigned_lst_user_id == user.id and 
-            user.has_permission('COMPLETE_OWN_ORDER')):
+            user.has_permission('complete_fuel_order')):
             return True
         
-        return False 
+        return False
+
+    @classmethod
+    def manual_update_order_status(cls, order_id: int, user_id: int, update_data: dict) -> FuelOrder:
+        """
+        Manually update a fuel order's status with full auditing.
+        
+        Args:
+            order_id: ID of the fuel order to update
+            user_id: ID of the user making the update
+            update_data: Dictionary containing status and optional fields like meter readings, reason
+            
+        Returns:
+            Updated FuelOrder object
+            
+        Raises:
+            ValueError: If order not found, invalid status, or missing required fields
+        """
+        # Fetch the fuel order
+        order = FuelOrder.query.get(order_id)
+        if not order:
+            raise ValueError(f"Fuel order with ID {order_id} not found")
+        
+        # Check if order is locked due to active receipt
+        from ..models.receipt import ReceiptStatus
+        active_receipt_exists = any(r.status != ReceiptStatus.VOID for r in order.receipts)
+        if active_receipt_exists:
+            raise ValueError("Cannot modify a Fuel Order that has an active receipt.")
+        
+        # Store previous status for auditing
+        previous_status = order.status.value
+        
+        # Get and validate new status
+        new_status_str = update_data.get('status')
+        if not new_status_str:
+            raise ValueError("Missing 'status' in update data")
+        
+        # Convert to uppercase and validate it's a valid FuelOrderStatus
+        new_status_str = new_status_str.upper()
+        if new_status_str not in FuelOrderStatus.__members__:
+            valid_statuses = [status.value for status in FuelOrderStatus]
+            raise ValueError(f"Invalid status '{update_data.get('status')}'. Valid statuses: {valid_statuses}")
+        
+        new_status = FuelOrderStatus[new_status_str]
+        
+        # Handle status-specific requirements
+        if new_status == FuelOrderStatus.COMPLETED:
+            # Check for required meter readings
+            start_meter = update_data.get('start_meter_reading')
+            end_meter = update_data.get('end_meter_reading')
+            
+            if start_meter is None or end_meter is None:
+                raise ValueError("start_meter_reading and end_meter_reading are required when updating status to COMPLETED")
+            
+            try:
+                start_meter = float(start_meter)
+                end_meter = float(end_meter)
+            except (ValueError, TypeError):
+                raise ValueError("start_meter_reading and end_meter_reading must be valid numbers")
+            
+            if end_meter <= start_meter:
+                raise ValueError("end_meter_reading must be greater than start_meter_reading")
+            
+            # Update meter readings and completion timestamp
+            order.start_meter_reading = Decimal(str(start_meter))
+            order.end_meter_reading = Decimal(str(end_meter))
+            order.completion_timestamp = datetime.utcnow()
+        else:
+            # If moving away from COMPLETED, clear completion timestamp
+            if order.status == FuelOrderStatus.COMPLETED and new_status != FuelOrderStatus.COMPLETED:
+                order.completion_timestamp = None
+        
+        # Update the status
+        order.status = new_status
+        
+        # Create audit log entry
+        audit_details = {
+            "previous_status": previous_status,
+            "new_status": new_status.value,
+            "reason": update_data.get("reason")
+        }
+        
+        # Add meter readings to audit details if provided
+        if new_status == FuelOrderStatus.COMPLETED:
+            audit_details["start_meter_reading"] = float(order.start_meter_reading)
+            audit_details["end_meter_reading"] = float(order.end_meter_reading)
+        
+        audit_log = AuditLog(
+            user_id=user_id,
+            entity_type='FuelOrder',
+            entity_id=order_id,
+            action='MANUAL_STATUS_UPDATE',
+            details=audit_details
+        )
+        db.session.add(audit_log)
+        
+        # Commit the changes
+        db.session.commit()
+        
+        return order 

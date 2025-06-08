@@ -8,6 +8,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { usePermissions } from "@/hooks/usePermissions"
 import AppSidebar from "@/components/layout/app-sidebar"
+import AccessDenied from "@/app/components/access-denied"
 import { cn } from "@/lib/utils"
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -46,18 +47,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const hasAdminAccess = canAny(adminPermissions) || isAdmin
 
     if (!hasAdminAccess) {
-      console.log("User does not have admin permissions, redirecting to appropriate dashboard")
+      console.log("User does not have admin permissions")
       
-      // Redirect to appropriate dashboard based on user's permissions
-      if (canAny(['access_csr_dashboard', 'view_all_orders', 'create_order'])) {
-        router.push("/csr/dashboard")
-      } else if (canAny(['access_fueler_dashboard', 'perform_fueling_task'])) {
-        router.push("/fueler/dashboard")
-      } else if (canAny(['access_member_dashboard']) || user.is_active) {
-        router.push("/member/dashboard")
-      } else {
-        router.push("/login")
-      }
+      // Set access denied state instead of redirecting
+      setHasAccess(false)
+      setIsLoading(false)
       return
     }
 
@@ -85,9 +79,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     )
   }
 
-  // Don't render anything if user doesn't have access (they'll be redirected)
+  // Show access denied page if user doesn't have access
   if (!hasAccess) {
-    return null
+    return (
+      <AccessDenied
+        adminOnly={true}
+        pageName="Admin Dashboard"
+        pageDescription="System Administrator dashboard for managing users, permissions, and system settings."
+        anyOfPermissions={[
+          'access_admin_dashboard',
+          'manage_settings', 
+          'manage_users',
+          'manage_roles'
+        ]}
+        suggestedActions={[
+          {
+            label: "Contact System Administrator",
+            href: "mailto:admin@fbolaunchpad.com",
+            variant: "outline"
+          }
+        ]}
+      />
+    )
   }
 
   return (

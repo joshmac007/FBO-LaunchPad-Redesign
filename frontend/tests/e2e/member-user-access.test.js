@@ -132,19 +132,19 @@ describe('Member User Access Tests', () => {
       // Member should have minimal permissions - mostly read-only access to own data
       if (user.permissions.length > 0) {
         expect(user.permissions).to.include.oneOf([
-          'VIEW_OWN_PROFILE',
-          'VIEW_OWN_STATISTICS',
-          'READ_ONLY_ACCESS'
+          'view_own_profile',
+          'view_own_statistics',
+          'read_only_access'
         ])
       }
       
       // Should NOT have any management or operational permissions
       expect(user.permissions).to.not.include.oneOf([
-        'MANAGE_USERS',
-        'CREATE_ORDER',
-        'EXECUTE_ORDER',
-        'MANAGE_CUSTOMERS',
-        'MANAGE_AIRCRAFT',
+        'manage_users',
+        'create_fuel_order',
+        'execute_order',
+        'manage_customers',
+        'manage_aircraft',
         'administrative_operations'
       ])
     })
@@ -242,7 +242,7 @@ describe('Member User Access Tests', () => {
       if (userData) {
         const user = JSON.parse(userData)
         expect(user.permissions || []).to.not.include.oneOf([
-          'MANAGE_USERS', 'CREATE_ORDER', 'EXECUTE_ORDER'
+          'manage_users', 'create_fuel_order', 'execute_order'
         ])
       }
     })

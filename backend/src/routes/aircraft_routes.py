@@ -51,7 +51,7 @@ def get_aircraft():
     
     aircraft, message, status_code = AircraftService.get_all_aircraft()
     if aircraft is not None:
-        return jsonify({"message": message, "aircraft": aircraft}), status_code
+        return jsonify({"message": message, "aircraft": [a.to_dict() for a in aircraft]}), status_code
     else:
         return jsonify({"error": message}), status_code
 
@@ -124,7 +124,7 @@ def create_aircraft():
         aircraft, message, status_code = AircraftService.create_aircraft(data)
         
         if aircraft is not None:
-            return jsonify({"message": message, "aircraft": aircraft}), status_code
+            return jsonify({"message": message, "aircraft": aircraft.to_dict()}), status_code
         else:
             return jsonify({"error": message}), status_code
             
@@ -181,7 +181,7 @@ def get_aircraft_by_tail(tail_number):
         aircraft, message, status_code = AircraftService.get_aircraft_by_tail(tail_number)
         
         if aircraft is not None:
-            return jsonify({"message": message, "aircraft": aircraft}), status_code
+            return jsonify({"message": message, "aircraft": aircraft.to_dict()}), status_code
         else:
             return jsonify({"error": message}), status_code
             
@@ -267,7 +267,7 @@ def update_aircraft(tail_number):
         aircraft, message, status_code = AircraftService.update_aircraft(tail_number, data)
         
         if aircraft is not None:
-            return jsonify({"message": message, "aircraft": aircraft}), status_code
+            return jsonify({"message": message, "aircraft": aircraft.to_dict()}), status_code
         else:
             return jsonify({"error": message}), status_code
             
@@ -332,10 +332,10 @@ def delete_aircraft(tail_number):
 
 # Special endpoint for CSR quick aircraft creation during fuel order process
 @aircraft_bp.route('/quick-create', methods=['POST', 'OPTIONS'])
-@require_permission_v2('create_fuel_order')
+@require_permission_v2('manage_aircraft')
 def create_aircraft_quick():
     """Quick aircraft creation for CSRs during fuel order process.
-    Requires create_fuel_order permission (CSR permission).
+    Requires manage_aircraft permission.
     ---
     tags:
       - Aircraft
@@ -415,7 +415,7 @@ def create_aircraft_quick():
         aircraft, message, status_code = AircraftService.create_aircraft(aircraft_data)
         
         if aircraft is not None:
-            return jsonify({"message": message, "aircraft": aircraft}), status_code
+            return jsonify({"message": message, "aircraft": aircraft.to_dict()}), status_code
         else:
             return jsonify({"error": message}), status_code
             

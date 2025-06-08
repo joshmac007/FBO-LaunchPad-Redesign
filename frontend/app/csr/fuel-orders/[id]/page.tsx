@@ -2,64 +2,80 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { ArrowLeft, Plane, CheckCircle, Clock, AlertCircle } from "lucide-react"
+import { ArrowLeft, Plane, CheckCircle, Clock, AlertCircle, Receipt, Edit } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { isAuthenticated } from "@/app/services/auth-service"
-import { type FuelOrderDisplay, getFuelOrder, reviewFuelOrder } from "@/app/services/fuel-order-service"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { useToast } from "@/components/ui/use-toast"
+import { CSRActionButton } from "@/app/components/permission-action-button"
 import Link from "next/link"
+import { type FuelOrderDisplay, getFuelOrder, reviewFuelOrder, updateOrderStatus, getFuelOrderStatuses } from "@/app/services/fuel-order-service"
+import { createDraftReceipt } from "@/app/services/receipt-service"
 
 export default function FuelOrderDetailPage() {
   const router = useRouter()
   const params = useParams()
   const orderId = Number(params.id)
+  const { toast } = useToast()
 
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isCreatingReceipt, setIsCreatingReceipt] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fuelOrder, setFuelOrder] = useState<FuelOrderDisplay | null>(null)
   const [reviewNotes, setReviewNotes] = useState("")
 
+  // Status update dialog state
+  const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false)
+  const [allStatuses, setAllStatuses] = useState<string[]>([])
+  const [selectedStatus, setSelectedStatus] = useState("")
+  const [startMeter, setStartMeter] = useState("")
+  const [endMeter, setEndMeter] = useState("")
+  const [reason, setReason] = useState("")
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+
+  const loadFuelOrder = async (id: number) => {
+    try {
+      const order = await getFuelOrder(id)
+      setFuelOrder(order)
+    } catch (error) {
+      console.error("Error loading fuel order:", error)
+      setError("Failed to load fuel order details. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const loadStatuses = async () => {
+    try {
+      const statuses = await getFuelOrderStatuses()
+      setAllStatuses(statuses)
+    } catch (error) {
+      console.error("Error loading statuses:", error)
+    }
+  }
+
   useEffect(() => {
-    // Check if user is logged in and is CSR
-    if (!isAuthenticated()) {
-      router.push("/login")
-      return
+    if (orderId) {
+      loadFuelOrder(orderId);
+      loadStatuses();
     }
+  }, [orderId])
 
-    const userData = localStorage.getItem("fboUser")
-    if (userData) {
-      const parsedUser = JSON.parse(userData)
-      
-      // Check if user has CSR role - handle both array and string formats (same as CSR layout)
-      const userRoles = parsedUser.roles || []
-      const hasCSRRole = Array.isArray(userRoles) 
-        ? userRoles.some(role => role.toLowerCase().includes("customer service") || role.toLowerCase().includes("csr"))
-        : false
-        
-      if (!parsedUser.isLoggedIn || !hasCSRRole) {
-        router.push("/login")
-        return
-      }
+  // Reset dialog state when it opens
+  useEffect(() => {
+    if (isStatusDialogOpen && fuelOrder) {
+      setSelectedStatus(fuelOrder.status)
+      setStartMeter("")
+      setEndMeter("")
+      setReason("")
     }
-
-    // Load fuel order details
-    const loadFuelOrder = async () => {
-      try {
-        const order = await getFuelOrder(orderId)
-        setFuelOrder(order)
-      } catch (error) {
-        console.error("Error loading fuel order:", error)
-        setError("Failed to load fuel order details. Please try again.")
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadFuelOrder()
-  }, [router, orderId])
+  }, [isStatusDialogOpen, fuelOrder])
 
   const handleReviewOrder = async () => {
     if (!fuelOrder) return
@@ -81,34 +97,144 @@ export default function FuelOrderDetailPage() {
     }
   }
 
+  const handleCreateReceipt = async () => {
+    if (!fuelOrder) return
+
+    setError(null)
+    setIsCreatingReceipt(true)
+
+    try {
+      const draftReceipt = await createDraftReceipt(fuelOrder.id)
+      // Navigate to the new receipt workspace
+      router.push(`/csr/receipts/${draftReceipt.id}`)
+    } catch (error) {
+      console.error("Error creating receipt:", error)
+      setError(error instanceof Error ? error.message : "Failed to create receipt. Please try again.")
+    } finally {
+      setIsCreatingReceipt(false)
+    }
+  }
+
+  const handleStatusUpdate = async () => {
+    if (!fuelOrder || !selectedStatus) return
+
+    // Validation for COMPLETED status
+    if (selectedStatus.toUpperCase() === 'COMPLETED') {
+      if (!startMeter || !endMeter) {
+        toast({
+          title: "Validation Error",
+          description: "Start meter reading and end meter reading are required when updating status to COMPLETED",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const startMeterNum = parseFloat(startMeter)
+      const endMeterNum = parseFloat(endMeter)
+
+      if (isNaN(startMeterNum) || isNaN(endMeterNum)) {
+        toast({
+          title: "Validation Error", 
+          description: "Meter readings must be valid numbers",
+          variant: "destructive",
+        })
+        return
+      }
+
+      if (endMeterNum <= startMeterNum) {
+        toast({
+          title: "Validation Error",
+          description: "End meter reading must be greater than start meter reading",
+          variant: "destructive",
+        })
+        return
+      }
+    }
+
+    setError(null)
+    setIsUpdatingStatus(true)
+
+    try {
+      // Construct the payload
+      const payload: any = { status: selectedStatus }
+      
+      if (selectedStatus.toUpperCase() === 'COMPLETED') {
+        payload.start_meter_reading = parseFloat(startMeter)
+        payload.end_meter_reading = parseFloat(endMeter)
+      }
+      
+      if (reason.trim()) {
+        payload.reason = reason.trim()
+      }
+
+      const updatedOrder = await updateOrderStatus(fuelOrder.id, payload)
+      setFuelOrder(updatedOrder)
+      setIsStatusDialogOpen(false)
+      
+      toast({
+        title: "Success",
+        description: "Status updated successfully",
+      })
+    } catch (error) {
+      console.error("Error updating status:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to update status. Please try again."
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      })
+    } finally {
+      setIsUpdatingStatus(false)
+    }
+  }
+
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "PENDING":
+    const upperStatus = status.toUpperCase()
+    switch (upperStatus) {
+      case "DISPATCHED":
         return (
-          <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-200">
-            Pending
+          <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-200" data-cy="order-status-badge">
+            Dispatched
           </Badge>
         )
-      case "IN_PROGRESS":
+      case "ACKNOWLEDGED":
         return (
-          <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-200">
-            In Progress
+          <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-200" data-cy="order-status-badge">
+            Acknowledged
+          </Badge>
+        )
+      case "EN ROUTE":
+        return (
+          <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-200" data-cy="order-status-badge">
+            En Route
+          </Badge>
+        )
+      case "FUELING":
+        return (
+          <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-200" data-cy="order-status-badge">
+            Fueling
           </Badge>
         )
       case "COMPLETED":
         return (
-          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-200">
+          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-200" data-cy="order-status-badge">
             Completed
           </Badge>
         )
       case "REVIEWED":
         return (
-          <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-200">
+          <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-200" data-cy="order-status-badge">
             Reviewed
           </Badge>
         )
+      case "CANCELLED":
+        return (
+          <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-200" data-cy="order-status-badge">
+            Cancelled
+          </Badge>
+        )
       default:
-        return <Badge variant="outline">{status}</Badge>
+        return <Badge variant="outline" data-cy="order-status-badge">{status}</Badge>
     }
   }
 
@@ -139,6 +265,8 @@ export default function FuelOrderDetailPage() {
       </div>
     )
   }
+
+  const canCreateReceipt = fuelOrder.status === 'Completed' || fuelOrder.status === 'Reviewed';
 
   return (
     <div className="min-h-screen bg-background">
@@ -228,7 +356,7 @@ export default function FuelOrderDetailPage() {
                 </div>
               </div>
 
-              {fuelOrder.status === "COMPLETED" && (
+              {fuelOrder.status === "Completed" && (
                 <div className="pt-4 border-t">
                   <h3 className="text-lg font-medium mb-2">Review Order</h3>
                   <p className="text-sm text-muted-foreground mb-2">
@@ -238,14 +366,14 @@ export default function FuelOrderDetailPage() {
                     <Textarea
                       placeholder="Add review notes (optional)"
                       value={reviewNotes}
-                      onChange={(e) => setReviewNotes(e.target.value)}
-                      disabled={fuelOrder.status === "REVIEWED"}
+                      onChange={(e) => setReviewNotes(e.target.value)} 
+                      disabled={fuelOrder.status !== "Completed"}
                     />
                   </div>
                 </div>
               )}
 
-              {fuelOrder.status === "REVIEWED" && fuelOrder.review_notes && (
+              {fuelOrder.status === "Reviewed" && fuelOrder.review_notes && (
                 <div className="pt-4 border-t">
                   <h3 className="text-lg font-medium mb-2">Review Notes</h3>
                   <div className="bg-muted/50 p-3 rounded-md">
@@ -262,30 +390,152 @@ export default function FuelOrderDetailPage() {
                 <Link href="/csr/dashboard">Back</Link>
               </Button>
 
-              {fuelOrder.status === "COMPLETED" && (
-                <Button onClick={handleReviewOrder} disabled={isSubmitting} className="gap-2">
-                  {isSubmitting ? (
-                    <>
-                      <span>Processing...</span>
-                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="h-4 w-4 mr-1" />
-                      Mark as Reviewed
-                    </>
-                  )}
-                </Button>
-              )}
+              <div className="flex gap-2">
+                <Dialog open={isStatusDialogOpen} onOpenChange={setIsStatusDialogOpen}>
+                  <DialogTrigger asChild>
+                    <CSRActionButton
+                      requiredPermission="update_order_status"
+                      disabled={fuelOrder.is_locked}
+                      title={fuelOrder.is_locked ? "Order is locked because a receipt has been generated." : "Update Order Status"}
+                    >
+                      <Edit className="mr-2 h-4 w-4" />
+                      Update Status
+                    </CSRActionButton>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[425px]" data-cy="status-update-dialog">
+                    <DialogHeader>
+                      <DialogTitle>Update Order Status</DialogTitle>
+                      <DialogDescription>
+                        Change the status of this fuel order. Some status changes may require additional information.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="status">Status</Label>
+                        <Select value={selectedStatus} onValueChange={setSelectedStatus} data-cy="status-select">
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {allStatuses.map((status) => (
+                              <SelectItem key={status} value={status} data-cy={`status-option-${status.toUpperCase()}`}>
+                                {status}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-              {fuelOrder.status === "PENDING" && (
+                      {selectedStatus?.toUpperCase() === 'COMPLETED' && (
+                        <>
+                          <div className="grid gap-2">
+                            <Label htmlFor="start-meter">Start Meter Reading</Label>
+                            <Input
+                              id="start-meter"
+                              type="number"
+                              step="0.1"
+                              value={startMeter}
+                              onChange={(e) => setStartMeter(e.target.value)}
+                              placeholder="Enter start meter reading"
+                              data-cy="start-meter-input"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="end-meter">End Meter Reading</Label>
+                            <Input
+                              id="end-meter"
+                              type="number"
+                              step="0.1"
+                              value={endMeter}
+                              onChange={(e) => setEndMeter(e.target.value)}
+                              placeholder="Enter end meter reading"
+                              data-cy="end-meter-input"
+                            />
+                          </div>
+                        </>
+                      )}
+
+                      <div className="grid gap-2">
+                        <Label htmlFor="reason">Reason (Optional)</Label>
+                        <Textarea
+                          id="reason"
+                          value={reason}
+                          onChange={(e) => setReason(e.target.value)}
+                          placeholder="Enter reason for status change..."
+                          data-cy="reason-textarea"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => setIsStatusDialogOpen(false)}
+                        data-cy="cancel-status-btn"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleStatusUpdate}
+                        disabled={isUpdatingStatus || !selectedStatus}
+                        data-cy="save-status-btn"
+                      >
+                        {isUpdatingStatus ? (
+                          <>
+                            <span>Updating...</span>
+                            <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin ml-2"></div>
+                          </>
+                        ) : (
+                          'Save Status'
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {fuelOrder.receipt_id ? (
+                  <Link href={`/csr/receipts/${fuelOrder.receipt_id}`} passHref>
+                    <Button>
+                      <Receipt className="mr-2 h-4 w-4" />
+                      View Receipt
+                    </Button>
+                  </Link>
+                ) : (
+                  <CSRActionButton
+                    requiredPermission="create_receipt"
+                    onClick={handleCreateReceipt}
+                    disabled={!canCreateReceipt || isCreatingReceipt}
+                    title={!canCreateReceipt ? "Order must be completed or reviewed to create a receipt." : "Create a new receipt for this order"}
+                  >
+                    <Receipt className="mr-2 h-4 w-4" />
+                    {isCreatingReceipt ? "Creating..." : "Create Receipt"}
+                  </CSRActionButton>
+                )}
+
+                {fuelOrder.status === "Completed" && (
+                  <Button onClick={handleReviewOrder} disabled={isSubmitting} className="gap-2">
+                    {isSubmitting ? (
+                      <>
+                        <span>Processing...</span>
+                        <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        Mark as Reviewed
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+
+              {fuelOrder.status === "Pending" && (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Clock className="h-4 w-4" />
                   <span className="text-sm">Waiting for LST to process</span>
                 </div>
               )}
 
-              {fuelOrder.status === "IN_PROGRESS" && (
+              {fuelOrder.status === "In Progress" && (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Clock className="h-4 w-4" />
                   <span className="text-sm">Fueling in progress</span>

@@ -50,7 +50,9 @@ def get_customers():
     
     customers, message, status_code = CustomerService.get_all_customers()
     if customers is not None:
-        return jsonify({"message": message, "customers": customers}), status_code
+        # Convert list of customer objects to list of dictionaries
+        customers_data = [customer.to_dict() for customer in customers]
+        return jsonify({"message": message, "customers": customers_data}), status_code
     else:
         return jsonify({"error": message}), status_code
 
@@ -123,7 +125,7 @@ def create_customer():
         customer, message, status_code = CustomerService.create_customer(data)
         
         if customer is not None:
-            return jsonify({"message": message, "customer": customer}), status_code
+            return jsonify({"message": message, "customer": customer.to_dict()}), status_code
         else:
             return jsonify({"error": message}), status_code
             
@@ -180,7 +182,7 @@ def get_customer(customer_id):
         customer, message, status_code = CustomerService.get_customer_by_id(customer_id)
         
         if customer is not None:
-            return jsonify({"message": message, "customer": customer}), status_code
+            return jsonify({"message": message, "customer": customer.to_dict()}), status_code
         else:
             return jsonify({"error": message}), status_code
             
@@ -266,7 +268,7 @@ def update_customer(customer_id):
         customer, message, status_code = CustomerService.update_customer(customer_id, data)
         
         if customer is not None:
-            return jsonify({"message": message, "customer": customer}), status_code
+            return jsonify({"message": message, "customer": customer.to_dict()}), status_code
         else:
             return jsonify({"error": message}), status_code
             

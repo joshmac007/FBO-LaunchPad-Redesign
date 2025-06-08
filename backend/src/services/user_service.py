@@ -165,14 +165,14 @@ class UserService:
                 if 'role_ids' in data:
                     new_role_ids = set(data['role_ids'])
                     # Check if user currently has MANAGE_USERS
-                    has_manage_users_now = user_to_update.has_permission('MANAGE_USERS')
+                    has_manage_users_now = user_to_update.has_permission('manage_users')
                     # Simulate permissions with new roles
                     if has_manage_users_now:
-                        roles_with_manage_users = Role.query.join(Role.permissions).filter(Permission.name == 'MANAGE_USERS').all()
+                        roles_with_manage_users = Role.query.join(Role.permissions).filter(Permission.name == 'manage_users').all()
                         manage_users_role_ids = {role.id for role in roles_with_manage_users}
                         # If none of the new roles grant MANAGE_USERS, prevent update
                         if not new_role_ids.intersection(manage_users_role_ids):
-                            return None, "Cannot remove your own MANAGE_USERS permission.", 403
+                            return None, "Cannot remove your own manage_users permission.", 403
 
             # Update fields if provided
             if 'username' in data and data['username'] is not None:

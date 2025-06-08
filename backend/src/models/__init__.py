@@ -11,6 +11,16 @@ from .customer import Customer
 from .fuel_truck import FuelTruck
 from .fuel_order import FuelOrder, FuelOrderStatus
 
+# Receipt system models
+from .aircraft_type import AircraftType
+from .fee_category import FeeCategory
+from .aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
+from .fee_rule import FeeRule, CalculationBasis, WaiverStrategy
+from .waiver_tier import WaiverTier
+from .receipt import Receipt, ReceiptStatus
+from .receipt_line_item import ReceiptLineItem, LineItemType
+from .audit_log import AuditLog
+
 __all__ = [
     'Base',
     'Permission',
@@ -27,5 +37,18 @@ __all__ = [
     'Customer',
     'FuelTruck',
     'FuelOrder',
-    'FuelOrderStatus'
+    'FuelOrderStatus',
+    # Receipt system exports
+    'AircraftType',
+    'FeeCategory',
+    'AircraftTypeToFeeCategoryMapping',
+    'FeeRule',
+    'CalculationBasis',
+    'WaiverStrategy',
+    'WaiverTier',
+    'Receipt',
+    'ReceiptStatus',
+    'ReceiptLineItem',
+    'LineItemType',
+    'AuditLog'
 ]

@@ -38,18 +38,18 @@ export default function PermissionDebug() {
   // Test specific CSR permissions - using actual database permission names
   const csrPermissions = [
     // Actual permission names from the seeded database
-    'CREATE_ORDER',           // Allows creating new fuel orders
-    'VIEW_ALL_ORDERS',        // Allows viewing all fuel orders  
-    'REVIEW_ORDERS',          // Allows CSR/Admin to mark orders as reviewed
-    'EXPORT_ORDERS_CSV',      // Allows exporting order data to CSV
-    'VIEW_ORDER_STATS',       // Allows viewing order statistics
-    'EDIT_FUEL_ORDER',        // Allows editing fuel order details
-    'VIEW_CUSTOMERS',         // Allows viewing customer list
-    'MANAGE_CUSTOMERS',       // Allows creating, updating, deleting customers
+    'create_fuel_order',           // Allows creating new fuel orders
+    'view_all_orders',        // Allows viewing all fuel orders  
+    'review_fuel_order',          // Allows CSR/Admin to mark orders as reviewed
+    'export_orders_csv',      // Allows exporting order data to CSV
+    'view_order_statistics',       // Allows viewing order statistics
+    'edit_fuel_order',        // Allows editing fuel order details
+    'view_customers',         // Allows viewing customer list
+    'manage_customers',       // Allows creating, updating, deleting customers
     
     // Legacy granular permission names (in case they exist)
     'csr_access',
-    'access_csr_module',
+    'access_csr_dashboard',
     'manage_orders',
     'create_fuel_order',
     'view_fuel_orders',
@@ -61,10 +61,9 @@ export default function PermissionDebug() {
 
   const adminPermissions = [
     // Actual permission names from the seeded database
-    'MANAGE_USERS',           // Allows managing user accounts
-    'MANAGE_SYSTEM',          // Allows system administration
-    'VIEW_ADMIN_PANEL',       // Allows access to admin panel
-    'MANAGE_ROLES',           // Allows managing roles and permissions
+    'manage_users',           // Allows managing user accounts
+    'access_admin_dashboard',       // Allows access to admin panel
+    'manage_roles',           // Allows managing roles and permissions
     
     // Legacy granular permission names (in case they exist)
     'admin_access',
@@ -76,14 +75,14 @@ export default function PermissionDebug() {
 
   const fuelerPermissions = [
     // Actual permission names from the seeded database
-    'PERFORM_FUELING',        // Allows performing fueling operations
-    'UPDATE_ORDER_STATUS',    // Allows updating order status
-    'COMPLETE_ORDERS',        // Allows completing orders
-    'VIEW_ASSIGNED_ORDERS',   // Allows viewing assigned orders
+    'perform_fueling_task',        // Allows performing fueling operations
+    'complete_fuel_order',    // Allows updating order status
+    'access_fueler_dashboard',        // Allows completing orders
+    'view_assigned_orders',   // Allows viewing assigned orders
     
     // Legacy granular permission names (in case they exist)
     'fueler_access',
-    'access_fueler_module',
+    '',
     'perform_fueling',
     'start_fueling_task',
     'update_fueling_status',

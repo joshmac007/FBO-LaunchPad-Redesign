@@ -1,108 +1,38 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Users, Shield, Truck, UserCheck, TrendingUp, Activity, AlertTriangle } from "lucide-react"
+import { Users, Shield, Truck, UserCheck, Activity, AlertTriangle } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
+import AdminService, { type DashboardData, type AdminDashboardStats, type SystemStatusItem, type ActivityItem } from "@/app/services/admin-service"
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState({
-    totalUsers: 0,
-    activeUsers: 0,
-    totalRoles: 0,
-    totalPermissions: 0,
-    activeFuelTrucks: 0,
-    totalFuelTrucks: 0,
-    activeLSTs: 0,
-    totalLSTs: 0,
-  })
-
-  const [recentActivity, setRecentActivity] = useState<any[]>([])
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Load statistics from localStorage
-    const users = JSON.parse(localStorage.getItem("fboUsers") || "[]")
-    const roles = JSON.parse(localStorage.getItem("fboRoles") || "[]")
-    const permissions = JSON.parse(localStorage.getItem("fboPermissions") || "[]")
-    const fuelTrucks = JSON.parse(localStorage.getItem("fboFuelTrucks") || "[]")
-    const lsts = JSON.parse(localStorage.getItem("fboLSTs") || "[]")
-
-    setStats({
-      totalUsers: users.length,
-      activeUsers: users.filter((user: any) => user.is_active !== false).length,
-      totalRoles: roles.length,
-      totalPermissions: permissions.length,
-      activeFuelTrucks: fuelTrucks.filter((truck: any) => truck.is_active).length,
-      totalFuelTrucks: fuelTrucks.length,
-      activeLSTs: lsts.filter((lst: any) => lst.is_active).length,
-      totalLSTs: lsts.length,
-    })
-
-    // Mock recent activity
-    setRecentActivity([
-      {
-        id: 1,
-        type: "user_created",
-        message: "New user John Doe created",
-        timestamp: "2 minutes ago",
-        severity: "info",
-      },
-      {
-        id: 2,
-        type: "role_assigned",
-        message: "CSR role assigned to Sarah Johnson",
-        timestamp: "15 minutes ago",
-        severity: "info",
-      },
-      {
-        id: 3,
-        type: "truck_maintenance",
-        message: "Fuel truck FT-003 scheduled for maintenance",
-        timestamp: "1 hour ago",
-        severity: "warning",
-      },
-      {
-        id: 4,
-        type: "lst_performance",
-        message: "LST Michael Brown completed 15 fuel orders today",
-        timestamp: "2 hours ago",
-        severity: "success",
-      },
-    ])
+    loadDashboardData()
   }, [])
 
-  const quickActions = [
-    {
-      title: "Add New User",
-      description: "Create a new user account",
-      href: "/admin/users",
-      icon: <Users className="h-5 w-5" />,
-      color: "bg-blue-500",
-    },
-    {
-      title: "Manage Permissions",
-      description: "Configure role permissions",
-      href: "/admin/permissions",
-      icon: <Shield className="h-5 w-5" />,
-      color: "bg-green-500",
-    },
-    {
-      title: "Add Fuel Truck",
-      description: "Register a new fuel truck",
-      href: "/admin/fuel-trucks",
-      icon: <Truck className="h-5 w-5" />,
-      color: "bg-orange-500",
-    },
-    {
-      title: "Add LST",
-      description: "Register a new line service technician",
-      href: "/admin/lst-management",
-      icon: <UserCheck className="h-5 w-5" />,
-      color: "bg-purple-500",
-    },
-  ]
+  const loadDashboardData = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      
+      const data = await AdminService.getDashboardData()
+      setDashboardData(data)
+    } catch (err) {
+      console.error('Error loading dashboard data:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -117,6 +47,70 @@ export default function AdminDashboard() {
     }
   }
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "operational":
+        return "text-green-600"
+      case "maintenance":
+        return "text-yellow-600"
+      case "error":
+        return "text-red-600"
+      default:
+        return "text-blue-600"
+    }
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "operational":
+        return "Operational"
+      case "maintenance":
+        return "Maintenance"
+      case "error":
+        return "Error"
+      default:
+        return "Unknown"
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-sm text-muted-foreground">Loading dashboard data...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-lg font-semibold mb-2">Error Loading Dashboard</h2>
+          <p className="text-sm text-muted-foreground mb-4">{error}</p>
+          <Button onClick={loadDashboardData}>Try Again</Button>
+        </div>
+      </div>
+    )
+  }
+
+  const stats = dashboardData?.stats || {
+    totalUsers: 0,
+    activeUsers: 0,
+    totalRoles: 0,
+    totalPermissions: 0,
+    activeFuelTrucks: 0,
+    totalFuelTrucks: 0,
+    activeLSTs: 0,
+    totalLSTs: 0,
+  }
+
+  const systemStatus = dashboardData?.systemStatus || []
+  const recentActivity = dashboardData?.recentActivity || []
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -125,7 +119,14 @@ export default function AdminDashboard() {
           <h1 className="text-3xl font-bold">Admin Dashboard</h1>
           <p className="text-muted-foreground">Manage your FBO operations and system administration</p>
         </div>
-        <div className="text-sm text-muted-foreground">Last updated: {new Date().toLocaleString()}</div>
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="sm" onClick={loadDashboardData}>
+            Refresh Data
+          </Button>
+          <div className="text-sm text-muted-foreground">
+            Last updated: {new Date().toLocaleString()}
+          </div>
+        </div>
       </div>
 
       {/* Statistics Cards */}
@@ -181,35 +182,7 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
-            Quick Actions
-          </CardTitle>
-          <CardDescription>Common administrative tasks and shortcuts</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {quickActions.map((action, index) => (
-              <Link key={index} href={action.href}>
-                <Card className="cursor-pointer transition-all hover:shadow-md hover:scale-105">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg ${action.color} text-white`}>{action.icon}</div>
-                      <div className="flex-1">
-                        <h3 className="font-medium text-sm">{action.title}</h3>
-                        <p className="text-xs text-muted-foreground">{action.description}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+
 
       {/* Recent Activity and System Status */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -224,15 +197,19 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentActivity.map((activity) => (
-                <div key={activity.id} className="flex items-start gap-3 p-3 rounded-lg border">
-                  <div className={`w-2 h-2 rounded-full mt-2 ${getSeverityColor(activity.severity)}`} />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{activity.message}</p>
-                    <p className="text-xs text-muted-foreground">{activity.timestamp}</p>
+              {recentActivity.length > 0 ? (
+                recentActivity.map((activity) => (
+                  <div key={activity.id} className="flex items-start gap-3 p-3 rounded-lg border">
+                    <div className={`w-2 h-2 rounded-full mt-2 ${getSeverityColor(activity.severity)}`} />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{activity.message}</p>
+                      <p className="text-xs text-muted-foreground">{activity.timestamp}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">No recent activity to display</p>
+              )}
             </div>
             <div className="mt-4 pt-4 border-t">
               <Button variant="outline" className="w-full">
@@ -253,49 +230,28 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <span className="text-sm font-medium">User Authentication</span>
-                </div>
-                <Badge variant="outline" className="text-green-600">
-                  Operational
-                </Badge>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <span className="text-sm font-medium">Permission System</span>
-                </div>
-                <Badge variant="outline" className="text-green-600">
-                  Operational
-                </Badge>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-yellow-500" />
-                  <span className="text-sm font-medium">Fuel Truck Monitoring</span>
-                </div>
-                <Badge variant="outline" className="text-yellow-600">
-                  Maintenance
-                </Badge>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <span className="text-sm font-medium">LST Performance</span>
-                </div>
-                <Badge variant="outline" className="text-green-600">
-                  Operational
-                </Badge>
-              </div>
+              {systemStatus.length > 0 ? (
+                systemStatus.map((status, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 rounded-lg border">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${
+                        status.status === 'operational' ? 'bg-green-500' :
+                        status.status === 'maintenance' ? 'bg-yellow-500' : 'bg-red-500'
+                      }`} />
+                      <span className="text-sm font-medium">{status.name}</span>
+                    </div>
+                    <Badge variant="outline" className={getStatusColor(status.status)}>
+                      {getStatusBadge(status.status)}
+                    </Badge>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">System status unavailable</p>
+              )}
             </div>
             <div className="mt-4 pt-4 border-t">
-              <Button variant="outline" className="w-full">
-                View System Details
+              <Button variant="outline" className="w-full" onClick={() => AdminService.getSystemHealth()}>
+                Refresh System Status
               </Button>
             </div>
           </CardContent>

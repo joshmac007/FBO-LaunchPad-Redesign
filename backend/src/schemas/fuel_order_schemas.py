@@ -1,5 +1,6 @@
 from marshmallow import Schema, fields, validate, pre_load
 from ..models.fuel_order import FuelOrderStatus
+from ..models.receipt import ReceiptStatus
 from .auth_schemas import ErrorResponseSchema
 
 # --- Schemas for Payloads ---
@@ -85,6 +86,21 @@ class FuelOrderResponseSchema(Schema):
     completion_timestamp = fields.DateTime(dump_only=True, allow_none=True)
     reviewed_timestamp = fields.DateTime(dump_only=True, allow_none=True)
     reviewed_by_csr_user_id = fields.Int(dump_only=True, allow_none=True)
+    
+    # New fields for receipt linking and order locking
+    receipt_id = fields.Method("get_active_receipt_id", allow_none=True)
+    is_locked = fields.Method("get_is_locked", dump_only=True)
+
+    def get_active_receipt_id(self, obj):
+        """Find the first non-voided receipt. This handles the void-and-recreate flow."""
+        for receipt in obj.receipts:
+            if receipt.status != ReceiptStatus.VOID:
+                return receipt.id
+        return None
+
+    def get_is_locked(self, obj):
+        """An order is locked if it has any receipt that is NOT voided."""
+        return any(r.status != ReceiptStatus.VOID for r in obj.receipts)
 
 class FuelOrderBriefResponseSchema(Schema): # For list view
     # Subset of fields for list responses

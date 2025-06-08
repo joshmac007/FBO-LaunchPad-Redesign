@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Truck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
@@ -17,46 +18,61 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
+import { usePermissions } from "@/app/contexts/permission-context"
+import { getCurrentUser } from "@/app/services/auth-service"
 
 // Local storage key for fuel orders
 const FUEL_ORDERS_STORAGE_KEY = "fboFuelOrders"
 
 export default function InProgressOrdersPage() {
-  const [user, setUser] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
+  const { user, loading: permissionsLoading, isAuthenticated } = usePermissions()
   const [inProgressOrders, setInProgressOrders] = useState<any[]>([])
   const [selectedOrder, setSelectedOrder] = useState<any>(null)
   const [isCompletingOrder, setIsCompletingOrder] = useState(false)
   const [actualQuantity, setActualQuantity] = useState("")
   const [completionNotes, setCompletionNotes] = useState("")
   const [error, setError] = useState("")
+  const [dataLoaded, setDataLoaded] = useState(false)
 
+  // Check authentication and redirect if necessary
   useEffect(() => {
-    // Check if user is logged in and is Fueler
-    const userData = localStorage.getItem("fboUser")
-    if (!userData) {
+    if (!permissionsLoading && !isAuthenticated()) {
+      router.push("/login")
       return
     }
 
-    const parsedUser = JSON.parse(userData)
-    if (!parsedUser.isLoggedIn || parsedUser.role !== "fueler") {
-      return
+    // Check if user has fueler role (using correct role names from backend)
+    if (!permissionsLoading && user) {
+      const currentUser = getCurrentUser()
+      const hasRequiredRole = currentUser?.roles?.includes('Line Service Technician')
+      
+      if (!hasRequiredRole) {
+        // Redirect to appropriate dashboard based on their role
+        if (currentUser?.roles?.includes('System Administrator')) {
+          router.push("/admin/dashboard")
+        } else if (currentUser?.roles?.includes('Customer Service Representative')) {
+          router.push("/csr/dashboard")
+        } else {
+          router.push("/member/dashboard")
+        }
+        return
+      }
     }
+  }, [permissionsLoading, isAuthenticated, user, router])
 
-    setUser(parsedUser)
-    setIsLoading(false)
-  }, [])
-
+  // Load in-progress orders data
   useEffect(() => {
-    if (!isLoading) {
+    if (!permissionsLoading && isAuthenticated() && user && !dataLoaded) {
       // Load fuel orders from localStorage
       const storedOrders = localStorage.getItem(FUEL_ORDERS_STORAGE_KEY)
       if (storedOrders) {
         const allOrders = JSON.parse(storedOrders)
         setInProgressOrders(allOrders.filter((order: any) => order.status === "IN_PROGRESS"))
       }
+      setDataLoaded(true)
     }
-  }, [isLoading])
+  }, [permissionsLoading, isAuthenticated, user, dataLoaded])
 
   const openCompletionDialog = (order: any) => {
     setSelectedOrder(order)
@@ -101,7 +117,7 @@ export default function InProgressOrdersPage() {
     setSelectedOrder(null)
   }
 
-  if (isLoading) {
+  if (permissionsLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="flex flex-col items-center gap-4">

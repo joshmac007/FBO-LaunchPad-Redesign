@@ -8,6 +8,9 @@ class Permission(db.Model):
     id = db.Column(Integer, primary_key=True)
     name = db.Column(String(100), unique=True, nullable=False, index=True)
     description = db.Column(Text, nullable=True)
+    resource_type = db.Column(String(50), nullable=True)  # e.g., 'fuel_order', 'user', 'global'
+    scope = db.Column(String(20), default='any', nullable=False)  # 'any', 'own', 'specific'
+    is_active = db.Column(Boolean, default=True, nullable=False)
     created_at = db.Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -26,6 +29,9 @@ class Permission(db.Model):
             'id': self.id,
             'name': self.name,
             'description': self.description,
+            'resource_type': self.resource_type,
+            'scope': self.scope,
+            'is_active': self.is_active,
             'full_name': self.get_full_name(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None

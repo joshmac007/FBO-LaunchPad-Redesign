@@ -233,16 +233,7 @@ export default function AircraftLookup({
           <Card className="bg-green-50 border border-green-200 shadow-sm">
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <span className="text-green-600">✓</span> Aircraft Selected
-                  </CardTitle>
-                  <CardDescription>This aircraft will be used for the fuel order</CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <Badge className="bg-green-100 text-green-700 border-green-300">
-                    Selected
-                  </Badge>
+                <div className="flex">
                   <Badge
                     variant="outline"
                     className={
@@ -269,14 +260,6 @@ export default function AircraftLookup({
                     <div className="text-sm font-medium text-gray-500">Aircraft Type</div>
                     <div>{lookupResult.type}</div>
                   </div>
-                  <div>
-                    <div className="text-sm font-medium text-gray-500">Model</div>
-                    <div>{lookupResult.model}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-gray-500">Home Base</div>
-                    <div>{lookupResult.homeBase}</div>
-                  </div>
                 </div>
                 <div className="space-y-3">
                   <div>
@@ -284,15 +267,7 @@ export default function AircraftLookup({
                     <div className="font-medium">{lookupResult.owner}</div>
                   </div>
                   <div>
-                    <div className="text-sm font-medium text-gray-500">Max Takeoff Weight (MTOW)</div>
-                    <div>{lookupResult.mtow?.toLocaleString() || "N/A"} lbs</div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-gray-500">Fuel Capacity</div>
-                    <div>{lookupResult.fuelCapacity} gallons</div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-gray-500">Preferred Fuel Type</div>
+                    <div className="text-sm font-medium text-gray-500">Fuel Type</div>
                     <div>{lookupResult.preferredFuelType}</div>
                   </div>
                 </div>

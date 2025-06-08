@@ -5,6 +5,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { usePermissions } from "@/hooks/usePermissions"
 import AppSidebar from "@/components/layout/app-sidebar"
+import AccessDenied from "@/app/components/access-denied"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
 export default function FuelerLayout({
@@ -48,18 +49,11 @@ export default function FuelerLayout({
     const hasFuelerAccess = canAny(fuelerPermissions) || isFueler
 
     if (!hasFuelerAccess) {
-      console.log("User does not have fueler permissions, redirecting to appropriate dashboard")
+      console.log("User does not have fueler permissions")
       
-      // Redirect to appropriate dashboard based on user's permissions
-      if (canAny(['access_admin_dashboard', 'manage_settings', 'manage_users', 'manage_roles'])) {
-        router.push("/admin/dashboard")
-      } else if (canAny(['access_csr_dashboard', 'view_all_orders', 'create_order'])) {
-        router.push("/csr/dashboard")
-      } else if (canAny(['access_member_dashboard']) || user.is_active) {
-        router.push("/member/dashboard")
-      } else {
-        router.push("/login")
-      }
+      // Set access denied state instead of redirecting
+      setHasAccess(false)
+      setIsLoading(false)
       return
     }
 
@@ -87,9 +81,29 @@ export default function FuelerLayout({
     )
   }
 
-  // Don't render anything if user doesn't have access (they'll be redirected)
+  // Show access denied page if user doesn't have access
   if (!hasAccess) {
-    return null
+    return (
+      <AccessDenied
+        fuelerOnly={true}
+        pageName="Fueler Dashboard"
+        pageDescription="Line Service Technician dashboard for managing assigned fuel orders and task execution."
+        anyOfPermissions={[
+          'access_fueler_dashboard',
+          'perform_fueling_task',
+          'update_order_status',
+          'view_assigned_orders',
+          'complete_fuel_order'
+        ]}
+        suggestedActions={[
+          {
+            label: "Contact CSR Team",
+            href: "/csr/dashboard",
+            variant: "outline"
+          }
+        ]}
+      />
+    )
   }
 
   return (

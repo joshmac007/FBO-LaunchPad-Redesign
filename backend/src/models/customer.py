@@ -12,6 +12,12 @@ class Customer(db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     phone = db.Column(db.String(20))
+    
+    # Receipt system fields
+    is_placeholder = db.Column(db.Boolean, nullable=False, default=False)
+    is_caa_member = db.Column(db.Boolean, nullable=False, default=False)
+    caa_member_id = db.Column(db.String(50), unique=True, nullable=True)
+    
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -21,6 +27,9 @@ class Customer(db.Model):
             'name': self.name,
             'email': self.email,
             'phone': self.phone,
+            'is_placeholder': self.is_placeholder,
+            'is_caa_member': self.is_caa_member,
+            'caa_member_id': self.caa_member_id,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

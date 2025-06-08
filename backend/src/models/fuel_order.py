@@ -68,5 +68,35 @@ class FuelOrder(db.Model):
             return float(self.end_meter_reading - self.start_meter_reading)
         return None
 
+    def to_dict(self):
+        """Convert fuel order object to dictionary for JSON serialization."""
+        return {
+            'id': self.id,
+            'tail_number': self.tail_number,
+            'customer_id': self.customer_id,
+            'fuel_type': self.fuel_type,
+            'additive_requested': self.additive_requested,
+            'requested_amount': str(self.requested_amount) if self.requested_amount else None,
+            'assigned_lst_user_id': self.assigned_lst_user_id,
+            'assigned_truck_id': self.assigned_truck_id,
+            'location_on_ramp': self.location_on_ramp,
+            'csr_notes': self.csr_notes,
+            'lst_notes': self.lst_notes,
+            'status': self.status.value,
+            'fuel_delivered': str(self.fuel_delivered) if hasattr(self, 'fuel_delivered') and self.fuel_delivered else None,
+            'start_meter_reading': str(self.start_meter_reading) if self.start_meter_reading else None,
+            'end_meter_reading': str(self.end_meter_reading) if self.end_meter_reading else None,
+            'calculated_gallons_dispensed': str(self.calculated_gallons_dispensed) if self.calculated_gallons_dispensed else None,
+            'dispatch_timestamp': self.dispatch_timestamp.isoformat() if self.dispatch_timestamp else None,
+            'acknowledge_timestamp': self.acknowledge_timestamp.isoformat() if self.acknowledge_timestamp else None,
+            'en_route_timestamp': self.en_route_timestamp.isoformat() if self.en_route_timestamp else None,
+            'fueling_start_timestamp': self.fueling_start_timestamp.isoformat() if self.fueling_start_timestamp else None,
+            'completion_timestamp': self.completion_timestamp.isoformat() if self.completion_timestamp else None,
+            'review_timestamp': self.reviewed_timestamp.isoformat() if self.reviewed_timestamp else None,
+            'reviewed_by_csr_user_id': self.reviewed_by_csr_user_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
     def __repr__(self):
         return f'<FuelOrder {self.id} - {self.tail_number}>' 

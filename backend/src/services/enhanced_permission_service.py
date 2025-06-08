@@ -22,6 +22,7 @@ from ..models.user import User
 from ..models.role import Role
 from ..models.permission import Permission
 from ..models.permission_group import PermissionGroup, PermissionGroupMembership, RolePermissionGroup
+from ..models.user_permission import UserPermission
 from ..extensions import db
 
 # Performance monitor imports - make optional too
@@ -115,28 +116,36 @@ class EnhancedPermissionService:
     
     def get_user_permission_groups(self, user_id: int) -> List[PermissionGroup]:
         """Get permission groups assigned to a user through their roles."""
-        try:
-            user = User.query.get(user_id)
-            if not user:
-                return []
-            
-            groups = []
-            for role in user.roles:
-                # Get groups assigned to this role
-                role_groups = RolePermissionGroup.query.filter_by(
-                    role_id=role.id,
-                    is_active=True
-                ).join(PermissionGroup).filter_by(is_active=True).all()
-                
-                for role_group in role_groups:
-                    if role_group.group not in groups:
-                        groups.append(role_group.group)
-            
-            return groups
-            
-        except Exception as e:
-            logger.error(f"Error getting user permission groups: {e}")
+        user = User.query.get(user_id)
+        if not user:
+            logger.warning(f"get_user_permission_groups: User ID {user_id} not found.")
             return []
+
+        logger.info(f"get_user_permission_groups: Processing user ID {user_id} ({user.email})")
+        groups = []
+        user_roles = user.roles # Assuming user.roles is already a list of Role objects
+        logger.info(f"get_user_permission_groups: User has roles: {[role.name for role in user_roles]}")
+
+        for role in user_roles:
+            logger.info(f"get_user_permission_groups: Checking role '{role.name}' (ID: {role.id})")
+            
+            # Accessing the relationship directly
+            active_role_group_assignments = [
+                rpg for rpg in role.role_permission_groups 
+                if rpg.is_active and rpg.group and rpg.group.is_active
+            ]
+            logger.info(f"get_user_permission_groups: Role '{role.name}' has {len(active_role_group_assignments)} active group assignments.")
+
+            for rpg_assignment in active_role_group_assignments:
+                group = rpg_assignment.group
+                logger.info(f"get_user_permission_groups: Role '{role.name}' is assigned to active group '{group.name}' (ID: {group.id})")
+                if group not in groups:
+                    groups.append(group)
+                else:
+                    logger.info(f"get_user_permission_groups: Group '{group.name}' already added.")
+        
+        logger.info(f"get_user_permission_groups: Found {len(groups)} unique active groups for user {user_id}: {[g.name for g in groups]}")
+        return groups
     
     def user_has_permission(self, user_id: int, permission: str, 
                           resource_context: Optional[ResourceContext] = None) -> bool:
@@ -339,9 +348,9 @@ class EnhancedPermissionService:
             if context.resource_type == 'fuel_order':
                 order = FuelOrder.query.get(resource_id)
                 if order:
-                    # Check if user created the order or is assigned to it
-                    return (order.created_by_id == user.id or 
-                           order.assigned_lst_id == user.id)
+                    # Check if user is assigned to the order (LST assignment)
+                    # Note: FuelOrder doesn't have created_by_id field
+                    return order.assigned_lst_user_id == user.id
                            
             elif context.resource_type == 'user':
                 # Users can always access their own profile
@@ -489,43 +498,81 @@ class EnhancedPermissionService:
         """Get all permissions for a user (cached)."""
         cache_key = f"user_perms:{user_id}:{include_groups}"
         
-        # Check Redis cache first if available
+        # L1 Cache Check
+        cached_perms = self._get_from_memory_cache(cache_key)
+        if cached_perms is not None:
+            return cached_perms
+
+        # L2 Redis Cache Check
         if self.redis_cache:
             cached_perms = self.redis_cache.get(cache_key)
-            if cached_perms:
+            if cached_perms is not None:
+                self._store_in_memory_cache(cache_key, cached_perms)
                 return cached_perms
-            
-        # Get from database
-        try:
-            user = User.query.get(user_id)
-            if not user:
-                return []
-                
-            permissions = set()
-            
-            # Get direct role permissions
-            for role in user.roles:
-                for perm in role.permissions:
-                    permissions.add(perm.name)
-                    
-            # Get permissions from groups
-            if include_groups:
-                user_groups = self.get_user_permission_groups(user_id)
-                for group in user_groups:
-                    group_permissions = group.get_all_permissions()
-                    permissions.update(group_permissions)
-            
-            perm_list = list(permissions)
-            
-            # Cache the result in Redis
-            if self.redis_cache:
-                self.redis_cache.set(cache_key, perm_list, ttl=self.memory_cache_ttl)
-            
-            return perm_list
-            
-        except Exception as e:
-            logger.error(f"Error getting permissions for user {user_id}: {e}")
+
+        user = self._get_user(user_id)
+        if not user:
+            logger.warning(f"get_user_permissions: User ID {user_id} not found during permission fetch.")
             return []
+
+        logger.info(f"get_user_permissions: Starting permission fetch for user ID {user_id} ({user.email})")
+        permissions = set()
+
+        # Part 1: Permissions from direct role_permissions (should be empty for new system)
+        logger.info(f"get_user_permissions: Checking legacy direct role.permissions for user {user_id}...")
+        for role in user.roles:
+            legacy_perms_count = 0
+            for perm in role.permissions: # This accesses the direct Role-Permission link
+                permissions.add(perm.name)
+                legacy_perms_count +=1
+            if legacy_perms_count > 0:
+                logger.info(f"get_user_permissions: Role '{role.name}' provided {legacy_perms_count} legacy direct permissions.")
+        if not any(role.permissions for role in user.roles):
+             logger.info(f"get_user_permissions: No legacy direct permissions found via role.permissions (this is expected for the new system).")
+
+
+        # Part 2: Permissions from Permission Groups
+        if include_groups:
+            logger.info(f"get_user_permissions: Fetching permission groups for user {user_id}...")
+            user_groups = self.get_user_permission_groups(user_id) # This now has logging
+            
+            if not user_groups:
+                logger.warning(f"get_user_permissions: No active permission groups found for user {user_id}.")
+            else:
+                logger.info(f"get_user_permissions: User {user_id} is in groups: {[g.name for g in user_groups]}. Processing permissions for these groups.")
+                for group in user_groups:
+                    logger.info(f"get_user_permissions: Getting all permissions for group '{group.name}' (ID: {group.id})")
+                    # group.get_all_permissions() returns a set of permission NAMES (strings)
+                    group_permission_names = group.get_all_permissions() 
+                    if group_permission_names:
+                        logger.info(f"get_user_permissions: Group '{group.name}' provides permissions: {list(group_permission_names)}")
+                        permissions.update(group_permission_names)
+                    else:
+                        logger.info(f"get_user_permissions: Group '{group.name}' provides no permissions directly or via hierarchy.")
+        else:
+            logger.info(f"get_user_permissions: Skipping group permissions fetch as include_groups is False.")
+
+        # Part 3: Direct UserPermission assignments (UserPermission model)
+        logger.info(f"get_user_permissions: Checking direct UserPermission assignments for user {user_id}...")
+        direct_assignments = UserPermission.query.filter_by(user_id=user_id, is_active=True).all()
+        if direct_assignments:
+            for assignment in direct_assignments:
+                if assignment.permission:
+                    logger.info(f"get_user_permissions: User {user_id} has direct permission '{assignment.permission.name}'")
+                    permissions.add(assignment.permission.name)
+        else:
+            logger.info(f"get_user_permissions: No active direct UserPermission assignments found for user {user_id}.")
+
+
+        perm_list = sorted(list(permissions))
+        logger.info(f"get_user_permissions: Final aggregated permissions for user {user_id}: {perm_list}")
+        
+        # Cache the result
+        self._store_in_memory_cache(cache_key, perm_list)
+        if self.redis_cache:
+            self.redis_cache.set(cache_key, perm_list, ttl=1800)  # 30 minutes
+
+        return perm_list
     
     def get_user_permission_summary(self, user_id: int) -> Dict[str, Any]:
         """Get comprehensive permission summary for a user."""
