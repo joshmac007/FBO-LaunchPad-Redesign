@@ -228,8 +228,17 @@ class FuelOrderService:
 
             # PBAC: Only show all orders if user has permission
             if not current_user.has_permission('view_all_orders'):
-                # Only see their assigned orders
-                query = query.filter(FuelOrder.assigned_lst_user_id == current_user.id)
+                # For fuelers (with access_fueler_dashboard), show unassigned orders + their assigned orders
+                if current_user.has_permission('access_fueler_dashboard'):
+                    query = query.filter(
+                        db.or_(
+                            FuelOrder.assigned_lst_user_id == current_user.id,  # Their assigned orders
+                            FuelOrder.assigned_lst_user_id == None  # Unassigned orders available for claiming
+                        )
+                    )
+                else:
+                    # For other users, only see their assigned orders
+                    query = query.filter(FuelOrder.assigned_lst_user_id == current_user.id)
 
             # Apply filtering based on request parameters
             if filters:
@@ -850,3 +859,43 @@ class FuelOrderService:
         db.session.commit()
         
         return order 
+
+    @classmethod
+    def claim_order(cls, order_id: int, user_id: int) -> Tuple[Optional[FuelOrder], str, int]:
+        """
+        Atomically claim an unassigned fuel order.
+        This method provides a direct interface to FuelerService.claim_order_atomic
+        for backward compatibility.
+        """
+        from .fueler_service import FuelerService
+        return FuelerService.claim_order_atomic(order_id, user_id)
+    
+    @classmethod
+    def csr_update_order(cls, order_id: int, update_data: Dict[str, Any], 
+                        csr_user_id: int) -> Tuple[Optional[FuelOrder], str, int]:
+        """
+        Allow CSR to update order details and set pending change status.
+        This method provides a direct interface to FuelerService.csr_update_order.
+        """
+        from .fueler_service import FuelerService
+        return FuelerService.csr_update_order(order_id, update_data, csr_user_id)
+    
+    @classmethod
+    def acknowledge_order_change(cls, order_id: int, change_version: int, 
+                               user_id: int) -> Tuple[Optional[FuelOrder], str, int]:
+        """
+        Acknowledge CSR changes to allow fueler to continue with order.
+        This method provides a direct interface to FuelerService.acknowledge_csr_changes.
+        """
+        from .fueler_service import FuelerService
+        return FuelerService.acknowledge_csr_changes(order_id, change_version, user_id)
+    
+    @classmethod
+    def complete_order_atomic(cls, order_id: int, completion_data: Dict[str, Any], 
+                            user_id: int) -> Tuple[Optional[FuelOrder], str, int]:
+        """
+        Atomically complete an order with meter readings and truck updates.
+        This method provides a direct interface to FuelerService.complete_order_with_transaction.
+        """
+        from .fueler_service import FuelerService
+        return FuelerService.complete_order_with_transaction(order_id, completion_data, user_id) 

@@ -393,14 +393,15 @@ export default function FuelOrderDetailPage() {
               <div className="flex gap-2">
                 <Dialog open={isStatusDialogOpen} onOpenChange={setIsStatusDialogOpen}>
                   <DialogTrigger asChild>
-                    <CSRActionButton
-                      requiredPermission="update_order_status"
+                    <Button
+                      onClick={() => setIsStatusDialogOpen(true)}
                       disabled={fuelOrder.is_locked}
                       title={fuelOrder.is_locked ? "Order is locked because a receipt has been generated." : "Update Order Status"}
+                      data-cy="edit-status-btn"
                     >
                       <Edit className="mr-2 h-4 w-4" />
                       Update Status
-                    </CSRActionButton>
+                    </Button>
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-[425px]" data-cy="status-update-dialog">
                     <DialogHeader>

@@ -39,6 +39,11 @@ class FuelOrder(db.Model):
     # Metering Fields
     start_meter_reading = db.Column(db.Numeric(12, 2), nullable=True)
     end_meter_reading = db.Column(db.Numeric(12, 2), nullable=True)
+    
+    # Change Tracking & Final Amounts
+    change_version = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    acknowledged_change_version = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    gallons_dispensed = db.Column(db.Numeric(10, 2), nullable=True)
 
     # Timestamps
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
@@ -68,25 +73,39 @@ class FuelOrder(db.Model):
             return float(self.end_meter_reading - self.start_meter_reading)
         return None
 
+    @hybrid_property
+    def has_pending_changes(self):
+        """Check if there are unacknowledged CSR changes."""
+        return self.change_version > self.acknowledged_change_version
+
     def to_dict(self):
         """Convert fuel order object to dictionary for JSON serialization."""
         return {
             'id': self.id,
             'tail_number': self.tail_number,
+            'aircraft_registration': self.tail_number,  # Frontend expects this field name
             'customer_id': self.customer_id,
+            'customer_name': self.customer.name if self.customer else None,  # Add customer name for frontend
             'fuel_type': self.fuel_type,
             'additive_requested': self.additive_requested,
             'requested_amount': str(self.requested_amount) if self.requested_amount else None,
+            'gallons_requested': float(self.requested_amount) if self.requested_amount else None,  # Frontend expects this
             'assigned_lst_user_id': self.assigned_lst_user_id,
+            'assigned_to_id': self.assigned_lst_user_id,  # Frontend field mapping
             'assigned_truck_id': self.assigned_truck_id,
             'location_on_ramp': self.location_on_ramp,
             'csr_notes': self.csr_notes,
             'lst_notes': self.lst_notes,
+            'notes': self.lst_notes or self.csr_notes,  # Frontend expects generic notes field
             'status': self.status.value,
+            'service_type': 'Fuel Service',  # Default service type for frontend
+            'priority': 'NORMAL',  # Default priority for frontend
             'fuel_delivered': str(self.fuel_delivered) if hasattr(self, 'fuel_delivered') and self.fuel_delivered else None,
             'start_meter_reading': str(self.start_meter_reading) if self.start_meter_reading else None,
             'end_meter_reading': str(self.end_meter_reading) if self.end_meter_reading else None,
             'calculated_gallons_dispensed': str(self.calculated_gallons_dispensed) if self.calculated_gallons_dispensed else None,
+            'change_version': self.change_version,
+            'gallons_dispensed': str(self.gallons_dispensed) if self.gallons_dispensed else None,
             'dispatch_timestamp': self.dispatch_timestamp.isoformat() if self.dispatch_timestamp else None,
             'acknowledge_timestamp': self.acknowledge_timestamp.isoformat() if self.acknowledge_timestamp else None,
             'en_route_timestamp': self.en_route_timestamp.isoformat() if self.en_route_timestamp else None,

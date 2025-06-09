@@ -466,7 +466,8 @@ export async function getFuelOrderStatuses(): Promise<string[]> {
     headers: getAuthHeaders(),
   })
 
-  return handleApiResponse<string[]>(response)
+  const data = await handleApiResponse<{ statuses: string[] }>(response)
+  return data.statuses
 }
 
 // Manual status update (CSR operations with meter readings and reason)

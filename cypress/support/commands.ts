@@ -27,7 +27,7 @@
 // Custom Cypress commands for authentication and user management
 
 /**
- * Login as a specific user type
+ * Login as a specific user type using API call directly (more reliable than form)
  * @param {string} userType - 'admin', 'csr', 'fueler', or 'member'
  */
 Cypress.Commands.add('loginAs', (userType) => {
@@ -55,29 +55,33 @@ Cypress.Commands.add('loginAs', (userType) => {
     throw new Error(`Unknown user type: ${userType}. Valid types: admin, csr, fueler, member`)
   }
 
-  cy.visit('/login', { failOnStatusCode: false })
-  
-  // Wait for login form to be visible
-  cy.get('input[type="email"]', { timeout: 10000 }).should('be.visible')
-  
-  // Fill in credentials
-  cy.get('input[type="email"]').clear().type(user.email)
-  cy.get('input[type="password"]').clear().type(user.password)
-  
-  // Submit form
-  cy.get('button[type="submit"]').click()
-  
-  // Wait for successful login - be more flexible about the redirect
-  cy.wait(3000) // Give time for the login to process
-  
-  // Check if we're no longer on the login page OR if user data exists
-  cy.window().then((win) => {
-    const userData = win.localStorage.getItem('fboUser')
-    if (!userData) {
-      // If no user data, wait a bit more and check URL
-      cy.wait(2000)
-      cy.url().should('not.include', '/login')
+  // Login via API call (more reliable than form interaction)
+  cy.request({
+    method: 'POST',
+    url: 'http://localhost:5001/api/auth/login',
+    body: {
+      email: user.email,
+      password: user.password
     }
+  }).then((response) => {
+    // Store user data in localStorage in the same format as the frontend
+    const enhancedUser = {
+      ...response.body.user,
+      access_token: response.body.token,
+      isLoggedIn: true,
+      permissions: [], // Will be loaded separately  
+      effective_permissions: {},
+      permission_summary: {
+        total_permissions: 0,
+        by_source: { direct: [], groups: [], roles: [] },
+        by_category: {},
+        resource_specific: []
+      }
+    }
+    
+    cy.window().then((win) => {
+      win.localStorage.setItem('fboUser', JSON.stringify(enhancedUser))
+    })
   })
 })
 

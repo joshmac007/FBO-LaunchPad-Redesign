@@ -1,3 +1,7 @@
+# CRITICAL: Apply eventlet monkey patching BEFORE any other imports
+import eventlet
+eventlet.monkey_patch()
+
 import os
 from flask import Flask, jsonify, current_app, request
 from flask_cors import CORS
@@ -7,7 +11,7 @@ import logging
 from datetime import datetime
 
 from src.config import config
-from src.extensions import db, migrate, jwt, apispec, marshmallow_plugin
+from src.extensions import db, migrate, jwt, apispec, marshmallow_plugin, socketio
 from src.cli import init_app as init_cli  # Import CLI initialization
 from src.schemas import (
     RegisterRequestSchema,
@@ -73,6 +77,7 @@ def create_app(config_name=None):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+    socketio.init_app(app)
     init_cli(app)
 
     # JWT User Lookup Loader - sets g.current_user automatically when JWT is present
@@ -122,6 +127,9 @@ def create_app(config_name=None):
     from src.routes.admin.fee_config_routes import admin_fee_config_bp
     from src.routes.enhanced_user_routes import enhanced_user_bp
     from src.routes.receipt_routes import receipt_bp
+    
+    # Import SocketIO routes to register event handlers
+    from src.routes import socketio_routes
 
     # Register blueprints with strict_slashes=False to prevent 308 redirects for both /api/resource and /api/resource/
     app.register_blueprint(auth_bp, url_prefix='/api/auth', strict_slashes=False)

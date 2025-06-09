@@ -17,3 +17,5 @@ flask_jwt_extended
 PyYAML==6.0.2
 alembic==1.15.2
 redis==5.0.1
+flask-socketio==5.3.6
+eventlet==0.36.1

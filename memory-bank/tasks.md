@@ -1,141 +1,107 @@
-Excellent. These are crucial business rules that will make the system much more robust and align it with real-world operational needs. Locking the `FuelOrder` after receipt creation prevents data integrity issues, and the void-and-recreate flow for receipts is a standard accounting practice.
 
-Here is the rewritten plan incorporating these new requirements.
+### **3. Implementation Plan (Tasks)**
+---
+# FBO Launchpad: Fueler System Implementation Plan (v2.0)
+
+This plan prioritizes testing at critical failure points using backend integration tests (`pytest`) and comprehensive end-to-end tests (`Cypress`).
+
+### Testing Strategy
+
+Our testing philosophy is to validate the system at its most important integration points.
+1.  **Backend Integration Tests (`pytest`):** Critical automated tests validating the API contract, business logic, race conditions, and data integrity.
+2.  **End-to-End Tests (`Cypress`):** Ultimate confirmation of user workflows, including network failure simulations.
 
 ---
 
-### **Plan 8: Linking Receipts, Locking Orders, and Handling Voids**
+## Phase 1: Backend Development & Integration Testing (`pytest`)
 
-*   **Objective:** Establish a clear, flexible link between a `FuelOrder` and its `Receipt`(s). Update the Fuel Order UI to dynamically show "Create Receipt" or "View Receipt" buttons. Implement logic to lock a `FuelOrder` from modification once an active receipt exists and provide a workflow for voiding receipts.
-*   **Relevant PRD Sections:** This enhances PRD Section 4.1 (Receipt Initiation) and introduces new business rules for data integrity and operational flexibility.
+**Objective:** Build and validate a secure, scalable, and correct backend API.
 
----
+### 1.1: Core Implementation & Database
+- [x] **Infrastructure:** Add `redis` service to `docker-compose.yml` and configure `Dockerfile` to use the `eventlet` worker class.
+- [x] **Dependencies:** Add `flask-socketio`, `eventlet`, and `redis` to `requirements.txt`.
+- [x] **Database:**
+    - [x] Add `change_version: Integer` and `gallons_dispensed: Numeric` to the `FuelOrder` model.
+    - [x] Generate and apply a single Alembic migration for both columns.
+- [x] **Services & Routes:**
+    - [x] Implement all new service methods in `fuel_order_service.py` (`claim_order`, `csr_update_order`, `acknowledge_order_change`, `complete_order_atomic`).
+    - [x] Implement all new API routes (`/claim`, `/csr-update`, `/acknowledge-change`, `/submit-data-atomic`) and modify existing ones in `fuel_order_routes.py`.
+- [x] **Event Logic:** Implement all WebSocket event emission logic within the service methods.
+- [x] **Security:** Implement the custom `@require_permission_socket` decorator.
 
-### **Phase 8.1: Backend - Data Model, API, and Business Logic** ✅ **COMPLETED**
+### 1.2: Critical Backend Test Points **NEXT**
+- [X] **Test Point: Atomic Order Claiming (Race Condition)**
+    - **Goal:** Verify that two users cannot claim the same order.
+    - **Test:** Write a `pytest` integration test using `threading` to have two fuelers simultaneously send a claim request for the same order.
+    - **Assert:** One request receives `200 OK`, the other receives `409 Conflict`.
+- [X] **Test Point: Order Completion & Truck State Update (Atomicity)**
+    - **Goal:** Verify that completing an order correctly updates the order and the fuel truck's meter in a single atomic transaction.
+    - **Test:** Write a `pytest` integration test that calls `PUT /submit-data`.
+    - **Assert (FuelOrder):** The order's `status`, `gallons_dispensed`, and meter readings are correct in the database.
+    - **Assert (FuelTruck):** The truck's `current_meter_reading` is updated to the `end_meter_reading`.
+- [X] **Test Point: CSR Update State Machine (Data Integrity)**
+    - **Goal:** Verify that an in-progress order cannot be modified by a fueler while a CSR change is pending.
+    - **Test:** Write a `pytest` integration test that simulates the full workflow:
+        1. Claim an order as a fueler.
+        2. As a CSR, send a `PATCH` to `/csr-update`. Assert `change_version` is incremented.
+        3. As the fueler, attempt to update the order's status (e.g., to `COMPLETED`). **Assert** this request fails with `409 Conflict`.
+        4. As the fueler, `POST` to `/acknowledge-change` with the correct `change_version`.
+        5. Re-attempt the status update. **Assert** it now succeeds.
+- [X] **Test Point: Server-Side Validation**
+    - **Goal:** Verify the API rejects invalid data.
+    - **Test:** Write a `pytest` test that sends a request to `PUT /submit-data` where `end_meter_reading` < `start_meter_reading`.
+    - **Assert:** The API returns a `400 Bad Request`.
 
-*   **Goal:** Implement the backend changes to support the one-to-many relationship, expose the "active" receipt, lock the fuel order, and handle receipt voiding.
+## Phase 2: Frontend Data Layer Development **COMPLETED**
 
-*   **Sub-Phase 8.1.1: Test Creation (Backend)** ✅ **COMPLETED**
-    *   **AI Agent - Test Creation Steps:**
-        1.  ✅ **Modified `test_fuel_order_api.py`:** Added `TestFuelOrderReceiptLinking` with 3 test cases:
-            *   **Test Case 1 (Order with Active Receipt):** Verifies `receipt_id` and `is_locked=true` fields
-            *   **Test Case 2 (Order with Voided Receipt):** Verifies `receipt_id=null` and `is_locked=false`
-            *   **Test Case 3 (Modify Locked Order Fails):** Verifies 400 error when modifying locked order
-        2.  ✅ **Created `test_receipt_api.py`:** Added `TestReceiptVoidAPI` with comprehensive void functionality tests
+**Objective:** Implement the `useRealtimeOrders` hook to manage all client-side state and resilience.
 
-*   **Sub-Phase 8.1.2: Backend Implementation** ✅ **COMPLETED**
-    *   **AI Agent - Backend Implementation Steps:**
-        1.  ✅ **Confirmed `FuelOrder` to `Receipt` Relationship:** Verified one-to-many relationship structure
-        2.  ✅ **Modified `FuelOrderResponseSchema`:** Added `receipt_id` and `is_locked` Method fields with logic:
-            ```python
-            receipt_id = fields.Method("get_active_receipt_id", allow_none=True)
-            is_locked = fields.Method("get_is_locked", dump_only=True)
+- [x] **Install Dependency:** Add `socket.io-client` to `frontend/package.json`.
+- [x] **Implement Hook:** Create and implement the `useRealtimeOrders.ts` hook.
+    - [x] Define the state, including Kanban columns, `connectionStatus`, and `actionQueue: Command[]`.
+    - [x] Implement the `useReducer` logic for all actions (initial load, optimistic updates, sync success/failure).
+    - [x] Implement the "Queued Actions Model" for handling `disconnect`/`reconnect` events and API failures.
 
-            def get_active_receipt_id(self, obj):
-                for receipt in obj.receipts:
-                    if receipt.status != ReceiptStatus.VOID:
-                        return receipt.id
-                return None
+## Phase 3: Frontend UI Development **COMPLETED**
 
-            def get_is_locked(self, obj):
-                return any(r.status != ReceiptStatus.VOID for r in obj.receipts)
-            ```
-        3.  ✅ **Implemented Order Locking in `FuelOrderService`:** Added check in `manual_update_order_status`:
-            ```python
-            active_receipt_exists = any(r.status != ReceiptStatus.VOID for r in order.receipts)
-            if active_receipt_exists:
-                raise ValueError("Cannot modify a Fuel Order that has an active receipt.")
-            ```
-        4.  ✅ **Implemented Receipt Voiding (`ReceiptService`):** Added `void_receipt()` method with proper validation and audit logging
-        5.  ✅ **Created Void Receipt API Route:** Added `POST /api/fbo/<int:fbo_id>/receipts/<int:receipt_id>/void` with `void_receipt` permission
-        6.  ✅ **Added Permission:** Added 'void_receipt' permission to seeds.py
+**Objective:** Build all UI components and connect them to the data hook.
 
----
+- [x] **Instrument UI for Testing:** Add `data-cy` attributes to key interactive elements (`kanban-column-*`, `order-card-*`, `claim-order-button-*`, `connection-status-banner`).
+- [x] **Component Implementation:**
+    - [x] Build `ConnectionStatusBanner.tsx`.
+    - [x] Build `OrderCard.tsx` with visual states for "Queued" and "Sync Failed".
+    - [x] Build `CompleteOrderDialog.tsx` with the real-time `gallons_dispensed` calculation.
+- [x] **Dashboard Integration:**
+    - [x] Refactor `dashboard/page.tsx` to use the `useRealtimeOrders` hook and render the Kanban board.
+    - [x] Implement the "pull-to-refresh" gesture on the "Available Orders" column.
+    - [x] Implement the high-contrast mode theme.
+- [x] **Code Cleanup:**
+    - [x] Delete obsolete page directories (`pending-orders/`, etc.).
+    - [x] Update the `AppSidebar` navigation.
 
-### **Phase 8.2: Frontend - UI and User Flow** ✅ **COMPLETED**
+## Phase 4: Comprehensive End-to-End Testing (`Cypress`) **COMPLETED**
 
-*   **Goal:** Update the UI to reflect the locked state of fuel orders and provide a clear, intuitive path for creating or viewing receipts.
+**Objective:** Validate complete user workflows across the entire system.
 
-*   **Sub-Phase 8.2.1: Frontend Service Updates** ✅ **COMPLETED**
-    *   **AI Agent - Frontend Service Steps:**
-        1.  ✅ **Updated `FuelOrderDisplay` Interface:** Added `receipt_id?: number | null` and `is_locked: boolean` fields
-        2.  ✅ **Updated `FuelOrderBackend` Interface:** Added corresponding backend fields
-        3.  ✅ **Enhanced `transformToDisplay` Function:** Added mapping for new fields
-        4.  ✅ **Added `voidReceipt` Function:** Implemented in receipt-service.ts with proper API integration
-
-*   **Sub-Phase 8.2.2: Frontend UI Implementation** ✅ **COMPLETED**
-    *   **AI Agent - Frontend UI Steps:**
-        1.  ✅ **Updated Fuel Order Detail Page (`/csr/fuel-orders/[id]/page.tsx`):**
-            *   **Locking Logic:** "Update Status" button disabled if `fuelOrder.is_locked` with tooltip explanation
-            *   **Dynamic Receipt Button Logic:** Three-state implementation:
-                ```jsx
-                {fuelOrder.receipt_id ? (
-                  <Link href={`/csr/receipts/${fuelOrder.receipt_id}`}>
-                    <Button>View Receipt</Button>
-                  </Link>
-                ) : (
-                  <CSRActionButton
-                    requiredPermission="create_receipt"
-                    onClick={handleCreateReceipt}
-                    disabled={!canCreateReceipt}
-                    title={!canCreateReceipt ? "Order must be completed or reviewed to create a receipt." : "Create Receipt"}
-                  >
-                    Create Receipt
-                  </CSRActionButton>
-                )}
-                ```
-        2.  ✅ **Enhanced Receipt Detail Page (`/csr/receipts/[id]/page.tsx`):**
-            *   **VOID Banner:** Large "VOID" watermark overlay when `receipt.status === 'VOID'`
-            *   **Void Receipt Button:** Available for GENERATED/PAID receipts with `void_receipt` permission
-            *   **Void Confirmation Dialog:** Requires reason, shows confirmation before voiding
-            *   **Action Button Management:** Disables other action buttons for VOID receipts
-
----
-
-### **Phase 8.3: Testing & Verification** 🔄 **IN PROGRESS**
-
-**Backend Environment Status:** ✅ **READY**
-- ✅ Database seeded with all permissions including 'void_receipt'
-- ✅ Permission groups configured and role assignments complete
-- ✅ Backend containers running (backend-backend-1, backend-db-1)
-- ✅ Enhanced permission system activated
-
-**Manual Verification Steps:** 📋 **PENDING USER TESTING**
-
-To complete Plan 8 verification, perform these manual tests in the running application:
-
-1. **Test Case 1: Create Receipt for Completed Order**
-   - Navigate to a `COMPLETED` fuel order → "Create Receipt" button should be **enabled**
-   - Create a receipt → Verify successful creation
-
-2. **Test Case 2: Order Locking Verification**  
-   - Go back to the fuel order from Test Case 1 → "View Receipt" button should be shown
-   - Verify "Update Status" button is **disabled** with tooltip: "Order is locked because a receipt has been generated."
-
-3. **Test Case 3: Disabled Create Receipt**
-   - Navigate to an `EN_ROUTE` fuel order → "Create Receipt" button should be **disabled**
-   - Tooltip should show: "Order must be completed or reviewed to create a receipt."
-
-4. **Test Case 4: Void Receipt Workflow**
-   - Go to the receipt created in Test Case 1 → Click "Void Receipt" button
-   - Enter a reason and confirm → Verify receipt page shows "VOID" watermark
-   - Verify other action buttons are disabled
-
-5. **Test Case 5: Void-and-Recreate Flow**
-   - Go back to the fuel order → "Create Receipt" should be **enabled** again
-   - "Update Status" should also be **enabled** again
-   - This confirms the complete void-and-recreate workflow
-
-**Frontend Testing Prerequisites:**
-- Ensure frontend dev server is running: `npm run dev` (should be on http://localhost:3000)
-- Login with CSR credentials: `csr@fbolaunchpad.com / CSR123!`
-- Ensure backend is accessible at http://localhost:5001
-
-**Plan 8 Objective Achievement:**
-✅ **IMPLEMENTATION COMPLETE** - Receipt linking, order locking, and void handling are fully implemented with robust business logic, comprehensive UI integration, and proper security controls. The system now prevents data integrity issues and supports standard accounting practices for receipt management.
-
-**Next Steps for Completion:**
-1. Start frontend dev server if not running
-2. Perform manual verification tests 1-5 above
-3. Document any issues found during testing
-4. Mark Plan 8 as fully complete once all tests pass
+- [X] **Cypress Test: The "Happy Path" Fueling Workflow** ✅ `fueler-happy-path.cy.ts`
+    - **Scenario:** A full order lifecycle.
+    - **Assert:** Order cards move smoothly between columns as actions are performed. The completion dialog calculates gallons correctly.
+    - **Additional Coverage:** Pull-to-refresh, order details display, high contrast mode toggle
+- [X] **Cypress Test: The "Claim Race" Condition** ✅ `fueler-claim-race.cy.ts`
+    - **Scenario:** Two fuelers attempt to claim the same order simultaneously.
+    - **Assert:** One fueler "wins" and the order moves to their queue. The other fueler "loses," sees a conflict notification, and the order is removed from their available list.
+    - **Additional Coverage:** Rapid successive claims, loading states, conflict notifications
+- [X] **Cypress Test: The "CSR Update & LST Acknowledgement" Workflow** ✅ `fueler-csr-update-acknowledgement.cy.ts`
+    - **Scenario:** A CSR updates an order that is already in progress.
+    - **Assert:** The order card is highlighted, buttons are disabled, the "Acknowledge Change" button appears, and functionality is restored after acknowledgement.
+    - **Additional Coverage:** Change version validation, updated order details display, WebSocket events
+- [X] **Cypress Test: The "Network Interruption & Queued Action" Workflow** ✅ `fueler-network-interruption.cy.ts`
+    - **Scenario:** The fueler's client loses connection, performs an action, and then reconnects.
+    - **Steps:**
+        1. Log in as a fueler.
+        2. Use `cy.intercept()` to block API calls, simulating a network disconnect.
+        3. Click "En Route" on an order.
+        4. **Assert:** The card moves optimistically but displays a "Queued" badge. The `ConnectionStatusBanner` shows "Reconnecting... 1 action queued".
+        5. Remove the `cy.intercept()` block to simulate the network returning.
+        6. **Assert:** The banner disappears, the "Queued" badge is removed, and the order state is confirmed as "En Route".
+    - **Additional Coverage:** Multiple queued actions, sync failures, retry functionality, order completion interruption, WebSocket disconnection, action persistence

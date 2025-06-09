@@ -78,7 +78,9 @@ def test_permissions(app, db):
             Permission(name='manage_fuel_orders', description='Can manage fuel orders'),
             Permission(name='view_fuel_orders', description='Can view fuel orders'),
             Permission(name='view_all_orders', description='Can view all fuel orders'),
+            Permission(name='view_assigned_orders', description='Can view assigned fuel orders'),
             Permission(name='complete_fuel_order', description='Can complete fuel orders'),
+            Permission(name='perform_fueling_task', description='Can perform fueling tasks'),
             Permission(name='manage_fuel_trucks', description='Can manage fuel trucks'),
             Permission(name='view_fuel_trucks', description='Can view fuel trucks'),
             Permission(name='manage_fbo_fee_schedules', description='Can manage FBO fee schedules'),
@@ -88,9 +90,13 @@ def test_permissions(app, db):
             Permission(name='generate_receipt', description='Can generate receipts'),
             Permission(name='mark_receipt_paid', description='Can mark receipts as paid'),
             Permission(name='view_receipts', description='Can view receipts'),
+            Permission(name='view_own_receipts', description='Can view own receipts'),
             Permission(name='edit_fuel_order', description='Can edit fuel orders'),
             Permission(name='update_order_status', description='Can update order status'),
-            Permission(name='void_receipt', description='Can void receipts')
+            Permission(name='void_receipt', description='Can void receipts'),
+            Permission(name='access_fueler_dashboard', description='Allows access to fueler dashboard'),
+            Permission(name='access_csr_dashboard', description='Allows access to CSR dashboard'),
+            Permission(name='access_admin_dashboard', description='Allows access to admin dashboard')
         ]
         for p in permissions:
             db.session.add(p)
@@ -111,13 +117,22 @@ def test_roles(app, db, test_permissions):
         csr_permissions = [perm_dict[n] for n in [
             'create_fuel_order', 'manage_fuel_orders', 'view_fuel_orders', 'view_all_orders', 'view_users',
             'create_receipt', 'update_receipt', 'calculate_receipt_fees', 'generate_receipt', 
-            'mark_receipt_paid', 'view_receipts', 'edit_fuel_order', 'update_order_status', 'void_receipt'
+            'mark_receipt_paid', 'view_receipts', 'edit_fuel_order', 'update_order_status', 'void_receipt',
+            'access_csr_dashboard'
         ] if n in perm_dict]
         csr_role.permissions.extend(csr_permissions)
-        # LST role gets limited permissions
+        # LST role gets permissions matching production permission groups
         lst_role = Role(name='Line Service Technician', description='Line service access')
         lst_permissions = [perm_dict[n] for n in [
-            'view_fuel_orders', 'complete_own_order', 'view_fuel_trucks'
+            # fuel_operations_basic permissions
+            'create_fuel_order', 'view_assigned_orders', 'update_order_status', 
+            'complete_fuel_order', 'perform_fueling_task',
+            # fleet_management_basic permissions  
+            'view_fuel_trucks',
+            # receipts_management_basic permissions
+            'view_own_receipts',
+            # dashboard_access_fueler permissions
+            'access_fueler_dashboard'
         ] if n in perm_dict]
         lst_role.permissions.extend(lst_permissions)
         roles = [admin_role, csr_role, lst_role]

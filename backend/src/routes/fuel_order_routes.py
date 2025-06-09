@@ -841,5 +841,190 @@ def get_fuel_order_statuses():
           application/json:
             schema: ErrorResponseSchema
     """
-    statuses = [status.value for status in FuelOrderStatus]
-    return jsonify(statuses), 200 
+    return jsonify({
+        'statuses': [status.value for status in FuelOrderStatus]
+    }), 200
+
+
+# =============================================================================
+# NEW FUELER SYSTEM ROUTES FOR REAL-TIME ORDER MANAGEMENT
+# =============================================================================
+
+@fuel_order_bp.route('/<int:order_id>/claim', methods=['POST'])
+@jwt_required()
+@require_permission_v2('access_fueler_dashboard')
+def claim_order(order_id):
+    """
+    Atomically claim an unassigned fuel order to prevent race conditions.
+    
+    This endpoint allows fuelers to claim orders that are currently unassigned.
+    The operation is atomic to prevent multiple fuelers from claiming the same order.
+    
+    Args:
+        order_id: The ID of the fuel order to claim
+        
+    Returns:
+        JSON response with order details and success/error message
+    """
+    try:
+        order, message, status_code = FuelOrderService.claim_order(order_id, g.current_user.id)
+        
+        if order:
+            return jsonify({
+                'message': message,
+                'order': order.to_dict()
+            }), status_code
+        else:
+            return jsonify({'error': message}), status_code
+            
+    except Exception as e:
+        logger.error(f"Error in claim_order endpoint: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@fuel_order_bp.route('/<int:order_id>/csr-update', methods=['PATCH'])
+@jwt_required()
+@require_any_permission_v2('manage_fuel_orders', 'edit_fuel_order')
+def csr_update_order(order_id):
+    """
+    Allow CSR to update order details and increment change version.
+    
+    This endpoint allows Customer Service Representatives to update order details
+    while the order is in progress. The fueler must acknowledge the changes before
+    continuing with order processing.
+    
+    Args:
+        order_id: The ID of the fuel order to update
+        
+    Request Body:
+        JSON object containing fields to update (e.g., requested_amount, location_on_ramp, etc.)
+        
+    Returns:
+        JSON response with updated order details and new change version
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        order, message, status_code = FuelOrderService.csr_update_order(
+            order_id, data, g.current_user.id
+        )
+        
+        if order:
+            return jsonify({
+                'message': message,
+                'order': order.to_dict(),
+                'change_version': order.change_version
+            }), status_code
+        else:
+            return jsonify({'error': message}), status_code
+            
+    except Exception as e:
+        logger.error(f"Error in csr_update_order endpoint: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@fuel_order_bp.route('/<int:order_id>/acknowledge-change', methods=['POST'])
+@jwt_required()
+@require_permission_v2('access_fueler_dashboard')
+def acknowledge_order_change(order_id):
+    """
+    Acknowledge CSR changes to allow fueler to continue with order processing.
+    
+    This endpoint allows fuelers to acknowledge changes made by CSRs to their orders.
+    Once acknowledged, the fueler can continue with normal order processing.
+    
+    Args:
+        order_id: The ID of the fuel order with pending changes
+        
+    Request Body:
+        JSON object containing:
+        - change_version: The version number of changes being acknowledged
+        
+    Returns:
+        JSON response confirming acknowledgment and updated order status
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'change_version' not in data:
+            return jsonify({'error': 'change_version is required'}), 400
+        
+        try:
+            change_version = int(data['change_version'])
+        except (ValueError, TypeError):
+            return jsonify({'error': 'change_version must be a valid integer'}), 400
+        
+        order, message, status_code = FuelOrderService.acknowledge_order_change(
+            order_id, change_version, g.current_user.id
+        )
+        
+        if order:
+            return jsonify({
+                'message': message,
+                'order': order.to_dict()
+            }), status_code
+        else:
+            return jsonify({'error': message}), status_code
+            
+    except Exception as e:
+        logger.error(f"Error in acknowledge_order_change endpoint: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@fuel_order_bp.route('/<int:order_id>/submit-data-atomic', methods=['PUT'])
+@jwt_required()
+@require_permission_v2('complete_fuel_order')
+def submit_fuel_data_atomic(order_id):
+    """
+    Atomically complete a fuel order with meter readings and truck updates.
+    
+    This endpoint provides atomic completion of fuel orders, ensuring that both
+    the order completion and fuel truck meter updates happen in a single transaction.
+    This prevents data inconsistencies and race conditions.
+    
+    Args:
+        order_id: The ID of the fuel order to complete
+        
+    Request Body:
+        JSON object containing:
+        - start_meter_reading: Starting meter reading (required)
+        - end_meter_reading: Ending meter reading (required)
+        - lst_notes: Optional notes from the Line Service Technician
+        
+    Returns:
+        JSON response with completed order details and calculated gallons dispensed
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        # Validate required fields
+        required_fields = ['start_meter_reading', 'end_meter_reading']
+        missing_fields = [field for field in required_fields if field not in data]
+        
+        if missing_fields:
+            return jsonify({
+                'error': f'Missing required fields: {", ".join(missing_fields)}'
+            }), 400
+        
+        order, message, status_code = FuelOrderService.complete_order_atomic(
+            order_id, data, g.current_user.id
+        )
+        
+        if order:
+            return jsonify({
+                'message': message,
+                'order': order.to_dict(),
+                'gallons_dispensed': float(order.gallons_dispensed) if order.gallons_dispensed else 0
+            }), status_code
+        else:
+            return jsonify({'error': message}), status_code
+            
+    except Exception as e:
+        logger.error(f"Error in submit_fuel_data_atomic endpoint: {e}")
+        return jsonify({'error': 'Internal server error'}), 500 
