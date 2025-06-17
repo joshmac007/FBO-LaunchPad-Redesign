@@ -1,4 +1,5 @@
 import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config"
+import { getCurrentUserFboId } from "./auth-service"
 import { isOfflineMode } from "./utils"
 
 // Receipt model - Updated for Plan 5 requirements
@@ -258,7 +259,7 @@ export async function getReceipts(): Promise<Receipt[]> {
   }
 
   // Online mode - fetch from API with proper FBO ID
-  const fboId = 1; // TODO: Get from user context/auth
+  const fboId = getCurrentUserFboId();
   const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts`, {
     method: "GET",
     headers: getAuthHeaders(),
@@ -284,7 +285,7 @@ export async function getRecentReceipts(limit: number = 5): Promise<Receipt[]> {
   }
 
   // Online mode - fetch from API with pagination
-  const fboId = 1; // TODO: Get from user context/auth
+  const fboId = getCurrentUserFboId();
   const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts?per_page=${limit}&page=1`, {
     method: "GET",
     headers: getAuthHeaders(),
@@ -298,8 +299,7 @@ export async function getRecentReceipts(limit: number = 5): Promise<Receipt[]> {
 
 // Get receipt by ID (alias for Plan 5 compatibility)
 export async function getReceiptById(id: number): Promise<ExtendedReceipt> {
-  // TODO: The FBO ID is hardcoded to 1.
-  const fboId = 1;
+  const fboId = getCurrentUserFboId();
 
   const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${id}`, {
     headers: getAuthHeaders(),
@@ -635,8 +635,7 @@ export function getReceiptStatistics(receipts: Receipt[]) {
 
 // Create draft receipt from fuel order
 export async function createDraftReceipt(fuelOrderId: number): Promise<ExtendedReceipt> {
-  // TODO: The FBO ID is hardcoded to 1. This needs to be dynamic in a multi-tenant environment.
-  const fboId = 1; 
+  const fboId = getCurrentUserFboId();
 
   const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/draft`, {
     method: 'POST',
@@ -897,7 +896,7 @@ export async function voidReceipt(receiptId: number, reason?: string): Promise<R
     return voidedReceipt
   }
 
-  const fboId = 1 // TODO: Get from context/auth
+  const fboId = getCurrentUserFboId();
   const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receiptId}/void`, {
     method: 'POST',
     headers: getAuthHeaders(),

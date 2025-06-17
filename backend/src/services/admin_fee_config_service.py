@@ -51,25 +51,62 @@ class AdminFeeConfigService:
             raise
 
     @staticmethod
-    def update_aircraft_type_fuel_waiver(aircraft_type_id: int, base_min_fuel_gallons: float) -> Dict[str, Any]:
-        """Update base min fuel for waiver for a specific aircraft type."""
+    def update_aircraft_type_fuel_waiver(fbo_location_id: int, aircraft_type_id: int, base_min_fuel_gallons: float) -> Dict[str, Any]:
+        """Update base min fuel for waiver for a specific aircraft type and FBO."""
         try:
+            from ..models.fbo_aircraft_type_config import FBOAircraftTypeConfig
+            
+            # Verify aircraft type exists
             aircraft_type = AircraftType.query.get(aircraft_type_id)
             if not aircraft_type:
                 raise ValueError("Aircraft type not found")
             
-            aircraft_type.base_min_fuel_gallons_for_waiver = base_min_fuel_gallons
+            # Create or update FBO-specific config
+            config = FBOAircraftTypeConfig.query.filter_by(
+                fbo_location_id=fbo_location_id,
+                aircraft_type_id=aircraft_type_id
+            ).first()
+            
+            if config:
+                config.base_min_fuel_gallons_for_waiver = base_min_fuel_gallons
+            else:
+                config = FBOAircraftTypeConfig(
+                    fbo_location_id=fbo_location_id,
+                    aircraft_type_id=aircraft_type_id,
+                    base_min_fuel_gallons_for_waiver=base_min_fuel_gallons
+                )
+                db.session.add(config)
+            
             db.session.commit()
             
             return {
-                'id': aircraft_type.id,
-                'name': aircraft_type.name,
-                'base_min_fuel_gallons_for_waiver': float(aircraft_type.base_min_fuel_gallons_for_waiver),
-                'updated_at': aircraft_type.updated_at.isoformat()
+                'id': config.id,
+                'fbo_location_id': config.fbo_location_id,
+                'aircraft_type_id': config.aircraft_type_id,
+                'aircraft_type_name': aircraft_type.name,
+                'base_min_fuel_gallons_for_waiver': float(config.base_min_fuel_gallons_for_waiver),
+                'updated_at': config.updated_at.isoformat()
             }
         except SQLAlchemyError as e:
             db.session.rollback()
             current_app.logger.error(f"Error updating aircraft type fuel waiver: {str(e)}")
+            raise
+
+    @staticmethod
+    def get_fbo_aircraft_type_configs(fbo_location_id: int) -> List[Dict[str, Any]]:
+        """Get all FBO-specific aircraft type configurations."""
+        try:
+            from ..models.fbo_aircraft_type_config import FBOAircraftTypeConfig
+            
+            configs = FBOAircraftTypeConfig.query.filter_by(
+                fbo_location_id=fbo_location_id
+            ).options(
+                joinedload(FBOAircraftTypeConfig.aircraft_type)
+            ).all()
+            
+            return [config.to_dict() for config in configs]
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Error fetching FBO aircraft type configs: {str(e)}")
             raise
 
     # Fee Categories CRUD
@@ -114,6 +151,11 @@ class AdminFeeConfigService:
         except SQLAlchemyError as e:
             current_app.logger.error(f"Error fetching fee category: {str(e)}")
             raise
+
+    @staticmethod
+    def get_fee_category_by_id(fbo_location_id: int, category_id: int) -> Optional[Dict[str, Any]]:
+        """Get a single fee category by ID for a specific FBO (alias for get_fee_category)."""
+        return AdminFeeConfigService.get_fee_category(fbo_location_id, category_id)
 
     @staticmethod
     def create_fee_category(fbo_location_id: int, name: str) -> Dict[str, Any]:
@@ -207,12 +249,18 @@ class AdminFeeConfigService:
 
     # Aircraft Type to Fee Category Mappings CRUD
     @staticmethod
-    def get_aircraft_type_mappings(fbo_location_id: int) -> List[Dict[str, Any]]:
-        """Get all aircraft type to fee category mappings for a specific FBO."""
+    def get_aircraft_type_mappings(fbo_location_id: int, category_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get all aircraft type to fee category mappings for a specific FBO, optionally filtered by fee category."""
         try:
-            mappings = AircraftTypeToFeeCategoryMapping.query.filter_by(
+            query = AircraftTypeToFeeCategoryMapping.query.filter_by(
                 fbo_location_id=fbo_location_id
-            ).options(
+            )
+            
+            # Apply category filter if provided
+            if category_id is not None:
+                query = query.filter_by(fee_category_id=category_id)
+            
+            mappings = query.options(
                 joinedload(AircraftTypeToFeeCategoryMapping.aircraft_type),
                 joinedload(AircraftTypeToFeeCategoryMapping.fee_category)
             ).all()
@@ -421,12 +469,16 @@ class AdminFeeConfigService:
 
     # Fee Rules CRUD
     @staticmethod
-    def get_fee_rules(fbo_location_id: int) -> List[Dict[str, Any]]:
-        """Get all fee rules for a specific FBO."""
+    def get_fee_rules(fbo_location_id: int, category_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get all fee rules for a specific FBO, optionally filtered by fee category."""
         try:
-            rules = FeeRule.query.filter_by(fbo_location_id=fbo_location_id).options(
-                joinedload(FeeRule.fee_category)
-            ).all()
+            query = FeeRule.query.filter_by(fbo_location_id=fbo_location_id)
+            
+            # Apply category filter if provided
+            if category_id is not None:
+                query = query.filter_by(applies_to_fee_category_id=category_id)
+            
+            rules = query.options(joinedload(FeeRule.fee_category)).all()
             
             return [
                 {

@@ -55,7 +55,7 @@ export interface UserUpdateRequest {
   password?: string // For password changes
 }
 
-// Interface for the brief user schema returned by /users?role=LST
+// Interface for the brief user schema returned by /users?role=Line Service Technician
 interface UserBriefSchema {
   id: number
   username?: string
@@ -74,7 +74,7 @@ export async function getActiveLSTs(): Promise<User[]> {
   try {
     // Use the non-admin users endpoint with role filter
     // This only requires view_users permission instead of manage_roles
-    const response = await fetch(`${API_BASE_URL}/users?role=LST&is_active=true`, {
+    const response = await fetch(`${API_BASE_URL}/users?role=Line Service Technician&is_active=true`, {
       method: "GET",
       headers: getAuthHeaders(),
     })
@@ -101,15 +101,24 @@ export async function getActiveLSTs(): Promise<User[]> {
 
 // Admin User CRUD Functions
 
-export async function getAllUsers(filters?: { role_ids?: number[]; is_active?: string }): Promise<User[]> {
-  let url = `${API_BASE_URL}/admin/users`
+export async function getAllUsers(filters?: { 
+  role_ids?: number[]; 
+  role?: string; 
+  is_active?: string 
+}): Promise<User[]> {
+  let url = `${API_BASE_URL}/users`
   const queryParams = new URLSearchParams()
 
   if (filters?.is_active !== undefined) {
     queryParams.append("is_active", filters.is_active)
   }
+  
   if (filters?.role_ids && filters.role_ids.length > 0) {
     filters.role_ids.forEach((id) => queryParams.append("role_ids", id.toString()))
+  }
+  
+  if (filters?.role) {
+    queryParams.append("role", filters.role)
   }
 
   if (queryParams.toString()) {
@@ -125,7 +134,7 @@ export async function getAllUsers(filters?: { role_ids?: number[]; is_active?: s
 }
 
 export async function createUser(userData: UserCreateRequest): Promise<User> {
-  const response = await fetch(`${API_BASE_URL}/admin/users`, {
+  const response = await fetch(`${API_BASE_URL}/users`, {
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify(userData),
@@ -135,7 +144,7 @@ export async function createUser(userData: UserCreateRequest): Promise<User> {
 }
 
 export async function updateUser(userId: number, userData: UserUpdateRequest): Promise<User> {
-  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+  const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
     method: "PATCH",
     headers: getAuthHeaders(),
     body: JSON.stringify(userData),
@@ -145,11 +154,14 @@ export async function updateUser(userId: number, userData: UserUpdateRequest): P
 }
 
 export async function deleteUser(userId: number): Promise<{ message: string }> {
-  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+  const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
     method: "DELETE",
     headers: getAuthHeaders(),
   })
-  // Assuming the response for delete is just { message: string } and not wrapped in "user"
+  // Note: /api/users DELETE returns 204 No Content, not a JSON message
+  if (response.status === 204) {
+    return { message: "User deleted successfully" }
+  }
   return handleApiResponse<{ message: string }>(response)
 }
 
@@ -174,7 +186,7 @@ export async function getRoles(): Promise<Role[]> {
 }
 
 export async function getAdminUserById(userId: number): Promise<User> {
-  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+  const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
     method: "GET",
     headers: getAuthHeaders(),
   })

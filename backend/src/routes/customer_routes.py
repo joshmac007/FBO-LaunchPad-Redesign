@@ -135,7 +135,7 @@ def create_customer():
         return jsonify({"error": "Server error"}), 500
 
 @customer_bp.route('/<int:customer_id>', methods=['GET'])
-@require_permission_v2('view_customers', 'customer', 'customer_id')
+@require_permission_v2('view_customers', {'resource_type': 'customer', 'id_param': 'customer_id'})
 def get_customer(customer_id):
     """Get a customer by ID.
     Requires view_customers permission for the specific customer.
@@ -192,7 +192,7 @@ def get_customer(customer_id):
         return jsonify({"error": "Server error"}), 500
 
 @customer_bp.route('/<int:customer_id>', methods=['PATCH'])
-@require_permission_v2('manage_customers', 'customer', 'customer_id')
+@require_permission_v2('manage_customers', {'resource_type': 'customer', 'id_param': 'customer_id'})
 def update_customer(customer_id):
     """Update a customer.
     Requires manage_customers permission for the specific customer.
@@ -278,7 +278,7 @@ def update_customer(customer_id):
         return jsonify({"error": "Server error"}), 500
 
 @customer_bp.route('/<int:customer_id>', methods=['DELETE'])
-@require_permission_v2('manage_customers', 'customer', 'customer_id')
+@require_permission_v2('manage_customers', {'resource_type': 'customer', 'id_param': 'customer_id'})
 def delete_customer(customer_id):
     """Delete a customer.
     Requires manage_customers permission for the specific customer.

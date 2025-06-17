@@ -75,7 +75,7 @@ def create_role():
     return jsonify(schema.dump(role)), status
 
 @admin_bp.route('/roles/<int:role_id>', methods=['GET'])
-@require_permission_v2('view_roles', 'role', 'role_id')
+@require_permission_v2('view_roles', {'resource_type': 'role', 'id_param': 'role_id'})
 def get_role(role_id):
     """
     ---
@@ -105,7 +105,7 @@ def get_role(role_id):
     return jsonify(schema.dump(role)), status
 
 @admin_bp.route('/roles/<int:role_id>', methods=['PATCH'])
-@require_permission_v2('manage_roles', 'role', 'role_id')
+@require_permission_v2('manage_roles', {'resource_type': 'role', 'id_param': 'role_id'})
 def update_role(role_id):
     """
     ---
@@ -143,7 +143,7 @@ def update_role(role_id):
     return jsonify(schema.dump(role)), status
 
 @admin_bp.route('/roles/<int:role_id>', methods=['DELETE'])
-@require_permission_v2('manage_roles', 'role', 'role_id')
+@require_permission_v2('manage_roles', {'resource_type': 'role', 'id_param': 'role_id'})
 def delete_role(role_id):
     """
     ---
@@ -171,7 +171,7 @@ def delete_role(role_id):
     return '', 204
 
 @admin_bp.route('/roles/<int:role_id>/permissions', methods=['GET'])
-@require_permission_v2('view_role_permissions', 'role', 'role_id')
+@require_permission_v2('view_role_permissions', {'resource_type': 'role', 'id_param': 'role_id'})
 def get_role_permissions(role_id):
     """
     ---

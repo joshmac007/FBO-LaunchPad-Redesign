@@ -15,6 +15,7 @@ from .fuel_order import FuelOrder, FuelOrderStatus
 from .aircraft_type import AircraftType
 from .fee_category import FeeCategory
 from .aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
+from .fbo_aircraft_type_config import FBOAircraftTypeConfig
 from .fee_rule import FeeRule, CalculationBasis, WaiverStrategy
 from .waiver_tier import WaiverTier
 from .receipt import Receipt, ReceiptStatus
@@ -42,6 +43,7 @@ __all__ = [
     'AircraftType',
     'FeeCategory',
     'AircraftTypeToFeeCategoryMapping',
+    'FBOAircraftTypeConfig',
     'FeeRule',
     'CalculationBasis',
     'WaiverStrategy',

@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { AlertTriangle, Clock, Fuel, User, FileText } from "lucide-react"
+import { AlertTriangle, Clock, Fuel, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { FuelOrder } from "@/hooks/useRealtimeOrders"
 
@@ -16,6 +16,12 @@ interface OrderCardProps {
 
 export function OrderCard({ order, onAction, currentUserId, className }: OrderCardProps) {
   const isMyOrder = order.assigned_to_id === currentUserId
+  
+  // Check if order has pending CSR changes that need acknowledgment
+  const hasPendingChanges = Boolean(order.change_version && 
+    typeof order.change_version === 'number' && 
+    order.change_version > 0 &&
+    (!order.acknowledged_change_version || order.change_version > order.acknowledged_change_version))
   
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -89,6 +95,22 @@ export function OrderCard({ order, onAction, currentUserId, className }: OrderCa
       )
     }
 
+    // If order has pending CSR changes, show acknowledge button
+    if (hasPendingChanges && isMyOrder) {
+      return (
+        <Button 
+          size="sm" 
+          variant="outline"
+          onClick={() => onAction('acknowledge_change', order.id)}
+          disabled={order.isQueued}
+          data-cy={`acknowledge-changes-button-${order.id}`}
+          className="border-orange-300 text-orange-700 hover:bg-orange-50"
+        >
+          {order.isQueued ? 'Acknowledging...' : 'Acknowledge Changes'}
+        </Button>
+      )
+    }
+
     switch (order.status) {
       case "Dispatched":
         return (
@@ -106,7 +128,7 @@ export function OrderCard({ order, onAction, currentUserId, className }: OrderCa
           <Button 
             size="sm"
             onClick={() => onAction('en_route', order.id)}
-            disabled={order.isQueued}
+            disabled={order.isQueued || hasPendingChanges}
             data-cy={`en-route-button-${order.id}`}
           >
             {order.isQueued ? 'Updating...' : 'En Route'}
@@ -117,7 +139,7 @@ export function OrderCard({ order, onAction, currentUserId, className }: OrderCa
           <Button 
             size="sm"
             onClick={() => onAction('start_fueling', order.id)}
-            disabled={order.isQueued}
+            disabled={order.isQueued || hasPendingChanges}
             data-cy={`start-fueling-button-${order.id}`}
           >
             {order.isQueued ? 'Updating...' : 'Start Fueling'}
@@ -128,38 +150,50 @@ export function OrderCard({ order, onAction, currentUserId, className }: OrderCa
           <Button 
             size="sm"
             onClick={() => onAction('complete', order.id)}
-            disabled={order.isQueued}
+            disabled={order.isQueued || hasPendingChanges}
             data-cy={`complete-order-button-${order.id}`}
           >
             {order.isQueued ? 'Completing...' : 'Complete'}
           </Button>
         ) : null
       case "Completed":
-        return (
-          <Button 
-            size="sm" 
-            variant="outline"
-            onClick={() => onAction('view_receipt', order.id)}
-            data-cy={`view-receipt-button-${order.id}`}
-          >
-            <FileText className="h-4 w-4 mr-1" />
-            Receipt
-          </Button>
-        )
+        return null // No action button for completed orders per PRD
       default:
         return null
     }
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString()
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'No date available'
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) {
+        return 'Invalid date'
+      }
+      return date.toLocaleString()
+    } catch (error) {
+      return 'Invalid date'
+    }
   }
 
   const calculateGallonsDispensed = () => {
-    if (order.start_meter_reading && order.end_meter_reading) {
-      return (order.end_meter_reading - order.start_meter_reading).toFixed(2)
+    // First try calculated_gallons_dispensed (backend calculated field)
+    if (order.calculated_gallons_dispensed) {
+      return parseFloat(order.calculated_gallons_dispensed).toFixed(2)
     }
-    return order.gallons_dispensed?.toFixed(2) || null
+    // Then try gallons_dispensed field
+    if (order.gallons_dispensed) {
+      return parseFloat(order.gallons_dispensed.toString()).toFixed(2)
+    }
+    // Then try to calculate from meter readings
+    if (order.start_meter_reading && order.end_meter_reading) {
+      return (parseFloat(order.end_meter_reading.toString()) - parseFloat(order.start_meter_reading.toString())).toFixed(2)
+    }
+    // For completed orders without any dispensed data, show requested amount as fallback
+    if (order.status === 'Completed') {
+      return order.gallons_requested?.toFixed(2) || null
+    }
+    return null
   }
 
   return (
@@ -212,14 +246,10 @@ export function OrderCard({ order, onAction, currentUserId, className }: OrderCa
       
       <CardContent className="pt-4">
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <div className="space-y-1">
               <div className="text-sm font-medium text-muted-foreground">Fuel Type</div>
               <div className="text-sm">{order.fuel_type}</div>
-            </div>
-            <div className="space-y-1">
-              <div className="text-sm font-medium text-muted-foreground">Service</div>
-              <div className="text-sm">{order.service_type}</div>
             </div>
           </div>
           
@@ -258,7 +288,7 @@ export function OrderCard({ order, onAction, currentUserId, className }: OrderCa
       <CardFooter className="border-t bg-muted/30 flex justify-between items-center">
         <div className="text-xs text-muted-foreground">
           {order.status === "Completed" 
-            ? `Completed: ${formatDate(order.updated_at)}`
+            ? `Completed: ${formatDate(order.completion_timestamp || order.completed_at || order.updated_at)}`
             : `Created: ${formatDate(order.created_at)}`
           }
         </div>

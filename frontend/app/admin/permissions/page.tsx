@@ -259,42 +259,7 @@ export default function PermissionsPage() {
   }
 
   return (
-    // <ProtectedRoute requiredPermission="manage_roles">
-      <div className="min-h-screen bg-background">
-        {/* Admin Header */}
-        <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-40">
-          <div className="container flex h-16 items-center justify-between px-4">
-            <div className="flex items-center gap-2">
-              <Plane className="h-6 w-6 text-primary rotate-45" />
-              <span className="text-xl font-bold">FBO LaunchPad</span>
-              <span className="bg-primary/10 text-primary text-xs px-2 py-1 rounded-md ml-2">Admin</span>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" className="gap-2">
-                <Bell className="h-4 w-4" />
-                <span className="sr-only">Notifications</span>
-              </Button>
-              <Button variant="ghost" size="sm" className="gap-2">
-                <Settings className="h-4 w-4" />
-                <span className="sr-only">Settings</span>
-              </Button>
-              <div className="flex items-center gap-2">
-                <div className="rounded-full bg-primary/10 p-1">
-                  <User className="h-5 w-5 text-primary" />
-                </div>
-                <span className="text-sm font-medium hidden md:inline-block">Administrator</span>
-              </div>
-              <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
-                <LogOut className="h-4 w-4" />
-                <span className="hidden md:inline-block">Logout</span>
-              </Button>
-            </div>
-          </div>
-        </header>
-
-        <main className="container px-4 md:px-6 py-6 md:py-8">
-          <div className="flex flex-col gap-6">
+      <div className="space-y-6 p-4 md:p-6">
             <div className="flex items-center justify-between">
               <h1 className="text-3xl font-bold">Permissions & Roles</h1>
               <Button variant="outline" size="sm" onClick={() => window.location.href = "/admin/dashboard"} className="gap-2">
@@ -442,7 +407,7 @@ export default function PermissionsPage() {
                                 </div>
                                 <div className="flex flex-wrap gap-1">
                                   {(role.permissions || []).slice(0, 5).map((permissionId) => {
-                                    const permission = permissions.find((p) => p.id === permissionId)
+                                    const permission = permissions.find((p) => p.id.toString() === permissionId.toString())
                                     return permission ? (
                                       <Badge key={permissionId} variant="secondary" className="text-xs">
                                         {permission.name}
@@ -580,8 +545,8 @@ export default function PermissionsPage() {
                                   <label key={permission.id} className="flex items-center space-x-2 text-sm">
                                     <input
                                       type="checkbox"
-                                      checked={newRole.permissions.includes(permission.id)}
-                                      onChange={() => handlePermissionToggle(permission.id)}
+                                      checked={newRole.permissions.includes(permission.id.toString())}
+                                      onChange={() => handlePermissionToggle(permission.id.toString())}
                                       className="rounded border-gray-300"
                                     />
                                     <span>{permission.name}</span>
@@ -709,9 +674,6 @@ export default function PermissionsPage() {
               </div>
             )}
             */}
-          </div>
-        </main>
-      </div>
-    // </ProtectedRoute>
+    </div>
   )
 }

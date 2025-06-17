@@ -72,7 +72,6 @@ import {
   type AdminAircraftUpdateRequest,
 } from "../../services/aircraft-service"
 import { toast } from "sonner"
-import AdminLayout from '../layout'
 import { Badge } from '@/components/ui/badge'
 
 export default function AdminAircraftPage() {
@@ -136,7 +135,7 @@ export default function AdminAircraftPage() {
 
     // Filter by fuel type
     if (fuelTypeFilter) {
-      filtered = filtered.filter((ac) => ac.preferredFuelType === fuelTypeFilter)
+      filtered = filtered.filter((ac) => ac.fuelType === fuelTypeFilter)
     }
 
     setFilteredAircraft(filtered)
@@ -145,9 +144,9 @@ export default function AdminAircraftPage() {
   const handleEditClick = (aircraft: Aircraft) => {
     setSelectedAircraft(aircraft)
     setEditAircraftData({
-      aircraft_type: aircraft.type,
-      fuel_type: aircraft.preferredFuelType,
-      customer_id: aircraft.customer_id,
+      aircraft_type: aircraft.aircraftType,
+      fuel_type: aircraft.fuelType,
+      customer_id: aircraft.customerId,
     })
     setEditFormError(null)
     setIsEditDialogOpen(true)
@@ -286,7 +285,7 @@ export default function AdminAircraftPage() {
   }
 
   // Get unique fuel types for filter
-  const uniqueFuelTypes = Array.from(new Set(aircraft.map((ac) => ac.preferredFuelType)))
+  const uniqueFuelTypes = Array.from(new Set(aircraft.map((ac) => ac.fuelType)))
 
   if (isLoading) {
     return (
@@ -297,9 +296,8 @@ export default function AdminAircraftPage() {
   }
 
   return (
-    <AdminLayout>
-      <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
+      <div className="space-y-6 p-4 md:p-6">
+        <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold">Aircraft Management</h1>
           
           <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
@@ -411,19 +409,10 @@ export default function AdminAircraftPage() {
         </div>
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
             {error}
           </div>
         )}
-
-        <div className="mb-4">
-          <Input
-            placeholder="Search aircraft by tail number, manufacturer, or model..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="max-w-md"
-          />
-        </div>
 
                  <Card>
            <CardHeader>
@@ -486,22 +475,14 @@ export default function AdminAircraftPage() {
                  {filteredAircraft.map((aircraft) => (
                    <TableRow key={aircraft.id}>
                      <TableCell className="font-medium">{aircraft.tailNumber}</TableCell>
-                     <TableCell>{aircraft.type}</TableCell>
-                     <TableCell>{aircraft.preferredFuelType}</TableCell>
+                     <TableCell>{aircraft.aircraftType}</TableCell>
+                     <TableCell>{aircraft.fuelType}</TableCell>
                      <TableCell>
-                       {aircraft.customer_id ? `Customer ID: ${aircraft.customer_id}` : "N/A"}
+                       {aircraft.customerId ? `Customer ID: ${aircraft.customerId}` : "N/A"}
                      </TableCell>
                      <TableCell>
-                       <span
-                         className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                           aircraft.status === "active"
-                             ? "bg-green-100 text-green-800"
-                             : aircraft.status === "maintenance"
-                             ? "bg-yellow-100 text-yellow-800"
-                             : "bg-gray-100 text-gray-800"
-                         }`}
-                       >
-                         {aircraft.status}
+                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                         Active
                        </span>
                      </TableCell>
                      <TableCell>
@@ -637,9 +618,8 @@ export default function AdminAircraftPage() {
              </DialogFooter>
            </DialogContent>
          </Dialog>
-      </div>
 
-      {/* Delete Aircraft Confirmation Dialog */}
+         {/* Delete Aircraft Confirmation Dialog */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={(open) => {
         setIsDeleteDialogOpen(open)
         if (!open) resetDeleteState()
@@ -677,6 +657,6 @@ export default function AdminAircraftPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </AdminLayout>
+    </div>
   )
 } 

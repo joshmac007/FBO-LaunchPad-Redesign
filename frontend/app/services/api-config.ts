@@ -14,9 +14,23 @@ export async function handleApiResponse<T>(response: Response): Promise<T> {
     try {
       const errorJson = JSON.parse(errorText)
       const userMessage = errorJson.error || errorJson.message || 'Authentication required'
+      
+      // Log the authentication failure for debugging
+      console.warn("Authentication failed:", userMessage)
+      
+      // Redirect to login if authentication fails
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem("fboUser")
+        window.location.href = '/login'
+      }
+      
       throw new Error(`Authentication required: ${userMessage}`)
     } catch (parseError) {
       // Fallback to raw text if JSON parsing fails
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem("fboUser")
+        window.location.href = '/login'
+      }
       throw new Error(`Authentication required: Please log in to access this resource`)
     }
   }
@@ -31,6 +45,19 @@ export async function handleApiResponse<T>(response: Response): Promise<T> {
       
       // Check for common error message fields
       const userMessage = errorJson.error || errorJson.message || errorJson.details || errorText
+      
+      // Enhanced error handling for specific cases
+      if (response.status === 409) {
+        // Conflict errors (like trying to delete a category with dependencies)
+        if (typeof userMessage === 'string') {
+          throw new Error(userMessage)
+        }
+        throw new Error("Operation failed due to a conflict. The resource may be in use by other items.")
+      }
+      
+      if (response.status === 404) {
+        throw new Error("The requested resource was not found.")
+      }
       
       // If we have a structured error with details, use the main error message
       if (typeof userMessage === 'string') {
@@ -47,12 +74,18 @@ export async function handleApiResponse<T>(response: Response): Promise<T> {
   }
 
   try {
+    // Handle DELETE requests that return empty responses
+    if (response.status === 204) {
+      return undefined as T
+    }
+    
     // Try to parse as JSON, but handle non-JSON responses gracefully
     const contentType = response.headers.get("content-type")
     if (contentType && contentType.includes("application/json")) {
       return await response.json()
     } else {
-      throw new Error("API returned non-JSON response")
+      // For non-JSON responses, return empty object for successful requests
+      return {} as T
     }
   } catch (error) {
     console.error("Error parsing API response:", error)
@@ -60,27 +93,50 @@ export async function handleApiResponse<T>(response: Response): Promise<T> {
   }
 }
 
-// Helper to get auth headers
+// Helper to get auth headers with improved error handling
 export function getAuthHeaders(): Record<string, string> {
-  // Get token from localStorage
-  const userData = localStorage.getItem("fboUser")
-  if (!userData) {
-    return { "Content-Type": "application/json" }
-  }
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
 
   try {
-    const user = JSON.parse(userData)
-    if (user.access_token) {
-      return {
-        Authorization: `Bearer ${user.access_token}`,
-        "Content-Type": "application/json",
+    // Get user object string from localStorage
+    const userStr = localStorage.getItem("fboUser");
+    if (userStr) {
+      // Parse the user object
+      const user = JSON.parse(userStr);
+      // Extract the access token
+      if (user && user.access_token) {
+        headers["Authorization"] = `Bearer ${user.access_token}`;
+      } else {
+        console.warn("User object found but no access_token available");
       }
+    } else {
+      console.warn("No user object found in localStorage");
     }
-  } catch (e) {
-    console.error("Error parsing user data", e)
+  } catch (error) {
+    console.error("Failed to parse user from localStorage or get token:", error);
+    // Clear invalid user data
+    localStorage.removeItem("fboUser");
   }
 
-  return { "Content-Type": "application/json" }
+  return headers;
+}
+
+// Add a function to check if user is authenticated
+export function isAuthenticated(): boolean {
+  try {
+    const userStr = localStorage.getItem("fboUser");
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      return !!(user && user.access_token);
+    }
+    return false;
+  } catch (error) {
+    console.error("Error checking authentication status:", error);
+    localStorage.removeItem("fboUser");
+    return false;
+  }
 }
 
 // Add a function to check API health

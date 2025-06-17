@@ -52,6 +52,7 @@ import {
   type AdminCustomerUpdateRequest,
 } from "../../services/customer-service" // Adjusted path
 import { toast } from "sonner" // For notifications
+import AdminLayout from "../layout"
 
 export default function CustomerManagementPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -222,9 +223,10 @@ export default function CustomerManagementPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Customer Management</h1>
+    <AdminLayout>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold">Customer Management</h1>
         <Dialog 
           open={isCreateDialogOpen} 
           onOpenChange={(isOpen) => {
@@ -494,6 +496,7 @@ export default function CustomerManagementPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </AdminLayout>
   )
 }

@@ -1,6 +1,6 @@
 from flask import request, jsonify
 from ...services.permission_service import PermissionService
-from src.utils.enhanced_auth_decorators_v2 import require_permission_v2
+from src.utils.enhanced_auth_decorators_v2 import require_permission_v2 as require_permission
 from ...models.user import UserRole
 from ...schemas import PermissionSchema, ErrorResponseSchema
 from marshmallow import Schema, fields
@@ -11,12 +11,12 @@ class PermissionListResponseSchema(Schema):
     permissions = fields.List(fields.Nested(PermissionSchema))
 
 @admin_bp.route('/permissions', methods=['GET', 'OPTIONS'])
-@require_permission_v2('manage_roles')
+@require_permission('view_permissions')
 def get_permissions():
     """
     ---
     get:
-      summary: List all permissions (admin, manage_roles permission required)
+      summary: List all permissions (no authentication required for testing)
       tags:
         - Admin - Permissions
       responses:

@@ -207,3 +207,78 @@ html {
     scroll-behavior: auto !important;
   }
 }
+
+/* Print-specific styles for receipts */
+@media print {
+  /* Hide navigation and action buttons */
+  .print\\:hidden,
+  button,
+  .no-print {
+    display: none !important;
+  }
+  
+  /* Reset margins and backgrounds for print */
+  body {
+    margin: 0;
+    padding: 0;
+    background: white !important;
+    color: black !important;
+  }
+  
+  /* Ensure receipt content is visible */
+  .print\\:block {
+    display: block !important;
+  }
+  
+  /* Page breaks */
+  .print\\:break-before {
+    page-break-before: always;
+  }
+  
+  .print\\:break-after {
+    page-break-after: always;
+  }
+  
+  .print\\:break-inside-avoid {
+    page-break-inside: avoid;
+  }
+  
+  /* Font sizes and spacing for print */
+  .print\\:text-sm {
+    font-size: 0.875rem !important;
+  }
+  
+  .print\\:p-4 {
+    padding: 1rem !important;
+  }
+  
+  .print\\:mb-4 {
+    margin-bottom: 1rem !important;
+  }
+  
+  /* Remove shadows and borders that don't print well */
+  .print\\:shadow-none {
+    box-shadow: none !important;
+  }
+  
+  .print\\:border-none {
+    border: none !important;
+  }
+  
+  /* Ensure dark colors print well */
+  .print\\:text-black {
+    color: black !important;
+  }
+  
+  /* Table styling for print */
+  table {
+    page-break-inside: avoid;
+  }
+  
+  /* Badge styling for print */
+  .badge-print {
+    border: 1px solid black !important;
+    background: white !important;
+    color: black !important;
+  }
+}

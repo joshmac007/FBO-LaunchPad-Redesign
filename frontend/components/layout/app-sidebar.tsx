@@ -43,6 +43,7 @@ interface NavItem {
   href: string
   icon: React.ReactNode
   permissions: string[]
+  requiredRoles?: string[] // Add this field for role-based checks
   description?: string
 }
 
@@ -96,41 +97,47 @@ export default function AppSidebar({ collapsed, setCollapsed, userRole = "csr" }
       href: "/admin/dashboard",
       icon: <Home className="h-5 w-5" />,
       permissions: ['access_admin_dashboard'],
-      description: "Admin overview and system management"
+      requiredRoles: ['System Administrator'], // Added role check
+      description: "System-wide settings and management"
     },
     {
       title: "User Management",
       href: "/admin/users",
       icon: <Users className="h-5 w-5" />,
       permissions: ['manage_users'],
-      description: "Manage system users and their access"
-    },
-    {
-      title: "Permissions",
-      href: "/admin/permissions",
-      icon: <Shield className="h-5 w-5" />,
-      permissions: ['view_permissions'],
-      description: "Configure user permissions and roles"
-    },
-    {
-      title: "Fuel Trucks",
-      href: "/admin/fuel-trucks",
-      icon: <Truck className="h-5 w-5" />,
-      permissions: ['manage_fuel_trucks'],
-      description: "Manage fuel truck fleet"
+      requiredRoles: ['System Administrator'], // Added role check
+      description: "Manage user accounts"
     },
     {
       title: "LST Management",
       href: "/admin/lst-management",
       icon: <UserCheck className="h-5 w-5" />,
       permissions: ['manage_users'],
+      requiredRoles: ['System Administrator'], // Added role check
       description: "Manage Line Service Technicians"
+    },
+    {
+      title: "Permissions",
+      href: "/admin/permissions",
+      icon: <Shield className="h-5 w-5" />,
+      permissions: ['manage_roles'],
+      requiredRoles: ['System Administrator'], // Added role check
+      description: "Manage roles and permissions"
+    },
+    {
+      title: "Fuel Trucks",
+      href: "/admin/fuel-trucks",
+      icon: <Truck className="h-5 w-5" />,
+      permissions: ['manage_fuel_trucks'],
+      requiredRoles: ['System Administrator'], // Added role check
+      description: "Manage fuel truck fleet"
     },
     {
       title: "Customer Management",
       href: "/admin/customers",
       icon: <Users className="h-5 w-5" />,
       permissions: ['manage_customers'],
+      requiredRoles: ['System Administrator'], // Added role check
       description: "Manage customer accounts"
     },
     {
@@ -138,35 +145,16 @@ export default function AppSidebar({ collapsed, setCollapsed, userRole = "csr" }
       href: "/admin/aircraft",
       icon: <Plane className="h-5 w-5" />,
       permissions: ['manage_aircraft'],
+      requiredRoles: ['System Administrator'], // Added role check
       description: "Manage aircraft records and registration"
     },
     {
-      title: "Fee Categories",
-      href: "/admin/fbo-config/fee-categories",
+      title: "Fee Management",
+      href: "/admin/fbo-config/fee-management",
       icon: <Settings className="h-5 w-5" />,
       permissions: ['manage_fbo_fee_schedules'],
-      description: "Manage aircraft fee categories"
-    },
-    {
-      title: "Fee Rules",
-      href: "/admin/fbo-config/fee-rules",
-      icon: <Receipt className="h-5 w-5" />,
-      permissions: ['manage_fbo_fee_schedules'],
-      description: "Configure fee rules and CAA overrides"
-    },
-    {
-      title: "Aircraft Mappings",
-      href: "/admin/fbo-config/aircraft-mappings",
-      icon: <Plane className="h-5 w-5" />,
-      permissions: ['manage_fbo_fee_schedules'],
-      description: "Map aircraft types to fee categories"
-    },
-    {
-      title: "Waiver Tiers",
-      href: "/admin/fbo-config/waiver-tiers",
-      icon: <CheckCircle className="h-5 w-5" />,
-      permissions: ['manage_fbo_fee_schedules'],
-      description: "Configure waiver tier strategies"
+      requiredRoles: ['System Administrator'],
+      description: "Manage fee categories, rules, and waivers"
     },
 
     // CSR Navigation
@@ -175,27 +163,31 @@ export default function AppSidebar({ collapsed, setCollapsed, userRole = "csr" }
       href: "/csr/dashboard",
       icon: <Home className="h-5 w-5" />,
       permissions: ['access_csr_dashboard'],
-      description: "Customer service overview"
+      requiredRoles: ['Customer Service Representative', 'System Administrator'], // Added role check
+      description: "Main dashboard for CSRs"
     },
     {
       title: "Fuel Orders",
       href: "/csr/fuel-orders",
       icon: <FileText className="h-5 w-5" />,
-      permissions: ['view_all_orders', 'create_order', 'edit_fuel_order'],
-      description: "Manage fuel orders and requests"
+      permissions: ['view_all_orders', 'create_fuel_order'],
+      requiredRoles: ['Customer Service Representative', 'System Administrator'], // Added role check
+      description: "Manage all fuel orders"
     },
     {
       title: "Receipts",
       href: "/csr/receipts",
       icon: <Receipt className="h-5 w-5" />,
-      permissions: ['view_all_receipts'],
-      description: "View and manage transaction receipts"
+      permissions: ['view_receipts', 'create_receipt'],
+      requiredRoles: ['Customer Service Representative', 'System Administrator'], // Added role check
+      description: "Manage and issue receipts"
     },
     {
       title: "Export Data",
       href: "/csr/export",
       icon: <BarChart3 className="h-5 w-5" />,
       permissions: ['export_order_data', 'view_order_statistics'],
+      requiredRoles: ['Customer Service Representative', 'System Administrator'], // Added role check
       description: "Export data and generate reports"
     },
 
@@ -203,9 +195,18 @@ export default function AppSidebar({ collapsed, setCollapsed, userRole = "csr" }
     {
       title: "Fueler Dashboard",
       href: "/fueler/dashboard",
-      icon: <Home className="h-5 w-5" />,
+      icon: <Droplet className="h-5 w-5" />,
       permissions: ['access_fueler_dashboard'],
-      description: "Fueling operations overview"
+      requiredRoles: ['Line Service Technician', 'System Administrator'], // Added role check
+      description: "Dashboard for LSTs to manage fuel orders"
+    },
+    {
+      title: "Completed Orders",
+      href: "/fueler/completed",
+      icon: <CheckCircle className="h-5 w-5" />,
+      permissions: ['access_fueler_dashboard'],
+      requiredRoles: ['Line Service Technician', 'System Administrator'], // Added role check
+      description: "View your completed orders"
     },
 
     // Member Navigation
@@ -213,8 +214,9 @@ export default function AppSidebar({ collapsed, setCollapsed, userRole = "csr" }
       title: "Member Dashboard",
       href: "/member/dashboard",
       icon: <Home className="h-5 w-5" />,
-      permissions: ['access_member_dashboard'],
-      description: "Personal account overview"
+      permissions: [], // No specific permission, just role
+      requiredRoles: ['Member', 'System Administrator'], // Added role check
+      description: "Dashboard for members"
     },
   ]
 
@@ -224,9 +226,20 @@ export default function AppSidebar({ collapsed, setCollapsed, userRole = "csr" }
       return [] // Show no items while loading
     }
 
-    return allNavItems.filter(item => 
-      canAny(item.permissions)
-    )
+    const userRoles = permissionUser?.roles || []
+
+    return allNavItems.filter(item => {
+      // If requiredRoles is defined, use it for access control.
+      if (item.requiredRoles && item.requiredRoles.length > 0) {
+        return item.requiredRoles.some(requiredRole => userRoles.includes(requiredRole))
+      }
+
+      // Fallback to original permission-based logic if requiredRoles is not set.
+      if (!item.permissions || item.permissions.length === 0) {
+        return true
+      }
+      return canAny(item.permissions)
+    })
   }
 
   // Utility navigation items (always shown if user has basic access)

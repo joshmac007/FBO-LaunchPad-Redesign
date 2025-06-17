@@ -41,20 +41,16 @@ def require_permission_v2(permission: str,
     def decorator(f):
         @functools.wraps(f)
         def decorated_function(*args, **kwargs):
-            print("--- DECORATOR: START ---", flush=True)
             try:
                 # Verify JWT token and get current user
                 try:
                     verify_jwt_in_request()
                     current_user_id = get_jwt_identity()
-                    print(f"--- DECORATOR: JWT identity is '{current_user_id}'", flush=True)
                 except Exception as jwt_error:
-                    print(f"--- DECORATOR: JWT verification failed: {jwt_error}", flush=True)
                     logger.warning(f"JWT verification failed for permission check: {permission} - {jwt_error}")
                     return jsonify({'error': 'Authentication required'}), 401
                     
                 if not current_user_id:
-                    print("--- DECORATOR: No authenticated user!", flush=True)
                     logger.warning(f"No authenticated user for permission check: {permission}")
                     return jsonify({'error': 'Authentication required'}), 401
                 
@@ -64,16 +60,13 @@ def require_permission_v2(permission: str,
                     from ..models.user import User
                     current_user = User.query.get(current_user_id)
                     if not current_user:
-                        print("--- DECORATOR: User not found in DB!", flush=True)
                         logger.warning(f"User {current_user_id} not found during permission check")
                         return jsonify({'error': 'User not found'}), 401
                     
                     # Set g.current_user for routes that expect it
                     g.current_user = current_user
-                    print(f"--- DECORATOR: Set g.current_user to {current_user.email}", flush=True)
                     
                 except (ValueError, TypeError) as e:
-                    print(f"--- DECORATOR: Invalid user ID format: {current_user_id} - {e}", flush=True)
                     logger.warning(f"Invalid user ID format: {current_user_id} - {e}")
                     return jsonify({'error': 'Invalid user identifier'}), 401
                 
@@ -96,7 +89,6 @@ def require_permission_v2(permission: str,
                 )
                 
                 if not has_permission:
-                    print(f"--- DECORATOR: Permission denied for {current_user.email} (permission: {permission})", flush=True)
                     logger.warning(f"Permission denied: user {current_user_id} lacks '{permission}'")
                     return jsonify({
                         'error': 'Insufficient permissions',
@@ -111,13 +103,9 @@ def require_permission_v2(permission: str,
                 g.permission_context = context
                 g.verified_permission = permission
                 
-                print("--- DECORATOR: Permission granted. Calling route function.", flush=True)
                 return f(*args, **kwargs)
                 
             except Exception as e:
-                print(f"--- DECORATOR: EXCEPTION! {type(e).__name__}: {e}", flush=True)
-                import traceback
-                traceback.print_exc()
                 logger.error(f"Error in permission decorator: {e}")
                 return jsonify({"error": "Authentication error in decorator"}), 401
                 
@@ -141,20 +129,16 @@ def require_any_permission_v2(*permissions: str,
     def decorator(f):
         @functools.wraps(f)
         def decorated_function(*args, **kwargs):
-            print("--- ANY_PERMISSION DECORATOR: START ---", flush=True)
             try:
                 # Verify JWT token and get current user
                 try:
                     verify_jwt_in_request()
                     current_user_id = get_jwt_identity()
-                    print(f"--- ANY_PERMISSION DECORATOR: JWT identity is '{current_user_id}'", flush=True)
                 except Exception as jwt_error:
-                    print(f"--- ANY_PERMISSION DECORATOR: JWT verification failed: {jwt_error}", flush=True)
                     logger.warning(f"JWT verification failed for permission check: {permissions} - {jwt_error}")
                     return jsonify({'error': 'Authentication required'}), 401
                     
                 if not current_user_id:
-                    print("--- ANY_PERMISSION DECORATOR: No authenticated user!", flush=True)
                     logger.warning(f"No authenticated user for permission check: {permissions}")
                     return jsonify({'error': 'Authentication required'}), 401
                 
@@ -164,16 +148,13 @@ def require_any_permission_v2(*permissions: str,
                     from ..models.user import User
                     current_user = User.query.get(current_user_id)
                     if not current_user:
-                        print("--- ANY_PERMISSION DECORATOR: User not found in DB!", flush=True)
                         logger.warning(f"User {current_user_id} not found during permission check")
                         return jsonify({'error': 'User not found'}), 401
                     
                     # Set g.current_user for routes that expect it
                     g.current_user = current_user
-                    print(f"--- ANY_PERMISSION DECORATOR: Set g.current_user to {current_user.email}", flush=True)
                     
                 except (ValueError, TypeError) as e:
-                    print(f"--- ANY_PERMISSION DECORATOR: Invalid user ID format: {current_user_id} - {e}", flush=True)
                     logger.warning(f"Invalid user ID format: {current_user_id} - {e}")
                     return jsonify({'error': 'Invalid user identifier'}), 401
                 
@@ -197,7 +178,6 @@ def require_any_permission_v2(*permissions: str,
                         break
                 
                 if not has_any_permission:
-                    print(f"--- ANY_PERMISSION DECORATOR: Permission denied for {current_user.email} (permissions: {permissions})", flush=True)
                     logger.warning(f"Permission denied: user {current_user_id} lacks any of {permissions}")
                     return jsonify({
                         'error': 'Insufficient permissions',

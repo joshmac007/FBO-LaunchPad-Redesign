@@ -74,136 +74,220 @@ class FuelOrderService:
             return None, f"Internal error in get_status_counts: {str(e)}", 500
 
     @classmethod
-    def create_fuel_order(cls, order_data: dict) -> Tuple[Optional[FuelOrder], Optional[str], Optional[int], Optional[bool]]:
-        from src.models import User, UserRole, FuelOrder, FuelOrderStatus, Aircraft
+    def create_fuel_order(cls, order_data: dict) -> Tuple[Optional[FuelOrder], Optional[str], Optional[int]]:
+        """
+        Create a new fuel order with comprehensive validation and auto-assignment logic.
+        
+        Args:
+            order_data: Dictionary containing fuel order data
+            
+        Returns:
+            Tuple of (FuelOrder, message, status_code)
+        """
+        from src.models import User, FuelOrder, FuelOrderStatus, Aircraft
         from src.extensions import db
         import logging
         logger = logging.getLogger(__name__)
 
-        # --- Check if any users exist (existing logic) ---
-        user_count = User.query.count()
-        if user_count == 0:
-            return (
-                None,
-                "No users exist in the system. Please create an ADMIN user via the CLI or database to access the admin panel and create LST users.",
-                400,
-                False # aircraft_created_this_request
-            )
+        # Special values for auto-assignment
+        AUTO_ASSIGN_LST_ID = -1
+        AUTO_ASSIGN_TRUCK_ID = -1
 
-        # Extract data
-        tail_number = order_data.get('tail_number')
-        fuel_type_from_order = order_data.get('fuel_type') # Renamed to avoid conflict with aircraft.fuel_type
-        assigned_lst_user_id = order_data.get('assigned_lst_user_id')
-        assigned_truck_id = order_data.get('assigned_truck_id')
-        customer_id = order_data.get('customer_id') # For FuelOrder, not new Aircraft
-
-        # Validate presence of tail_number specifically first for aircraft check
-        if not tail_number:
-            return None, "Tail number is required.", 400, False # aircraft_created_this_request
-
-        # --- Check for Aircraft and auto-create if not found ---
-        aircraft = Aircraft.query.get(tail_number)
-        aircraft_created_this_request = False
-        if not aircraft:
-            logger.info(f"Aircraft with tail number {tail_number} not found. Auto-creating.")
-            placeholder_aircraft_type = "UNKNOWN_TYPE"
-            placeholder_fuel_type = "UNKNOWN_FUEL" # Consider if fuel_type_from_order could be used if appropriate
-
-            aircraft = Aircraft(
-                tail_number=tail_number,
-                aircraft_type=placeholder_aircraft_type,
-                fuel_type=placeholder_fuel_type
-                # customer_id is not part of Aircraft model, so not set here
-            )
-            db.session.add(aircraft)
-            aircraft_created_this_request = True
-            # DO NOT COMMIT HERE - will be part of the main transaction for the fuel order
-
-        # Check for other required fields for the fuel order itself
-        # Note: tail_number is already validated. fuel_type_from_order is for the order.
-        if not all([fuel_type_from_order, assigned_lst_user_id is not None, assigned_truck_id is not None]):
-            return None, "Missing required fields for fuel order (fuel_type, LST, truck).", 400, aircraft_created_this_request
-
-        # --- LST Assignment Logic ---
-        if assigned_lst_user_id == -1:
-            active_lsts = FuelOrderService.get_active_lsts()
-            if not active_lsts:
-                return None, "No available LST found for auto-assignment.", 400, aircraft_created_this_request
-            min_count = None
-            chosen_lst = None
-            active_statuses = [
-                FuelOrderStatus.DISPATCHED,
-                FuelOrderStatus.ACKNOWLEDGED,
-                FuelOrderStatus.EN_ROUTE,
-                FuelOrderStatus.FUELING
-            ]
-            for lst in active_lsts:
-                count = FuelOrder.query.filter(
-                    FuelOrder.assigned_lst_user_id == lst.id,
-                    FuelOrder.status.in_(active_statuses)
-                ).count()
-                if min_count is None or count < min_count:
-                    min_count = count
-                    chosen_lst = lst
-            if not chosen_lst:
-                return None, "No available LST found for auto-assignment.", 400, aircraft_created_this_request
-            logger.info(f"Auto-assigned LST user: {chosen_lst.id} (Active orders: {min_count})")
-            assigned_lst_user_id = chosen_lst.id
-            # order_data['assigned_lst_user_id'] = assigned_lst_user_id # Not needed if using var directly
-        else:
-            lst_user, error = FuelOrderService.validate_lst_assignment(assigned_lst_user_id)
-            if not lst_user:
-                return None, error, 400, aircraft_created_this_request
-
-        # --- Truck Validation ---
-        # Assuming truck validation logic exists here or is part of route handler.
-        # For this example, we'll just check if truck ID leads to a valid truck.
-        truck = FuelTruck.query.get(assigned_truck_id)
-        if not truck:
-            return None, f"Fuel truck with ID {assigned_truck_id} not found.", 400, aircraft_created_this_request
-        if not truck.is_active:
-            return None, f"Fuel truck {assigned_truck_id} is not active.", 400, aircraft_created_this_request
-        
-        # --- Customer Validation (Optional) ---
-        if customer_id:
-            customer = Customer.query.get(customer_id)
-            if not customer:
-                return None, f"Customer with ID {customer_id} not found.", 400, aircraft_created_this_request
-
-
-        # Create the FuelOrder
         try:
-            new_order = FuelOrder(
-                tail_number=aircraft.tail_number, # Use tail_number from the aircraft object
-                fuel_type=fuel_type_from_order, # Use fuel_type from the order data
+            # --- Input validation ---
+            if not order_data or not isinstance(order_data, dict):
+                return None, "Invalid request data", 400
+
+            # Required fields validation
+            base_required_fields = {
+                'tail_number': str,
+                'fuel_type': str,
+                'assigned_lst_user_id': int,
+                'assigned_truck_id': int,
+            }
+
+            # Validate requested_amount separately for robust conversion
+            if 'requested_amount' not in order_data:
+                return None, "Missing required field: requested_amount", 400
+            
+            try:
+                order_data['requested_amount'] = float(order_data['requested_amount'])
+                if order_data['requested_amount'] <= 0:
+                    return None, "Invalid value for requested_amount: must be a positive number", 400
+            except (ValueError, TypeError):
+                return None, "Invalid type for field: requested_amount (must be a valid number)", 400
+
+            # Validate base required fields
+            for field, field_type in base_required_fields.items():
+                if field not in order_data:
+                    return None, f"Missing required field: {field}", 400
+                
+                if field == 'assigned_lst_user_id':
+                    try:
+                        order_data[field] = int(order_data[field])
+                        if order_data[field] != AUTO_ASSIGN_LST_ID and order_data[field] <= 0:
+                            return None, f"Invalid ID for field: {field}", 400
+                    except Exception:
+                        return None, f"Invalid type for field: {field} (must be integer or {AUTO_ASSIGN_LST_ID})", 400
+                elif field == 'assigned_truck_id':
+                    try:
+                        order_data[field] = int(order_data[field])
+                        if order_data[field] != AUTO_ASSIGN_TRUCK_ID and order_data[field] <= 0:
+                            return None, f"Invalid ID for field: {field}", 400
+                    except Exception:
+                        return None, f"Invalid type for field: {field} (must be integer or {AUTO_ASSIGN_TRUCK_ID})", 400
+                else:
+                    if not isinstance(order_data[field], field_type):
+                        return None, f"Invalid type for field: {field}", 400
+                    if field_type == str and not order_data[field].strip():
+                        return None, f"Field {field} cannot be empty", 400
+
+            # --- Check if any users exist ---
+            user_count = User.query.count()
+            if user_count == 0:
+                return None, "No users exist in the system. Please create an ADMIN user via the CLI or database to access the admin panel and create LST users.", 400
+
+            # --- Aircraft handling (get or create) ---
+            tail_number = order_data['tail_number']
+            aircraft_data = {
+                'tail_number': tail_number,
+                'aircraft_type': order_data.get('aircraft_type', 'Unknown'),
+                'fuel_type': order_data['fuel_type']
+            }
+            
+            aircraft, aircraft_message, aircraft_status, aircraft_created = AircraftService.get_or_create_aircraft(aircraft_data)
+            
+            if not aircraft:
+                logger.error(f"Failed to get or create aircraft {tail_number}: {aircraft_message}")
+                return None, f"Failed to process aircraft {tail_number}: {aircraft_message}", aircraft_status
+
+            if aircraft_created:
+                logger.info(f"Created new aircraft during fuel order creation: {tail_number}")
+            else:
+                logger.info(f"Using existing aircraft for fuel order: {tail_number}")
+                # Update aircraft fuel type if it differs from the order (for existing aircraft)
+                if aircraft.fuel_type != order_data['fuel_type']:
+                    logger.info(f"Updating fuel_type for existing aircraft {aircraft.tail_number} from {aircraft.fuel_type} to {order_data['fuel_type']}.")
+                    updated_aircraft, msg, update_status = AircraftService.update_aircraft(aircraft.tail_number, {'fuel_type': order_data['fuel_type']})
+                    if update_status != 200:
+                        logger.warning(f"Could not update fuel_type for aircraft {aircraft.tail_number}: {msg}")
+                    else:
+                        aircraft = updated_aircraft
+
+            # --- LST Assignment Logic ---
+            assigned_lst_user_id = order_data['assigned_lst_user_id']
+            if assigned_lst_user_id == AUTO_ASSIGN_LST_ID:
+                active_lsts = cls.get_active_lsts()
+                if not active_lsts:
+                    return None, "No active LST users available for auto-assignment", 400
+                
+                # Find the LST with the fewest active/in-progress orders
+                least_busy = None
+                min_orders = None
+                active_statuses = [
+                    FuelOrderStatus.DISPATCHED,
+                    FuelOrderStatus.ACKNOWLEDGED,
+                    FuelOrderStatus.EN_ROUTE,
+                    FuelOrderStatus.FUELING
+                ]
+                
+                for lst in active_lsts:
+                    count = FuelOrder.query.filter(
+                        FuelOrder.assigned_lst_user_id == lst.id,
+                        FuelOrder.status.in_(active_statuses)
+                    ).count()
+                    if min_orders is None or count < min_orders:
+                        min_orders = count
+                        least_busy = lst
+                
+                if not least_busy:
+                    return None, "Auto-assign failed to select an LST", 400
+                
+                assigned_lst_user_id = least_busy.id
+                logger.info(f"Auto-assigned LST user_id {least_busy.id} (username={least_busy.username}) with {min_orders} active orders.")
+            else:
+                # Validate the specified LST
+                lst_user, error = cls.validate_lst_assignment(assigned_lst_user_id)
+                if not lst_user:
+                    return None, error, 400
+
+            # --- Truck Assignment Logic ---
+            assigned_truck_id = order_data['assigned_truck_id']
+            if assigned_truck_id == AUTO_ASSIGN_TRUCK_ID:
+                # Get the first active truck for simplicity
+                # Future enhancement: more sophisticated selection logic
+                active_truck = FuelTruck.query.filter(FuelTruck.is_active == True).first()
+                
+                if not active_truck:
+                    return None, "No active FuelTrucks available for auto-assignment", 400
+                
+                assigned_truck_id = active_truck.id
+                logger.info(f"Auto-assigned FuelTruck ID {active_truck.id} (Name: {getattr(active_truck, 'name', 'N/A')}).")
+            else:
+                # Validate the specified truck
+                truck = FuelTruck.query.get(assigned_truck_id)
+                if not truck:
+                    return None, f"Fuel truck with ID {assigned_truck_id} not found.", 400
+                if not truck.is_active:
+                    return None, f"Fuel truck {assigned_truck_id} is not active.", 400
+
+            # --- Optional fields validation ---
+            optional_fields = {
+                'customer_id': int,
+                'additive_requested': bool,
+                'csr_notes': str,
+                'location_on_ramp': str
+            }
+            
+            for field, field_type in optional_fields.items():
+                if field in order_data:
+                    try:
+                        if field_type == int:
+                            if order_data[field] is not None:
+                                order_data[field] = int(order_data[field])
+                        elif field_type == bool and not isinstance(order_data[field], bool):
+                            order_data[field] = bool(order_data[field])
+                        elif field_type == str and order_data[field] is not None and not isinstance(order_data[field], str):
+                            order_data[field] = str(order_data[field])
+                    except (ValueError, TypeError):
+                        return None, f"Invalid type for field {field}. Expected {field_type.__name__}", 400
+
+            # --- Customer validation (if provided) ---
+            customer_id = order_data.get('customer_id')
+            if customer_id:
+                customer = Customer.query.get(customer_id)
+                if not customer:
+                    return None, f"Customer with ID {customer_id} not found.", 400
+
+            # --- Create the fuel order ---
+            fuel_order = FuelOrder(
+                tail_number=aircraft.tail_number,
+                customer_id=customer_id,
+                fuel_type=order_data['fuel_type'],
+                additive_requested=order_data.get('additive_requested', False),
+                requested_amount=order_data['requested_amount'],
                 assigned_lst_user_id=assigned_lst_user_id,
                 assigned_truck_id=assigned_truck_id,
-                customer_id=customer_id, # For the FuelOrder
-                additive_requested=order_data.get('additive_requested', False),
-                requested_amount=order_data.get('requested_amount'),
                 location_on_ramp=order_data.get('location_on_ramp'),
                 csr_notes=order_data.get('csr_notes'),
                 status=FuelOrderStatus.DISPATCHED,
                 dispatch_timestamp=datetime.utcnow()
             )
-            db.session.add(new_order)
             
-            # Commit the session (includes new_order and potentially new_aircraft)
+            db.session.add(fuel_order)
             db.session.commit()
             
-            message = "Fuel order created successfully."
-            if aircraft_created_this_request:
-                message += f" New aircraft {aircraft.tail_number} was auto-created with placeholder details."
+            message = "Fuel order created successfully"
+            if aircraft_created:
+                message += f". New aircraft {aircraft.tail_number} was auto-created with placeholder details."
             
-            return new_order, message, 201, aircraft_created_this_request
+            logger.info(f"Successfully created fuel order {fuel_order.id}")
+            return fuel_order, message, 201
             
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error creating fuel order: {str(e)} traceback: {traceback.format_exc()}")
-            # Check for specific FK violation on aircraft if not auto-created, though auto-create should prevent this path.
-            if "violates foreign key constraint" in str(e) and "fuel_orders_tail_number_fkey" in str(e) and not aircraft_created_this_request:
-                 return None, f"Database error: Aircraft with tail number {tail_number} could not be referenced. Ensure it exists or was auto-created.", 500, False
-            return None, f"Database error during fuel order creation: {str(e)}", 500, aircraft_created_this_request
+            return None, f"Error creating fuel order: {str(e)}", 500
 
     @classmethod
     def get_fuel_orders(
@@ -657,53 +741,27 @@ class FuelOrderService:
 
     @staticmethod
     def get_active_lsts():
-        """Get active Line Service Technicians based on permissions and roles."""
-        # Find users who have LST permissions through permission groups or direct assignments
-        lst_permissions = ['perform_fueling_task', 'complete_fuel_order', 'access_fueler_dashboard']
-        
-        # Get users with LST permission groups
-        lst_group = PermissionGroup.query.filter_by(name='LST_Default_Permissions').first()
-        active_lsts = []
-        
-        if lst_group:
-            # Get users assigned to LST permission group
-            lst_assignments = UserPermissionGroup.query.filter_by(
-                permission_group_id=lst_group.id,
-                is_active=True
+        """Get active Line Service Technicians based on their role."""
+        try:
+            # Import Role model locally to avoid circular imports
+            from src.models.role import Role
+            
+            # The single source of truth for who is an LST should be their assigned role.
+            lst_role = Role.query.filter_by(name='Line Service Technician').first()
+            if not lst_role:
+                logger.warning("'Line Service Technician' role not found in the database.")
+                return []
+
+            # Find all active users with the 'Line Service Technician' role.
+            active_lsts = User.query.join(User.roles).filter(
+                User.is_active == True,
+                Role.id == lst_role.id
             ).all()
             
-            for assignment in lst_assignments:
-                if assignment.user and assignment.user.is_active:
-                    active_lsts.append(assignment.user)
-        
-        # Also check for users with direct LST permissions
-        for permission_name in lst_permissions:
-            permission = Permission.query.filter_by(name=permission_name).first()
-            if permission:
-                direct_assignments = UserPermission.query.filter_by(
-                    permission_id=permission.id,
-                    is_active=True
-                ).all()
-                
-                for assignment in direct_assignments:
-                    if assignment.user and assignment.user.is_active and assignment.user not in active_lsts:
-                        active_lsts.append(assignment.user)
-        
-        # FALLBACK: Also check for users with traditional "Line Service Technician" role
-        # This ensures compatibility with role-based seeded data
-        from src.models.role import Role
-        lst_role = Role.query.filter_by(name='Line Service Technician').first()
-        if lst_role:
-            role_based_lsts = User.query.join(User.roles).filter(
-                Role.name == 'Line Service Technician',
-                User.is_active == True
-            ).all()
-            
-            for lst_user in role_based_lsts:
-                if lst_user not in active_lsts:
-                    active_lsts.append(lst_user)
-        
-        return active_lsts
+            return active_lsts
+        except Exception as e:
+            logger.error(f"Error fetching LSTs by role: {e}")
+            return []
 
     @staticmethod
     def validate_lst_assignment(assigned_lst_user_id: int) -> Tuple[Optional[User], Optional[str]]:
@@ -796,13 +854,25 @@ class FuelOrderService:
         if not new_status_str:
             raise ValueError("Missing 'status' in update data")
         
-        # Convert to uppercase and validate it's a valid FuelOrderStatus
-        new_status_str = new_status_str.upper()
-        if new_status_str not in FuelOrderStatus.__members__:
+        # Normalize the status string and find the corresponding enum
+        new_status = None
+        
+        # First, try to find by enum value (case-insensitive)
+        for status_enum in FuelOrderStatus:
+            if status_enum.value.upper() == new_status_str.upper():
+                new_status = status_enum
+                break
+        
+        # If not found by value, try by enum member name (handle space-to-underscore conversion)
+        if new_status is None:
+            normalized_name = new_status_str.upper().replace(' ', '_')
+            if normalized_name in FuelOrderStatus.__members__:
+                new_status = FuelOrderStatus[normalized_name]
+        
+        # If still not found, it's an invalid status
+        if new_status is None:
             valid_statuses = [status.value for status in FuelOrderStatus]
             raise ValueError(f"Invalid status '{update_data.get('status')}'. Valid statuses: {valid_statuses}")
-        
-        new_status = FuelOrderStatus[new_status_str]
         
         # Handle status-specific requirements
         if new_status == FuelOrderStatus.COMPLETED:
@@ -833,6 +903,14 @@ class FuelOrderService:
         
         # Update the status
         order.status = new_status
+        
+        # Update corresponding timestamp field based on the new status
+        if new_status == FuelOrderStatus.ACKNOWLEDGED:
+            order.acknowledge_timestamp = datetime.utcnow()
+        elif new_status == FuelOrderStatus.EN_ROUTE:
+            order.en_route_timestamp = datetime.utcnow()
+        elif new_status == FuelOrderStatus.FUELING:
+            order.fueling_start_timestamp = datetime.utcnow()
         
         # Create audit log entry
         audit_details = {

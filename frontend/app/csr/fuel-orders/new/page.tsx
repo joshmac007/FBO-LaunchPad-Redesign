@@ -247,7 +247,7 @@ export default function NewFuelOrderPage() {
       // Add the fuel_type from the selected aircraft (required by backend)
       const fuelOrderRequest: FuelOrderCreateRequest = {
         ...backendData,
-        fuel_type: currentSelectedAircraft.preferredFuelType, // Get fuel type from selected aircraft
+        fuel_type: currentSelectedAircraft.fuelType, // Get fuel type from selected aircraft
       } as FuelOrderCreateRequest
 
       // Create the fuel order using the new service
@@ -335,12 +335,7 @@ export default function NewFuelOrderPage() {
                         value={formData.quantity}
                         onChange={handleInputChange}
                       />
-                      {selectedAircraft && selectedAircraft.fuelCapacity && (
-                        <div className="text-xs text-blue-600 flex items-center gap-1 mt-1">
-                          <Info className="h-3 w-3" />
-                          Max capacity: {selectedAircraft.fuelCapacity} gallons
-                        </div>
-                      )}
+
                     </div>
 
                     <div className="space-y-2">

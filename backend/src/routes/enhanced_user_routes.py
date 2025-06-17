@@ -29,6 +29,63 @@ from ..extensions import db
 enhanced_user_bp = Blueprint('enhanced_user_bp', __name__)
 
 # =============================================================================
+# USER MANAGEMENT ENDPOINTS
+# =============================================================================
+
+@enhanced_user_bp.route('', methods=['GET', 'OPTIONS'])
+@enhanced_user_bp.route('/', methods=['GET', 'OPTIONS'])
+@require_permission('view_users')
+def get_all_users():
+    """
+    Get all users with optional filtering.
+    This matches the expected frontend endpoint: GET /api/admin/users
+    """
+    if request.method == 'OPTIONS':
+        return jsonify({'message': 'OPTIONS request successful'}), 200
+    
+    # Extract filter parameters from request.args
+    filters = {
+        'role': request.args.get('role', None, type=str),
+        'is_active': request.args.get('is_active', None, type=str)  # Keep as string, service handles conversion
+    }
+    
+    # Handle role_ids parameter (multiple values)
+    role_ids = request.args.getlist('role_ids')
+    if role_ids:
+        try:
+            # Convert string IDs to integers
+            filters['role_ids'] = [int(rid) for rid in role_ids]
+        except ValueError:
+            return jsonify({"error": "Invalid role_ids format, must be integers"}), 400
+    
+    # Remove None values so service doesn't process empty filters unnecessarily
+    filters = {k: v for k, v in filters.items() if v is not None}
+    
+    try:
+        # Call the service method
+        users, message, status_code = UserService.get_users(filters=filters)
+        
+        # Handle the response
+        if users is not None:
+            # Use schema for consistent formatting
+            from ..schemas.user_schemas import UserBriefSchema
+            schema = UserBriefSchema(many=True)
+            users_list = schema.dump(users)
+            # Construct the final JSON response
+            response = {
+                "message": message,
+                "users": users_list
+            }
+            return jsonify(response), status_code  # Use status_code from service (should be 200)
+        else:
+            # Return the error message and status code provided by the service
+            return jsonify({"error": message}), status_code  # Use status_code from service (e.g., 400, 500)
+            
+    except Exception as e:
+        current_app.logger.error(f"Error fetching users: {str(e)}")
+        return jsonify({"error": "Failed to fetch users"}), 500
+
+# =============================================================================
 # DIRECT PERMISSION ASSIGNMENT ENDPOINTS
 # =============================================================================
 

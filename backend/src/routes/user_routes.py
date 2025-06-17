@@ -10,6 +10,7 @@ from ..schemas import (
     UserListResponseSchema,
     ErrorResponseSchema
 )
+from ..schemas.user_schemas import UserDetailSchema, UserBriefSchema
 
 # Create blueprint for user routes
 user_bp = Blueprint('user_bp', __name__, url_prefix='/api/users')
@@ -75,6 +76,16 @@ def get_users():
         'role': request.args.get('role', None, type=str),
         'is_active': request.args.get('is_active', None, type=str)  # Keep as string, service handles conversion
     }
+    
+    # Handle role_ids parameter (multiple values)
+    role_ids = request.args.getlist('role_ids')
+    if role_ids:
+        try:
+            # Convert string IDs to integers
+            filters['role_ids'] = [int(rid) for rid in role_ids]
+        except ValueError:
+            return jsonify({"error": "Invalid role_ids format, must be integers"}), 400
+    
     # Remove None values so service doesn't process empty filters unnecessarily
     filters = {k: v for k, v in filters.items() if v is not None}
     
@@ -83,17 +94,9 @@ def get_users():
     
     # Handle the response
     if users is not None:
-        # Serialize the list of user objects, excluding sensitive fields
-        users_list = []
-        for user in users:
-            users_list.append({
-                "id": user.id,
-                "name": user.username,
-                "email": user.email,
-                "roles": [role.name for role in user.roles],
-                "is_active": user.is_active,
-                "created_at": user.created_at.isoformat()
-            })
+        # Use UserBriefSchema for consistent formatting with admin endpoints
+        schema = UserBriefSchema(many=True)
+        users_list = schema.dump(users)
         # Construct the final JSON response
         response = {
             "message": message,
@@ -180,17 +183,12 @@ def create_user():
         user, message, status_code = UserService.create_user(data)
         
         if user is not None:
-            # Return serialized user data
+            # Use UserDetailSchema for consistent formatting with admin endpoints
+            schema = UserDetailSchema()
+            user_data = schema.dump(user)
             return jsonify({
                 "message": message,
-                "user": {
-                    "id": user.id,
-                    "name": user.username,
-                    "email": user.email,
-                    "roles": [role.name for role in user.roles],
-                    "is_active": user.is_active,
-                    "created_at": user.created_at.isoformat()
-                }
+                "user": user_data
             }), status_code
         else:
             return jsonify({"error": message}), status_code
@@ -202,7 +200,7 @@ def create_user():
         }), 500
 
 @user_bp.route('/<int:user_id>', methods=['PATCH'])
-@require_permission_v2('manage_users', 'user', 'user_id')
+@require_permission_v2('manage_users', {'resource_type': 'user', 'id_param': 'user_id'})
 def update_user(user_id):
     """Update a user.
     Requires manage_users permission.
@@ -280,17 +278,12 @@ def update_user(user_id):
         user, message, status_code = UserService.update_user(user_id, data)
         
         if user is not None:
-            # Return serialized user data
+            # Use UserDetailSchema for consistent formatting with admin endpoints
+            schema = UserDetailSchema()
+            user_data = schema.dump(user)
             return jsonify({
                 "message": message,
-                "user": {
-                    "id": user.id,
-                    "name": user.username,
-                    "email": user.email,
-                    "roles": [role.name for role in user.roles],
-                    "is_active": user.is_active,
-                    "created_at": user.created_at.isoformat()
-                }
+                "user": user_data
             }), status_code
         else:
             return jsonify({"error": message}), status_code
@@ -301,7 +294,7 @@ def update_user(user_id):
         return jsonify({"error": "Server error"}), 500
 
 @user_bp.route('/<int:user_id>', methods=['DELETE'])
-@require_permission_v2('manage_users', 'user', 'user_id')
+@require_permission_v2('manage_users', {'resource_type': 'user', 'id_param': 'user_id'})
 def delete_user(user_id):
     """Delete a user.
     Requires manage_users permission.
@@ -355,7 +348,7 @@ def delete_user(user_id):
         return jsonify({"error": "Server error"}), 500
 
 @user_bp.route('/<int:user_id>', methods=['GET'])
-@require_permission_v2('view_users', 'user', 'user_id')
+@require_permission_v2('view_users', {'resource_type': 'user', 'id_param': 'user_id'})
 def get_user(user_id):
     """Get a user by ID.
     Requires view_users permission.
@@ -402,17 +395,12 @@ def get_user(user_id):
         user, message, status_code = UserService.get_user_by_id(user_id)
         
         if user is not None:
-            # Return serialized user data
+            # Use UserDetailSchema for consistent formatting with admin endpoints
+            schema = UserDetailSchema()
+            user_data = schema.dump(user)
             return jsonify({
                 "message": message,
-                "user": {
-                    "id": user.id,
-                    "name": user.username,
-                    "email": user.email,
-                    "roles": [role.name for role in user.roles],
-                    "is_active": user.is_active,
-                    "created_at": user.created_at.isoformat()
-                }
+                "user": user_data
             }), status_code
         else:
             return jsonify({"error": message}), status_code

@@ -1,39 +1,33 @@
 import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config"
 
-// Frontend Aircraft model (updated to use tail_number as id)
+// Frontend Aircraft model - accurately reflecting backend structure
 export interface Aircraft {
   id: string  // Use tail_number as the ID
   tailNumber: string
-  type: string // Corresponds to aircraft_type from backend
-  model: string // Will be 'N/A' or derived if not directly from backend
-  owner: string // Will be 'N/A' or derived if not directly from backend, potentially customer_id
-  homeBase: string // Will be 'N/A' or derived
-  lastMaintenance?: string
-  nextMaintenance?: string
-  status: "active" | "maintenance" | "inactive" // Default to 'active' or derived
-  fuelCapacity: number // Default or derived
-  preferredFuelType: string // Corresponds to fuel_type from backend
-  mtow?: number
-  lastFaaSyncAt?: string
-  // Potentially add customer_id if needed on frontend representation
-  customer_id?: number
+  aircraftType: string  // Corresponds to aircraft_type from backend
+  fuelType: string      // Corresponds to fuel_type from backend
+  customerId?: number   // Optional customer association
+  createdAt: string
+  updatedAt: string
 }
 
 // Backend API-aligned interfaces
 interface BackendAdminAircraft {
-  id: number
   tail_number: string
   aircraft_type: string
   fuel_type: string
   customer_id?: number
-  // Add other fields if the backend AdminAircraftSchema provides more that are useful for mapping
+  created_at: string
+  updated_at: string
 }
 
 interface BackendAircraft {
   tail_number: string  // Primary key in backend
   aircraft_type: string
   fuel_type: string
-  // Add other fields if the backend AircraftResponseSchema provides more that are useful for mapping
+  customer_id?: number
+  created_at: string
+  updated_at: string
 }
 
 // Request payload interfaces
@@ -74,19 +68,11 @@ function mapBackendAdminToFrontendAircraft(backend: BackendAdminAircraft): Aircr
   return {
     id: backend.tail_number,
     tailNumber: backend.tail_number,
-    type: backend.aircraft_type,
-    model: "N/A", // Or derive if possible from aircraft_type or other data
-    owner: backend.customer_id ? `Customer ID: ${backend.customer_id}` : "N/A", // Example mapping
-    homeBase: "N/A",
-    status: "active", // Default status
-    fuelCapacity: 0, // Default, consider if backend can provide this
-    preferredFuelType: backend.fuel_type,
-    customer_id: backend.customer_id,
-    // Initialize other optional fields from Aircraft interface as undefined or default
-    lastMaintenance: undefined,
-    nextMaintenance: undefined,
-    mtow: undefined,
-    lastFaaSyncAt: undefined,
+    aircraftType: backend.aircraft_type,
+    fuelType: backend.fuel_type,
+    customerId: backend.customer_id,
+    createdAt: backend.created_at,
+    updatedAt: backend.updated_at,
   }
 }
 
@@ -94,18 +80,11 @@ function mapBackendToFrontendAircraft(backend: BackendAircraft): Aircraft {
   return {
     id: backend.tail_number,
     tailNumber: backend.tail_number,
-    type: backend.aircraft_type,
-    model: "N/A",
-    owner: "N/A", // General endpoint might not have customer info
-    homeBase: "N/A",
-    status: "active",
-    fuelCapacity: 0,
-    preferredFuelType: backend.fuel_type,
-    // Initialize other optional fields
-    lastMaintenance: undefined,
-    nextMaintenance: undefined,
-    mtow: undefined,
-    lastFaaSyncAt: undefined,
+    aircraftType: backend.aircraft_type,
+    fuelType: backend.fuel_type,
+    customerId: backend.customer_id,
+    createdAt: backend.created_at,
+    updatedAt: backend.updated_at,
   }
 }
 

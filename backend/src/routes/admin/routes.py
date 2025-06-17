@@ -3,7 +3,7 @@ from flask import Blueprint
 admin_bp = Blueprint('admin', __name__)
 
 # Import all admin route modules
-from .user_admin_routes import *
+# from .user_admin_routes import *  # REMOVED: Conflicting/redundant with main user routes
 from .permission_admin_routes import *
 from .role_admin_routes import *
 from .customer_admin_routes import *

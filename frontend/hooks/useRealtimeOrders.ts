@@ -12,12 +12,16 @@ export interface FuelOrder {
   status: 'Dispatched' | 'Acknowledged' | 'En Route' | 'Fueling' | 'Completed';
   assigned_to_id?: number;
   change_version: number;
-  gallons_dispensed?: number;
-  start_meter_reading?: number;
-  end_meter_reading?: number;
+  acknowledged_change_version?: number;
+  gallons_dispensed?: number | string;
+  calculated_gallons_dispensed?: string;
+  start_meter_reading?: number | string;
+  end_meter_reading?: number | string;
   notes?: string;
   created_at: string;
   updated_at: string;
+  completion_timestamp?: string;
+  completed_at?: string;
   customer_name?: string;
   tail_number?: string;
   // UI state
@@ -38,7 +42,7 @@ interface OrdersState {
   availableOrders: FuelOrder[];
   myQueue: FuelOrder[];
   inProgress: FuelOrder[];
-  completedToday: FuelOrder[];
+  completedToday: FuelOrder[]; // Note: Shows all completed orders assigned to user, not just today
   connectionStatus: 'CONNECTED' | 'RECONNECTING' | 'DISCONNECTED';
   actionQueue: Command[];
   isLoading: boolean;
@@ -86,12 +90,52 @@ function ordersReducer(state: OrdersState, action: OrdersAction): OrdersState {
     case 'INITIAL_LOAD': {
       const { orders, userId } = action.payload;
       
+      // Debug logging to see what orders we're getting
+      console.log('INITIAL_LOAD:', { 
+        totalOrders: orders.length, 
+        userId,
+        orderSample: orders.slice(0, 5).map(o => ({ 
+          id: o.id, 
+          status: o.status, 
+          assigned_to_id: o.assigned_to_id,
+          tail_number: o.tail_number 
+        }))
+      });
+      
+      // More robust categorization logic
+      const availableOrders = orders.filter(o => 
+        o.status === 'Dispatched' && (!o.assigned_to_id || o.assigned_to_id === null)
+      );
+      
+      // Fixed: Include dispatched orders assigned to the user in myQueue
+      const myQueue = orders.filter(o => 
+        o.assigned_to_id === userId && (o.status === 'Acknowledged' || o.status === 'Dispatched')
+      );
+      
+      const inProgress = orders.filter(o => 
+        o.assigned_to_id === userId && ['En Route', 'Fueling'].includes(o.status)
+      );
+      
+      const completedToday = orders.filter(o => 
+        o.status === 'Completed' && 
+        o.assigned_to_id === userId &&
+        (o.completion_timestamp && isToday(o.completion_timestamp))
+      );
+      
+      console.log('Categorized orders:', {
+        available: availableOrders.length,
+        myQueue: myQueue.length,
+        inProgress: inProgress.length,
+        completed: completedToday.length,
+        completedDetails: completedToday.map(o => ({ id: o.id, status: o.status, assigned_to_id: o.assigned_to_id }))
+      });
+      
       return {
         ...state,
-        availableOrders: orders.filter(o => o.status === 'Dispatched' && !o.assigned_to_id),
-        myQueue: orders.filter(o => o.assigned_to_id === userId && o.status === 'Acknowledged'),
-        inProgress: orders.filter(o => o.assigned_to_id === userId && ['En Route', 'Fueling'].includes(o.status)),
-        completedToday: orders.filter(o => o.status === 'Completed' && isToday(o.updated_at)),
+        availableOrders,
+        myQueue,
+        inProgress,
+        completedToday,
         isLoading: false,
         lastSync: Date.now(),
       };
@@ -131,7 +175,16 @@ function ordersReducer(state: OrdersState, action: OrdersAction): OrdersState {
 
     case 'ORDER_UPDATED': {
       const updatedOrder = action.payload;
-      return updateOrderInState(state, updatedOrder);
+      
+      // Handle status transitions by moving orders between columns
+      let newState = updateOrderInState(state, updatedOrder);
+      
+      // If this is an order assignment/status change, recategorize
+      if (updatedOrder.assigned_to_id) {
+        newState = categorizeOrderAfterUpdate(newState, updatedOrder);
+      }
+      
+      return newState;
     }
 
     case 'ORDER_COMPLETED': {
@@ -163,7 +216,9 @@ function ordersReducer(state: OrdersState, action: OrdersAction): OrdersState {
       if (!order) return state;
 
       const updatedOrder = { ...order, status, isQueued: true };
-      const newState = updateOrderInState(state, updatedOrder);
+      
+      // Move order to appropriate column based on new status
+      let newState = categorizeOrderAfterUpdate(state, updatedOrder);
       
       return {
         ...newState,
@@ -311,6 +366,44 @@ function updateOrderInState(state: OrdersState, updatedOrder: FuelOrder): Orders
   return newState;
 }
 
+function categorizeOrderAfterUpdate(state: OrdersState, updatedOrder: FuelOrder): OrdersState {
+  // Remove order from all columns first
+  const cleanState = {
+    ...state,
+    availableOrders: state.availableOrders.filter(o => o.id !== updatedOrder.id),
+    myQueue: state.myQueue.filter(o => o.id !== updatedOrder.id),
+    inProgress: state.inProgress.filter(o => o.id !== updatedOrder.id),
+    completedToday: state.completedToday.filter(o => o.id !== updatedOrder.id),
+  };
+  
+  // Add to appropriate column based on status and assignment
+  if (updatedOrder.status === 'Dispatched' && !updatedOrder.assigned_to_id) {
+    return {
+      ...cleanState,
+      availableOrders: [updatedOrder, ...cleanState.availableOrders],
+    };
+  } else if ((updatedOrder.status === 'Acknowledged' || updatedOrder.status === 'Dispatched') && updatedOrder.assigned_to_id) {
+    return {
+      ...cleanState,
+      myQueue: [updatedOrder, ...cleanState.myQueue],
+    };
+  } else if (['En Route', 'Fueling'].includes(updatedOrder.status) && updatedOrder.assigned_to_id) {
+    return {
+      ...cleanState,
+      inProgress: [updatedOrder, ...cleanState.inProgress],
+    };
+  } else if (updatedOrder.status === 'Completed' && updatedOrder.assigned_to_id && 
+             updatedOrder.completion_timestamp && isToday(updatedOrder.completion_timestamp)) {
+    return {
+      ...cleanState,
+      completedToday: [updatedOrder, ...cleanState.completedToday],
+    };
+  }
+  
+  // If it doesn't fit any category, keep it in original state
+  return updateOrderInState(state, updatedOrder);
+}
+
 function moveOrderToColumn(state: OrdersState, orderId: number, targetColumn: keyof OrdersState, updatedOrder?: FuelOrder): OrdersState {
   const columns = ['availableOrders', 'myQueue', 'inProgress', 'completedToday'] as const;
   const newState = { ...state };
@@ -405,7 +498,19 @@ export function useRealtimeOrders(userId: number) {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      // Try to extract error message from response body
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.error) {
+          errorMessage = errorData.error;
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      } catch (e) {
+        // If we can't parse the response, use the default message
+      }
+      throw new Error(errorMessage);
     }
 
     return response.json();
@@ -421,9 +526,8 @@ export function useRealtimeOrders(userId: number) {
         
         switch (command.type) {
           case 'CLAIM_ORDER':
-            result = await apiCall(`/fuel-orders/${command.payload.orderId}/status`, {
-              method: 'PATCH',
-              body: JSON.stringify({ status: 'ACKNOWLEDGED' }),
+            result = await apiCall(`/fuel-orders/${command.payload.orderId}/claim`, {
+              method: 'POST',
             });
             break;
             
@@ -620,6 +724,7 @@ export function useRealtimeOrders(userId: number) {
     };
 
     dispatch({ type: 'OPTIMISTIC_CLAIM', payload: { orderId, command } });
+    dispatch({ type: 'ADD_TO_QUEUE', payload: command });
   }, [generateCommandId]);
 
   const updateOrderStatus = useCallback((orderId: number, status: FuelOrder['status']) => {

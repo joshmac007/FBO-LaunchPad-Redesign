@@ -61,6 +61,9 @@ export default function FuelerDashboard() {
       case 'claim':
         ordersHook.actions.claimOrder(orderId)
         break
+      case 'acknowledge_change':
+        ordersHook.actions.acknowledgeChange(orderId, order.change_version)
+        break
       case 'en_route':
         ordersHook.actions.updateOrderStatus(orderId, 'En Route')
         break
@@ -70,9 +73,7 @@ export default function FuelerDashboard() {
       case 'complete':
         setCompletionDialogOrder(order)
         break
-      case 'view_receipt':
-        router.push(`/fueler/receipts/${orderId}`)
-        break
+
       case 'retry':
         // Clear error and retry the failed action
         ordersHook.actions.clearOrderError(orderId)
@@ -91,8 +92,8 @@ export default function FuelerDashboard() {
     ordersHook.actions.completeOrder(data.orderId, {
       start_meter_reading: data.startMeterReading,
       end_meter_reading: data.endMeterReading,
-      gallons_dispensed: data.endMeterReading - data.startMeterReading,
-      notes: data.notes,
+      fuel_delivered: data.endMeterReading - data.startMeterReading,
+      lst_notes: data.notes,
     })
     setCompletionDialogOrder(null)
   }

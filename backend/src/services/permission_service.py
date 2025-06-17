@@ -370,6 +370,24 @@ class PermissionService:
         cls._permission_cache.clear()
     
     @classmethod
+    def get_all_permissions(cls) -> Tuple[List[Permission], str, int]:
+        """
+        Get all permissions from the database.
+        
+        Returns:
+            Tuple[List[Permission], str, int]: A tuple containing:
+                - List of Permission objects
+                - Success/error message
+                - HTTP status code
+        """
+        try:
+            permissions = Permission.query.filter_by(is_active=True).order_by(Permission.name).all()
+            return permissions, f"Successfully retrieved {len(permissions)} permissions", 200
+        except Exception as e:
+            current_app.logger.error(f"Error retrieving permissions: {str(e)}")
+            return [], f"Error retrieving permissions: {str(e)}", 500
+
+    @classmethod
     def get_permission_summary(cls, user_id: int) -> Dict[str, any]:
         """
         Get a summary of user's permissions organized by source.

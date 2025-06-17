@@ -67,7 +67,7 @@ def create_customer():
     return jsonify(schema.dump(customer)), status
 
 @admin_bp.route('/customers/<int:customer_id>', methods=['GET'])
-@require_permission_v2('manage_customers', 'customer', 'customer_id')
+@require_permission_v2('manage_customers', {'resource_type': 'customer', 'id_param': 'customer_id'})
 def get_customer(customer_id):
     """
     ---
@@ -97,7 +97,7 @@ def get_customer(customer_id):
     return jsonify(schema.dump(customer)), status
 
 @admin_bp.route('/customers/<int:customer_id>', methods=['PATCH'])
-@require_permission_v2('manage_customers', 'customer', 'customer_id')
+@require_permission_v2('manage_customers', {'resource_type': 'customer', 'id_param': 'customer_id'})
 def update_customer(customer_id):
     """
     ---
@@ -135,7 +135,7 @@ def update_customer(customer_id):
     return jsonify(schema.dump(customer)), status
 
 @admin_bp.route('/customers/<int:customer_id>', methods=['DELETE'])
-@require_permission_v2('manage_customers', 'customer', 'customer_id')
+@require_permission_v2('manage_customers', {'resource_type': 'customer', 'id_param': 'customer_id'})
 def delete_customer(customer_id):
     """
     ---

@@ -113,10 +113,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <div
         className={cn(
           "transition-all duration-300 ease-in-out min-h-screen",
-          sidebarCollapsed ? "lg:pl-[80px]" : "lg:pl-[280px]",
+          sidebarCollapsed ? "lg:ml-20" : "lg:ml-72",
         )}
       >
-        <main className="p-4 md:p-6 lg:p-8">
+        <main className="p-4 md:p-6 lg:pr-8 lg:py-8">
           <div className="mx-auto max-w-7xl">{children}</div>
         </main>
       </div>

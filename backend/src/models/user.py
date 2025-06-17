@@ -47,6 +47,10 @@ class User(db.Model):
     average_time = db.Column(db.Float, nullable=True)
     last_active = db.Column(db.DateTime, nullable=True)
     hire_date = db.Column(db.DateTime, nullable=True)
+    
+    # FBO association for multi-tenancy
+    fbo_location_id = db.Column(db.Integer, nullable=True, index=True)
+    
     roles = db.relationship(
         'Role',
         secondary=user_roles,
@@ -82,7 +86,8 @@ class User(db.Model):
             'name': self.name,
             'roles': [role.name for role in self.roles.all()],
             'is_active': self.is_active,
-            'created_at': self.created_at.isoformat()
+            'created_at': self.created_at.isoformat(),
+            'fbo_id': self.fbo_location_id
         }
         
         # Add LST-specific fields if they exist
@@ -226,10 +231,12 @@ class User(db.Model):
         Note:
             The token includes user ID, roles, and expiration time.
             Uses the app's JWT_SECRET_KEY for signing.
+            Uses 'sub' claim for Flask-JWT-Extended compatibility.
         """
         now = datetime.utcnow()
         payload = {
-            'user_id': self.id,
+            'sub': str(self.id),  # Flask-JWT-Extended expects 'sub' claim as string
+            'user_id': self.id,  # Keep for backward compatibility
             'username': self.username,
             'roles': [role.name for role in self.roles],
             'is_active': self.is_active,

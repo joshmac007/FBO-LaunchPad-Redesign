@@ -181,9 +181,10 @@ def delete_fee_category(fbo_id, category_id):
 @admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/aircraft-type-mappings', methods=['GET'])
 @require_permission_v2('manage_fbo_fee_schedules')
 def get_aircraft_type_mappings(fbo_id):
-    """Get all aircraft type to fee category mappings for a specific FBO."""
+    """Get all aircraft type to fee category mappings for a specific FBO, optionally filtered by fee category."""
     try:
-        mappings = AdminFeeConfigService.get_aircraft_type_mappings(fbo_id)
+        category_id = request.args.get('fee_category_id', type=int)
+        mappings = AdminFeeConfigService.get_aircraft_type_mappings(fbo_id, category_id)
         return jsonify(mappings), 200
     except Exception as e:
         current_app.logger.error(f"Error fetching aircraft type mappings: {str(e)}")
@@ -277,9 +278,10 @@ def upload_aircraft_type_mappings_csv(fbo_id):
 @admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/fee-rules', methods=['GET'])
 @require_permission_v2('manage_fbo_fee_schedules')
 def get_fee_rules(fbo_id):
-    """Get all fee rules for a specific FBO."""
+    """Get all fee rules for a specific FBO, optionally filtered by fee category."""
     try:
-        rules = AdminFeeConfigService.get_fee_rules(fbo_id)
+        category_id = request.args.get('applies_to_fee_category_id', type=int)
+        rules = AdminFeeConfigService.get_fee_rules(fbo_id, category_id)
         return jsonify({'fee_rules': rules}), 200
     except Exception as e:
         current_app.logger.error(f"Error fetching fee rules: {str(e)}")

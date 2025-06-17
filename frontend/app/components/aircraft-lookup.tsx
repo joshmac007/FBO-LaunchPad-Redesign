@@ -236,15 +236,9 @@ export default function AircraftLookup({
                 <div className="flex">
                   <Badge
                     variant="outline"
-                    className={
-                      lookupResult.status === "active"
-                        ? "bg-green-50 text-green-600 border-green-200"
-                        : lookupResult.status === "maintenance"
-                          ? "bg-amber-50 text-amber-600 border-amber-200"
-                          : "bg-red-50 text-red-600 border-red-200"
-                    }
+                    className="bg-green-50 text-green-600 border-green-200"
                   >
-                    {lookupResult.status.charAt(0).toUpperCase() + lookupResult.status.slice(1)}
+                    Active
                   </Badge>
                 </div>
               </div>
@@ -258,25 +252,24 @@ export default function AircraftLookup({
                   </div>
                   <div>
                     <div className="text-sm font-medium text-gray-500">Aircraft Type</div>
-                    <div>{lookupResult.type}</div>
+                    <div>{lookupResult.aircraftType}</div>
                   </div>
                 </div>
                 <div className="space-y-3">
                   <div>
-                    <div className="text-sm font-medium text-gray-500">Owner</div>
-                    <div className="font-medium">{lookupResult.owner}</div>
+                    <div className="text-sm font-medium text-gray-500">Customer</div>
+                    <div className="font-medium">{lookupResult.customerId ? `Customer ID: ${lookupResult.customerId}` : 'Not assigned'}</div>
                   </div>
                   <div>
                     <div className="text-sm font-medium text-gray-500">Fuel Type</div>
-                    <div>{lookupResult.preferredFuelType}</div>
+                    <div>{lookupResult.fuelType}</div>
                   </div>
                 </div>
               </div>
             </CardContent>
             <CardFooter className="pt-2 text-xs text-gray-500 flex items-center gap-1">
               <Info className="h-3 w-3" />
-              Last updated:{" "}
-              {lookupResult.lastFaaSyncAt ? new Date(lookupResult.lastFaaSyncAt).toLocaleDateString() : "Unknown"}
+              Last updated: {new Date(lookupResult.updatedAt).toLocaleDateString()}
             </CardFooter>
           </Card>
         )}

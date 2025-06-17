@@ -45,8 +45,8 @@ class FuelerService:
             if not order:
                 return None, "Fuel order not found", 404
             
-            # Check if order is still unassigned
-            if order.assigned_lst_user_id is not None:
+            # Check if order is still unassigned or pre-assigned to the current user
+            if order.assigned_lst_user_id is not None and order.assigned_lst_user_id != user_id:
                 return None, "Order has already been claimed by another fueler", 409
             
             # Check if order has pending CSR changes
@@ -58,8 +58,9 @@ class FuelerService:
             if not user:
                 return None, "User not found", 404
             
-            # Claim the order
-            order.assigned_lst_user_id = user_id
+            # Claim the order (or acknowledge if already pre-assigned)
+            if order.assigned_lst_user_id is None:
+                order.assigned_lst_user_id = user_id
             order.status = FuelOrderStatus.ACKNOWLEDGED
             order.acknowledge_timestamp = datetime.utcnow()
             

@@ -238,23 +238,19 @@ class ReceiptService:
             if not receipt.fuel_quantity_gallons_at_receipt_time:
                 raise ValueError("Receipt must have fuel quantity for calculation")
             
-            if not receipt.fuel_order.aircraft or not receipt.fuel_order.aircraft.aircraft_type:
+            if not receipt.aircraft_type_at_receipt_time:
                 raise ValueError("Aircraft type information is required for fee calculation")
             
-            # For this test, we'll use a simplified approach to find the aircraft type ID
-            # In the full implementation, this would map the aircraft type string to the proper ID
-            aircraft_type_record = AircraftType.query.filter(
-                AircraftType.name.like(f"%{receipt.fuel_order.aircraft.aircraft_type}%")
+            # FIXED: Properly look up aircraft type using receipt's stored aircraft type name
+            aircraft_type_record = AircraftType.query.filter_by(
+                name=receipt.aircraft_type_at_receipt_time
             ).first()
             
             if not aircraft_type_record:
-                # Default to the first aircraft type for testing
-                aircraft_type_record = AircraftType.query.first()
-                if not aircraft_type_record:
-                    raise ValueError("No aircraft type configuration found")
+                raise ValueError(f"Aircraft type '{receipt.aircraft_type_at_receipt_time}' not found in system configuration")
             
-            # Set up fuel pricing (in a real system this would come from FBO configuration)
-            default_fuel_price = Decimal('5.50')  # $5.50 per gallon for Jet A
+            # FIXED: Use dynamic fuel pricing instead of hardcoded value
+            fuel_price_per_gallon = self._get_fuel_price(fbo_location_id, receipt.fuel_type_at_receipt_time)
             
             # Create fee calculation context
             context = FeeCalculationContext(
@@ -262,7 +258,7 @@ class ReceiptService:
                 aircraft_type_id=aircraft_type_record.id,
                 customer_id=receipt.customer_id,
                 fuel_uplift_gallons=receipt.fuel_quantity_gallons_at_receipt_time,
-                fuel_price_per_gallon=default_fuel_price,
+                fuel_price_per_gallon=fuel_price_per_gallon,
                 additional_services=additional_services or []
             )
             
@@ -293,7 +289,7 @@ class ReceiptService:
             receipt.tax_amount = calculation_result.tax_amount
             receipt.grand_total_amount = calculation_result.grand_total_amount
             receipt.is_caa_applied = calculation_result.is_caa_applied
-            receipt.fuel_unit_price_at_receipt_time = default_fuel_price
+            receipt.fuel_unit_price_at_receipt_time = fuel_price_per_gallon
             receipt.updated_at = datetime.utcnow()
             
             db.session.commit()
@@ -313,6 +309,34 @@ class ReceiptService:
             db.session.rollback()
             current_app.logger.error(f"Unexpected error calculating fees: {str(e)}")
             raise ValueError(f"Fee calculation failed: {str(e)}")
+    
+    def _get_fuel_price(self, fbo_id: int, fuel_type: str) -> Decimal:
+        """
+        Get fuel price for given FBO and fuel type.
+        
+        Args:
+            fbo_id: FBO location ID
+            fuel_type: Type of fuel (e.g., 'Jet A', 'Avgas 100LL')
+            
+        Returns:
+            Price per gallon as Decimal
+            
+        Note: This is a temporary implementation. In the full system, this would
+                  query an FBO fuel pricing configuration table.
+        """
+        # Temporary implementation with hardcoded prices per FBO
+        fuel_prices = {
+            1: {  # FBO ID 1
+                'Jet A': Decimal('5.50'),
+                'Avgas 100LL': Decimal('6.25'),
+                'Jet A-1': Decimal('5.50'),
+                'default': Decimal('5.50')
+            },
+            # Future FBOs can be added here
+        }
+        
+        fbo_prices = fuel_prices.get(fbo_id, fuel_prices[1])  # Default to FBO 1 prices
+        return fbo_prices.get(fuel_type, fbo_prices['default'])
     
     def generate_receipt(self, receipt_id: int, fbo_location_id: int) -> Receipt:
         """
@@ -538,12 +562,12 @@ class ReceiptService:
     
     def void_receipt(self, receipt_id: int, user_id: int, reason: str = None) -> Receipt:
         """
-        Void a receipt by changing its status to VOID.
+        Void a receipt and record the action.
         
         Args:
             receipt_id: ID of the receipt to void
-            user_id: ID of the user performing the void action
-            reason: Optional reason for voiding the receipt
+            user_id: ID of the user voiding the receipt
+            reason: Optional reason for voiding
             
         Returns:
             The voided receipt
@@ -552,42 +576,33 @@ class ReceiptService:
             ValueError: If receipt is not found or cannot be voided
         """
         try:
-            # Fetch the receipt
             receipt = Receipt.query.get(receipt_id)
-            if not receipt:
-                raise ValueError(f"Receipt with ID {receipt_id} not found")
             
-            # Check if the receipt status is GENERATED or PAID
+            if not receipt:
+                raise ValueError(f"Receipt {receipt_id} not found")
+            
+            # Can only void generated or paid receipts
             if receipt.status not in [ReceiptStatus.GENERATED, ReceiptStatus.PAID]:
                 raise ValueError(f"Cannot void receipt with status {receipt.status.value}")
             
-            # Store previous status for auditing
-            previous_status = receipt.status.value
-            
-            # Update receipt status to VOID
+            # Update receipt status
             receipt.status = ReceiptStatus.VOID
             receipt.updated_at = datetime.utcnow()
             receipt.updated_by_user_id = user_id
             
-            # Create audit log entry for the void action
-            audit_details = {
-                "previous_status": previous_status,
-                "new_status": ReceiptStatus.VOID.value,
-                "reason": reason
-            }
-            
+            # Log the void action
             audit_log = AuditLog(
                 user_id=user_id,
-                entity_type='Receipt',
-                entity_id=receipt_id,
-                action='VOID_RECEIPT',
-                details=audit_details
+                action=f"Receipt {receipt.receipt_number or receipt_id} voided",
+                details=f"Reason: {reason}" if reason else "No reason provided",
+                entity_type="Receipt",
+                entity_id=receipt_id
             )
             db.session.add(audit_log)
             
             db.session.commit()
             
-            current_app.logger.info(f"Voided receipt {receipt.receipt_number} (ID: {receipt_id})")
+            current_app.logger.info(f"Voided receipt {receipt.receipt_number or receipt_id} by user {user_id}")
             return receipt
             
         except IntegrityError as e:
@@ -597,4 +612,386 @@ class ReceiptService:
         except SQLAlchemyError as e:
             db.session.rollback()
             current_app.logger.error(f"Database error voiding receipt: {str(e)}")
-            raise 
+            raise
+
+    def toggle_line_item_waiver(self, receipt_id: int, line_item_id: int, fbo_location_id: int, user_id: int) -> Receipt:
+        """
+        Toggle the waiver status of a fee line item manually.
+        
+        Args:
+            receipt_id: ID of the receipt containing the line item
+            line_item_id: ID of the fee line item to toggle waiver for
+            fbo_location_id: FBO location ID for scoping
+            user_id: ID of the user making the change
+            
+        Returns:
+            The updated receipt with recalculated totals
+            
+        Raises:
+            ValueError: If receipt/line item not found, not draft status, or fee not waivable
+        """
+        try:
+            # Fetch the receipt with FBO scoping
+            receipt = (Receipt.query
+                      .filter_by(id=receipt_id, fbo_location_id=fbo_location_id)
+                      .first())
+            
+            if not receipt:
+                raise ValueError(f"Receipt {receipt_id} not found for FBO {fbo_location_id}")
+            
+            # Validate receipt is in DRAFT status
+            if receipt.status != ReceiptStatus.DRAFT:
+                raise ValueError(f"Cannot modify waivers on receipt with status {receipt.status.value}")
+            
+            # Fetch the fee line item
+            fee_line_item = (ReceiptLineItem.query
+                           .filter_by(id=line_item_id, receipt_id=receipt_id, line_item_type=LineItemType.FEE)
+                           .first())
+            
+            if not fee_line_item:
+                raise ValueError(f"Fee line item {line_item_id} not found for receipt {receipt_id}")
+            
+            # Check if this fee is potentially waivable by looking up the fee rule
+            from ..models.fee_rule import FeeRule
+            fee_rule = (FeeRule.query
+                       .filter_by(fbo_location_id=fbo_location_id, fee_code=fee_line_item.fee_code_applied)
+                       .first())
+            
+            if not fee_rule or not fee_rule.is_potentially_waivable_by_fuel_uplift:
+                raise ValueError(f"Fee '{fee_line_item.fee_code_applied}' is not manually waivable")
+            
+            # Check if there's already a waiver line item for this fee
+            existing_waiver = (ReceiptLineItem.query
+                             .filter_by(receipt_id=receipt_id, 
+                                      line_item_type=LineItemType.WAIVER,
+                                      fee_code_applied=fee_line_item.fee_code_applied)
+                             .first())
+            
+            if existing_waiver:
+                # Remove the existing waiver
+                db.session.delete(existing_waiver)
+                current_app.logger.info(f"Removed manual waiver for fee {fee_line_item.fee_code_applied}")
+            else:
+                # Create a new waiver line item
+                waiver_line_item = ReceiptLineItem(
+                    receipt_id=receipt_id,
+                    line_item_type=LineItemType.WAIVER,
+                    description=f"Manual Waiver ({fee_line_item.description})",
+                    fee_code_applied=fee_line_item.fee_code_applied,
+                    quantity=Decimal('1.0'),
+                    unit_price=-fee_line_item.amount,  # Negative of the fee amount
+                    amount=-fee_line_item.amount
+                )
+                db.session.add(waiver_line_item)
+                current_app.logger.info(f"Added manual waiver for fee {fee_line_item.fee_code_applied}")
+            
+            # Recalculate totals
+            self._recalculate_receipt_totals(receipt)
+            
+            # Update metadata
+            receipt.updated_by_user_id = user_id
+            receipt.updated_at = datetime.utcnow()
+            
+            db.session.commit()
+            
+            current_app.logger.info(f"Toggled waiver for line item {line_item_id} on receipt {receipt_id}")
+            return receipt
+            
+        except IntegrityError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Integrity error toggling waiver: {str(e)}")
+            raise ValueError("Failed to toggle waiver due to data integrity constraints")
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error toggling waiver: {str(e)}")
+            raise
+    
+    def _recalculate_receipt_totals(self, receipt: Receipt) -> None:
+        """
+        Recalculate receipt totals based on current line items.
+        
+        Args:
+            receipt: The receipt to recalculate totals for
+        """
+        line_items = ReceiptLineItem.query.filter_by(receipt_id=receipt.id).all()
+        
+        fuel_subtotal = Decimal('0.00')
+        total_fees_amount = Decimal('0.00')
+        total_waivers_amount = Decimal('0.00')
+        tax_amount = Decimal('0.00')
+        
+        for item in line_items:
+            if item.line_item_type == LineItemType.FUEL:
+                fuel_subtotal += item.amount
+            elif item.line_item_type == LineItemType.FEE:
+                total_fees_amount += item.amount
+            elif item.line_item_type == LineItemType.WAIVER:
+                total_waivers_amount += abs(item.amount)  # Store as positive value
+            elif item.line_item_type == LineItemType.TAX:
+                tax_amount += item.amount
+        
+        # Update receipt totals
+        receipt.fuel_subtotal = fuel_subtotal
+        receipt.total_fees_amount = total_fees_amount
+        receipt.total_waivers_amount = total_waivers_amount
+        receipt.tax_amount = tax_amount
+        receipt.grand_total_amount = fuel_subtotal + total_fees_amount - total_waivers_amount + tax_amount
+    
+    def generate_receipt_pdf(self, receipt: Receipt) -> bytes:
+        """
+        Generate a PDF representation of the receipt using ReportLab.
+        
+        Args:
+            receipt: The receipt to generate PDF for
+            
+        Returns:
+            PDF data as bytes
+            
+        Raises:
+            ValueError: If receipt is not found or PDF generation fails
+        """
+        try:
+            from reportlab.lib.pagesizes import letter
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+            from reportlab.lib import colors
+            from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+            from datetime import datetime
+            import io
+            
+            # Get line items
+            line_items = ReceiptLineItem.query.filter_by(receipt_id=receipt.id).all()
+            
+            # Create PDF buffer
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+            
+            # Container for the 'Flowable' objects
+            elements = []
+            
+            # Get styles
+            styles = getSampleStyleSheet()
+            
+            # Custom styles
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                alignment=TA_CENTER,
+                textColor=colors.HexColor('#2563eb'),
+                spaceAfter=12,
+            )
+            
+            company_style = ParagraphStyle(
+                'CompanyInfo',
+                parent=styles['Normal'],
+                fontSize=10,
+                alignment=TA_CENTER,
+                textColor=colors.grey,
+                spaceAfter=20,
+            )
+            
+            receipt_title_style = ParagraphStyle(
+                'ReceiptTitle',
+                parent=styles['Heading2'],
+                fontSize=18,
+                alignment=TA_CENTER,
+                spaceAfter=6,
+            )
+            
+            receipt_number_style = ParagraphStyle(
+                'ReceiptNumber',
+                parent=styles['Normal'],
+                fontSize=14,
+                fontName='Courier-Bold',
+                alignment=TA_CENTER,
+                spaceAfter=12,
+            )
+            
+            section_title_style = ParagraphStyle(
+                'SectionTitle',
+                parent=styles['Heading3'],
+                fontSize=12,
+                textColor=colors.HexColor('#2563eb'),
+                spaceAfter=6,
+            )
+            
+            # Company header
+            elements.append(Paragraph("FBO LaunchPad", title_style))
+            elements.append(Paragraph("Professional Aviation Services<br/>Main Terminal, Gate A1<br/>Phone: (555) 123-4567", company_style))
+            
+            # Receipt title and number
+            elements.append(Paragraph("RECEIPT", receipt_title_style))
+            elements.append(Paragraph(f"{receipt.receipt_number or receipt.id}", receipt_number_style))
+            
+            # Status badge (simplified as text)
+            if receipt.status:
+                status_text = f"Status: {receipt.status.value if hasattr(receipt.status, 'value') else receipt.status}"
+                elements.append(Paragraph(status_text, styles['Normal']))
+            
+            # Add VOID watermark if needed
+            if hasattr(receipt.status, 'value') and receipt.status.value == 'VOID':
+                void_style = ParagraphStyle(
+                    'VoidWatermark',
+                    parent=styles['Normal'],
+                    fontSize=48,
+                    alignment=TA_CENTER,
+                    textColor=colors.red,
+                    spaceAfter=12,
+                )
+                elements.append(Paragraph("VOID", void_style))
+            
+            elements.append(Spacer(1, 20))
+            
+            # Receipt information table
+            elements.append(Paragraph("Receipt Information", section_title_style))
+            
+            receipt_info_data = [
+                ['Receipt Number:', str(receipt.receipt_number or receipt.id)],
+                ['Generated:', receipt.generated_at.strftime('%B %d, %Y at %I:%M %p') if receipt.generated_at else 'N/A'],
+                ['Fuel Order ID:', f"#{receipt.fuel_order_id}"],
+            ]
+            
+            if receipt.paid_at:
+                receipt_info_data.insert(2, ['Paid:', receipt.paid_at.strftime('%B %d, %Y at %I:%M %p')])
+            
+            receipt_info_table = Table(receipt_info_data, colWidths=[2*inch, 3*inch])
+            receipt_info_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+            ]))
+            elements.append(receipt_info_table)
+            elements.append(Spacer(1, 15))
+            
+            # Aircraft and Customer information
+            elements.append(Paragraph("Aircraft & Customer Information", section_title_style))
+            
+            aircraft_info_data = [
+                ['Tail Number:', getattr(receipt.fuel_order, 'tail_number', 'N/A') if receipt.fuel_order else 'N/A'],
+                ['Customer:', receipt.customer.name if receipt.customer else 'N/A'],
+            ]
+            
+            if receipt.aircraft_type_at_receipt_time:
+                aircraft_info_data.insert(1, ['Aircraft Type:', receipt.aircraft_type_at_receipt_time])
+            
+            if receipt.is_caa_applied:
+                aircraft_info_data.append(['CAA Member:', 'Yes'])
+            
+            aircraft_info_table = Table(aircraft_info_data, colWidths=[2*inch, 3*inch])
+            aircraft_info_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+            ]))
+            elements.append(aircraft_info_table)
+            elements.append(Spacer(1, 15))
+            
+            # Fueling details
+            elements.append(Paragraph("Fueling Details", section_title_style))
+            
+            fueling_data = [
+                ['Fuel Type:', receipt.fuel_type_at_receipt_time or 'N/A'],
+                ['Quantity:', f"{receipt.fuel_quantity_gallons_at_receipt_time or 'N/A'} gallons"],
+                ['Price per Gallon:', f"${receipt.fuel_unit_price_at_receipt_time or 0:.2f}"],
+            ]
+            
+            fueling_table = Table(fueling_data, colWidths=[2*inch, 3*inch])
+            fueling_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+            ]))
+            elements.append(fueling_table)
+            elements.append(Spacer(1, 20))
+            
+            # Line items table
+            elements.append(Paragraph("Line Items", section_title_style))
+            
+            line_items_data = [['Description', 'Type', 'Quantity', 'Unit Price', 'Amount']]
+            
+            for item in line_items:
+                line_items_data.append([
+                    item.description or '',
+                    item.line_item_type.value if hasattr(item.line_item_type, 'value') else str(item.line_item_type),
+                    str(item.quantity or ''),
+                    f"${item.unit_price or 0:.2f}",
+                    f"${item.amount or 0:.2f}"
+                ])
+            
+            line_items_table = Table(line_items_data, colWidths=[2.5*inch, 0.8*inch, 0.8*inch, 0.9*inch, 1*inch])
+            line_items_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+            ]))
+            elements.append(line_items_table)
+            elements.append(Spacer(1, 20))
+            
+            # Totals
+            elements.append(Paragraph("Totals", section_title_style))
+            
+            totals_data = [
+                ['Fuel Subtotal:', f"${receipt.fuel_subtotal or 0:.2f}"],
+                ['Total Fees:', f"${receipt.total_fees_amount or 0:.2f}"],
+                ['Total Waivers:', f"-${receipt.total_waivers_amount or 0:.2f}"],
+                ['Tax:', f"${receipt.tax_amount or 0:.2f}"],
+                ['Grand Total:', f"${receipt.grand_total_amount or 0:.2f}"],
+            ]
+            
+            totals_table = Table(totals_data, colWidths=[2*inch, 1.5*inch])
+            totals_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, -1), (-1, -1), 12),
+                ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+                ('TEXTCOLOR', (0, -1), (-1, -1), colors.HexColor('#2563eb')),
+            ]))
+            elements.append(totals_table)
+            elements.append(Spacer(1, 30))
+            
+            # Footer
+            footer_style = ParagraphStyle(
+                'Footer',
+                parent=styles['Normal'],
+                fontSize=8,
+                alignment=TA_CENTER,
+                textColor=colors.grey,
+            )
+            
+            elements.append(Paragraph("Thank you for choosing FBO LaunchPad for your aviation needs.", footer_style))
+            elements.append(Paragraph(f"Generated on {datetime.utcnow().strftime('%B %d, %Y at %I:%M %p')}", footer_style))
+            
+            # Build PDF
+            doc.build(elements)
+            
+            # Get the value of the BytesIO buffer and return it
+            pdf_data = buffer.getvalue()
+            buffer.close()
+            
+            return pdf_data
+            
+        except ImportError:
+            current_app.logger.error("ReportLab not available for PDF generation")
+            raise ValueError("PDF generation not available - ReportLab not installed")
+        except Exception as e:
+            current_app.logger.error(f"Error generating PDF: {str(e)}")
+            raise ValueError(f"Failed to generate PDF: {str(e)}") 

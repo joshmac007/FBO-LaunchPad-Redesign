@@ -57,6 +57,7 @@ export interface FuelOrderBackend {
   fuel_type?: string // Added missing fuel_type field
   requested_amount: number | string // Can be number or string depending on endpoint
   customer_id: number
+  customer_name?: string // Customer name from backend relationship
   status: string
   priority?: string
   csr_notes?: string
@@ -205,7 +206,7 @@ async function getAircraftData(): Promise<Aircraft[]> {
 // User lookup function
 async function getUserData(): Promise<User[]> {
   return getCachedData('users', async () => {
-    const response = await fetch(`${API_BASE_URL}/users?role=LST&is_active=true`, {
+    const response = await fetch(`${API_BASE_URL}/users?role=Line Service Technician&is_active=true`, {
       method: 'GET',
       headers: getAuthHeaders(),
     })
@@ -258,7 +259,7 @@ export async function transformToDisplay(
     quantity: backend.requested_amount ? (typeof backend.requested_amount === 'string' ? backend.requested_amount : backend.requested_amount.toString()) : '0',
     fuel_type: backend.fuel_type || 'Unknown', // Get fuel_type from backend
     customer_id: backend.customer_id,
-    customer_name: `Customer ${backend.customer_id}`, // Will be enhanced when customer service is available
+    customer_name: backend.customer_name || `Customer ${backend.customer_id}`,
     status: backend.status as FuelOrderStatus,
     priority: (backend.priority as 'normal' | 'high' | 'urgent') || 'normal',
     csr_notes: backend.csr_notes || '',
@@ -284,7 +285,7 @@ export async function transformToDisplay(
     },
     customer: {
       id: backend.customer_id,
-      name: `Customer ${backend.customer_id}`,
+      name: backend.customer_name || `Customer ${backend.customer_id}`,
     },
     assigned_lst: backend.assigned_lst_user_id ? {
       id: backend.assigned_lst_user_id,

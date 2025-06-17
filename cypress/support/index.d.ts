@@ -6,7 +6,7 @@ declare namespace Cypress {
      * Login as a specific user type
      * @param userType - 'admin', 'csr', 'fueler', or 'member'
      */
-    loginAs(userType: string): Chainable<void>
+    loginAs(userType: 'admin' | 'csr' | 'fueler' | 'member'): Chainable<void>
 
     /**
      * Logout current user
@@ -60,5 +60,54 @@ declare namespace Cypress {
      * Get the current auth token from localStorage
      */
     getAuthToken(): Chainable<string | null>
+
+    /**
+     * Create fee category via API
+     * @param name - Name of the fee category
+     * @param fboId - FBO location ID (defaults to 1)
+     */
+    createFeeCategory(name: string, fboId?: number): Chainable<any>
+
+    /**
+     * Create fee rule via API
+     * @param feeRuleData - Fee rule configuration
+     */
+    createFeeRule(feeRuleData: any): Chainable<any>
+
+    /**
+     * Update aircraft type waiver minimum via API
+     * @param aircraftTypeId - Aircraft type ID
+     * @param waivMinGallons - Minimum gallons for waiver
+     * @param fboId - FBO location ID (defaults to 1)
+     */
+    updateAircraftWaiverMinimum(aircraftTypeId: number, waivMinGallons: number, fboId?: number): Chainable<any>
+
+    /**
+     * Create aircraft type to fee category mapping via API
+     * @param aircraftTypeId - Aircraft type ID
+     * @param feeCategoryId - Fee category ID
+     * @param fboId - FBO location ID (defaults to 1)
+     */
+    createAircraftMapping(aircraftTypeId: number, feeCategoryId: number, fboId?: number): Chainable<any>
+
+    /**
+     * Get aircraft types via API
+     * @param fboId - FBO location ID (defaults to 1)
+     */
+    getAircraftTypes(fboId?: number): Chainable<any>
+
+    /**
+     * Create a test fuel order with specific characteristics
+     * @param fuelOrderData - Fuel order configuration
+     */
+    createSpecificFuelOrder(fuelOrderData: any): Chainable<any>
+
+    /**
+     * Toggle waiver on a receipt line item via API
+     * @param receiptId - Receipt ID
+     * @param lineItemId - Line item ID
+     * @param fboId - FBO location ID (defaults to 1)
+     */
+    toggleLineItemWaiver(receiptId: number, lineItemId: number, fboId?: number): Chainable<any>
   }
 } 

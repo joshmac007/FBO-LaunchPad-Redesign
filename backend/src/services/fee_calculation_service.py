@@ -106,9 +106,16 @@ class FeeCalculationService:
             )
             
             # 3. Evaluate tiered waivers
+            # Get base minimum fuel gallons for waiver - FBO-specific if available, otherwise aircraft type default
+            base_min_fuel_for_waiver = None
+            if data['fbo_aircraft_config']:
+                base_min_fuel_for_waiver = data['fbo_aircraft_config'].base_min_fuel_gallons_for_waiver
+            elif data['aircraft_type']:
+                base_min_fuel_for_waiver = data['aircraft_type'].base_min_fuel_gallons_for_waiver
+            
             waived_fee_codes = self._evaluate_waivers(
                 context.fuel_uplift_gallons,
-                data['aircraft_type'].base_min_fuel_gallons_for_waiver if data['aircraft_type'] else None,
+                base_min_fuel_for_waiver,
                 data['waiver_tiers'],
                 is_caa_member
             )
@@ -125,12 +132,16 @@ class FeeCalculationService:
                     waiver_strategy = rule.waiver_strategy
                     simple_multiplier = rule.simple_waiver_multiplier
                 
+                # Get quantity for this service
+                service_quantity = self._get_service_quantity(rule.fee_code, context.additional_services)
+                total_amount = fee_amount * service_quantity
+                
                 # Add fee line item
                 fee_line_item = FeeCalculationResultLineItem(
                     line_item_type='FEE',
                     description=rule.fee_name,
-                    amount=fee_amount,
-                    quantity=self._get_service_quantity(rule.fee_code, context.additional_services),
+                    amount=total_amount,
+                    quantity=service_quantity,
                     unit_price=fee_amount,
                     fee_code_applied=rule.fee_code,
                     is_taxable=rule.is_taxable
@@ -140,10 +151,10 @@ class FeeCalculationService:
                 # Check if fee should be waived
                 should_waive = False
                 
-                if rule.is_potentially_waivable_by_fuel_uplift and data['aircraft_type'] and data['aircraft_type'].base_min_fuel_gallons_for_waiver:
+                if rule.is_potentially_waivable_by_fuel_uplift and base_min_fuel_for_waiver:
                     if waiver_strategy == WaiverStrategy.SIMPLE_MULTIPLIER:
                         # Simple multiplier waiver
-                        threshold = data['aircraft_type'].base_min_fuel_gallons_for_waiver * simple_multiplier
+                        threshold = base_min_fuel_for_waiver * simple_multiplier
                         should_waive = context.fuel_uplift_gallons >= threshold
                         
                     elif waiver_strategy == WaiverStrategy.TIERED_MULTIPLIER:
@@ -151,12 +162,12 @@ class FeeCalculationService:
                         should_waive = rule.fee_code in waived_fee_codes
                 
                 if should_waive:
-                    # Add waiver line item (negative amount)
+                    # Add waiver line item (negative amount, matches the total fee amount)
                     waiver_line_item = FeeCalculationResultLineItem(
                         line_item_type='WAIVER',
                         description=f"Fuel Uplift Waiver ({rule.fee_name})",
-                        amount=-fee_amount,
-                        quantity=Decimal('1.0'),
+                        amount=-total_amount,
+                        quantity=service_quantity,
                         fee_code_applied=rule.fee_code,
                         is_taxable=False
                     )
@@ -217,11 +228,21 @@ class FeeCalculationService:
         Returns:
             Dictionary containing all fetched data
         """
+        from ..models.fbo_aircraft_type_config import FBOAircraftTypeConfig
+        
         # Fetch customer
         customer = db.session.get(Customer, context.customer_id)
         
         # Fetch aircraft type
         aircraft_type = db.session.get(AircraftType, context.aircraft_type_id)
+        
+        # Fetch FBO-specific aircraft configuration (for waiver minimum fuel gallons)
+        fbo_aircraft_config = None
+        if aircraft_type:
+            fbo_aircraft_config = FBOAircraftTypeConfig.query.filter_by(
+                fbo_location_id=context.fbo_location_id,
+                aircraft_type_id=aircraft_type.id
+            ).first()
         
         # Find aircraft's fee category for this FBO
         aircraft_fee_category_id = None
@@ -245,6 +266,7 @@ class FeeCalculationService:
         return {
             'customer': customer,
             'aircraft_type': aircraft_type,
+            'fbo_aircraft_config': fbo_aircraft_config,
             'aircraft_fee_category_id': aircraft_fee_category_id,
             'fee_rules': fee_rules,
             'waiver_tiers': waiver_tiers

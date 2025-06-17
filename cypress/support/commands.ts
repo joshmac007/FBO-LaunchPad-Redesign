@@ -30,8 +30,8 @@
  * Login as a specific user type using API call directly (more reliable than form)
  * @param {string} userType - 'admin', 'csr', 'fueler', or 'member'
  */
-Cypress.Commands.add('loginAs', (userType) => {
-  const credentials = {
+Cypress.Commands.add('loginAs', (userType: 'admin' | 'csr' | 'fueler' | 'member') => {
+  const credentials: Record<string, { email: string; password: string }> = {
     admin: {
       email: 'admin@fbolaunchpad.com',
       password: 'Admin123!'
@@ -118,8 +118,8 @@ Cypress.Commands.add('checkPageAccess', (path, shouldHaveAccess) => {
     cy.get('body').should('not.contain', 'Unauthorized')
   } else {
     // Should be redirected to login or show access denied
-    cy.url({ timeout: 10000 }).then((url) => {
-      expect(url).to.satisfy((url) => {
+    cy.url({ timeout: 10000 }).then((url: string) => {
+      expect(url).to.satisfy((url: string) => {
         return url.includes('/login') || 
                url.includes('/unauthorized') ||
                url.includes('/access-denied')
@@ -273,5 +273,216 @@ Cypress.Commands.add('getAuthToken', () => {
     
     const user = JSON.parse(userData)
     return user.token || user.access_token || null
+  })
+})
+
+/**
+ * Create fee category via API
+ * @param {string} name - Name of the fee category
+ * @param {number} fboId - FBO location ID (defaults to 1)
+ */
+Cypress.Commands.add('createFeeCategory', (name, fboId = 1) => {
+  return cy.getAuthToken().then((token) => {
+    if (!token) {
+      throw new Error('No auth token found. Make sure to login first.')
+    }
+
+    return cy.request({
+      method: 'POST',
+      url: `http://localhost:5001/api/admin/fbo/${fboId}/fee-categories`,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: { name }
+    }).then((response) => {
+      return response.body
+    })
+  })
+})
+
+/**
+ * Create fee rule via API
+ * @param {object} feeRuleData - Fee rule configuration
+ */
+Cypress.Commands.add('createFeeRule', (feeRuleData) => {
+  const fboId = feeRuleData.fbo_location_id || 1
+  
+  return cy.getAuthToken().then((token) => {
+    if (!token) {
+      throw new Error('No auth token found. Make sure to login first.')
+    }
+
+    return cy.request({
+      method: 'POST',
+      url: `http://localhost:5001/api/admin/fbo/${fboId}/fee-rules`,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: feeRuleData
+    }).then((response) => {
+      return response.body
+    })
+  })
+})
+
+/**
+ * Update aircraft type waiver minimum via API
+ * @param {number} aircraftTypeId - Aircraft type ID
+ * @param {number} waivMinGallons - Minimum gallons for waiver
+ * @param {number} fboId - FBO location ID (defaults to 1)
+ */
+Cypress.Commands.add('updateAircraftWaiverMinimum', (aircraftTypeId, waivMinGallons, fboId = 1) => {
+  return cy.getAuthToken().then((token) => {
+    if (!token) {
+      throw new Error('No auth token found. Make sure to login first.')
+    }
+
+    return cy.request({
+      method: 'PUT',
+      url: `http://localhost:5001/api/admin/fbo/${fboId}/aircraft-types/${aircraftTypeId}/fuel-waiver`,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: {
+        base_min_fuel_gallons_for_waiver: waivMinGallons.toString()
+      }
+    }).then((response) => {
+      return response.body
+    })
+  })
+})
+
+/**
+ * Create aircraft type to fee category mapping via API
+ * @param {number} aircraftTypeId - Aircraft type ID
+ * @param {number} feeCategoryId - Fee category ID
+ * @param {number} fboId - FBO location ID (defaults to 1)
+ */
+Cypress.Commands.add('createAircraftMapping', (aircraftTypeId, feeCategoryId, fboId = 1) => {
+  return cy.getAuthToken().then((token) => {
+    if (!token) {
+      throw new Error('No auth token found. Make sure to login first.')
+    }
+
+    return cy.request({
+      method: 'POST',
+      url: `http://localhost:5001/api/admin/fbo/${fboId}/aircraft-mappings`,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: {
+        aircraft_type_id: aircraftTypeId,
+        fee_category_id: feeCategoryId
+      }
+    }).then((response) => {
+      return response.body
+    })
+  })
+})
+
+/**
+ * Get aircraft types via API
+ * @param {number} fboId - FBO location ID (defaults to 1)
+ */
+Cypress.Commands.add('getAircraftTypes', (fboId = 1) => {
+  return cy.getAuthToken().then((token) => {
+    if (!token) {
+      throw new Error('No auth token found. Make sure to login first.')
+    }
+
+    return cy.request({
+      method: 'GET',
+      url: `http://localhost:5001/api/admin/fbo/${fboId}/aircraft-types`,
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    }).then((response) => {
+      return response.body
+    })
+  })
+})
+
+/**
+ * Create a test fuel order with specific characteristics
+ * @param {object} fuelOrderData - Fuel order configuration
+ */
+Cypress.Commands.add('createSpecificFuelOrder', (fuelOrderData) => {
+  return cy.getAuthToken().then((token) => {
+    if (!token) {
+      throw new Error('No auth token found. Make sure to login first.')
+    }
+
+    // First create the fuel order
+    return cy.request({
+      method: 'POST',
+      url: 'http://localhost:5001/api/fuel-orders',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: {
+        tail_number: fuelOrderData.tail_number || 'N123TEST',
+        fuel_type: fuelOrderData.fuel_type || 'Jet A',
+        requested_amount: fuelOrderData.requested_amount || 200.0,
+        assigned_lst_user_id: fuelOrderData.assigned_lst_user_id || 1,
+        assigned_truck_id: fuelOrderData.assigned_truck_id || 1,
+        location_on_ramp: fuelOrderData.location_on_ramp || 'A1',
+        csr_notes: fuelOrderData.csr_notes || 'E2E test fuel order',
+        aircraft_type: fuelOrderData.aircraft_type || 'Citation CJ3'
+      }
+    }).then((response) => {
+      const fuelOrder = response.body.fuel_order
+      
+      // If we need to complete the order, submit data
+      if (fuelOrderData.status === 'Completed') {
+        return cy.request({
+          method: 'PUT',
+          url: `http://localhost:5001/api/fuel-orders/${fuelOrder.id}/submit-data`,
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: {
+            fuel_delivered: fuelOrderData.fuel_delivered || fuelOrderData.requested_amount || 200.0,
+            start_meter_reading: 1000.0,
+            end_meter_reading: 1000.0 + (fuelOrderData.fuel_delivered || fuelOrderData.requested_amount || 200.0),
+            lst_notes: 'E2E test completion'
+          }
+        }).then(() => {
+          return { ...fuelOrder, status: 'Completed', fuel_delivered: fuelOrderData.fuel_delivered || fuelOrderData.requested_amount || 200.0 }
+        })
+      }
+      
+      return fuelOrder
+    })
+  })
+})
+
+/**
+ * Toggle waiver on a receipt line item via API
+ * @param {number} receiptId - Receipt ID
+ * @param {number} lineItemId - Line item ID
+ * @param {number} fboId - FBO location ID (defaults to 1)
+ */
+Cypress.Commands.add('toggleLineItemWaiver', (receiptId, lineItemId, fboId = 1) => {
+  return cy.getAuthToken().then((token) => {
+    if (!token) {
+      throw new Error('No auth token found. Make sure to login first.')
+    }
+
+    return cy.request({
+      method: 'POST',
+      url: `http://localhost:5001/api/fbo/${fboId}/receipts/${receiptId}/line-items/${lineItemId}/toggle-waiver`,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    }).then((response) => {
+      return response.body
+    })
   })
 })

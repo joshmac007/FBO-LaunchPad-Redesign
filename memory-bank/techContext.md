@@ -233,3 +233,7 @@ Member: member@fbolaunchpad.com / Member123!
 
 **IN TESTING**
 If encountering authentication issues or logouts, it is likely a backend 500 error disguised as a 401 authentication error.
+
+***DO NOT PASS OR SKIP TESTS ASSUMING THAT THE DATABSE IS DOWN OR INACCESSIBLE. YOU NEED TO RUN TESTS WITHIN THE DOCKER CONTAINER***
+
+When creating test credentials for e2e tests, reads seeds.py for correct data. Do not assume or make up credentials.

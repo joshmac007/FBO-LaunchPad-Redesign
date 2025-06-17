@@ -379,41 +379,132 @@ def list_receipts(fbo_id):
 @require_permission_v2('view_receipts')
 def get_receipt_by_id(fbo_id, receipt_id):
     """
-    Get a specific receipt by ID with line items.
+    Get a single receipt by ID with line items.
     
     Returns:
-        200: Receipt details with line items
+        200: Receipt found and returned
         404: Receipt not found
     """
     try:
-        # Get receipt with line items
         receipt = receipt_service.get_receipt_by_id(receipt_id, fbo_id)
         
         if not receipt:
-            return jsonify({'error': f'Receipt {receipt_id} not found'}), 404
+            return jsonify({'error': f'Receipt {receipt_id} not found for FBO {fbo_id}'}), 404
         
         # Serialize receipt with line items
         receipt_dict = receipt.to_dict()
         receipt_dict['line_items'] = [item.to_dict() for item in receipt.line_items]
         
+        return jsonify({'receipt': receipt_dict}), 200
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/<int:receipt_id>/line-items/<int:line_item_id>/toggle-waiver', methods=['POST'])
+@require_permission_v2('update_receipt')
+def toggle_line_item_waiver(fbo_id, receipt_id, line_item_id):
+    """
+    Toggle the waiver status of a fee line item manually.
+    CSRs can manually waive or un-waive fees marked as potentially waivable.
+    
+    Returns:
+        200: Waiver toggled successfully
+        400: Validation error or fee not waivable
+        403: Receipt cannot be modified (not draft)
+        404: Receipt or line item not found
+    """
+    try:
+        # Get current user ID from auth context
+        user_id = g.current_user.id
+        
+        # Toggle the waiver
+        receipt = receipt_service.toggle_line_item_waiver(
+            receipt_id=receipt_id,
+            line_item_id=line_item_id,
+            fbo_location_id=fbo_id,
+            user_id=user_id
+        )
+        
+        # Fetch updated receipt with line items for response
+        updated_receipt = receipt_service.get_receipt_by_id(receipt_id, fbo_id)
+        receipt_dict = updated_receipt.to_dict()
+        receipt_dict['line_items'] = [item.to_dict() for item in updated_receipt.line_items]
+        
+        # Serialize response
         response_data = {
-            'receipt': receipt_dict
+            'receipt': receipt_dict,
+            'message': 'Waiver toggled successfully'
         }
         
         return jsonify(response_data), 200
         
+    except ValueError as e:
+        error_msg = str(e)
+        if 'not found' in error_msg.lower():
+            return jsonify({'error': error_msg}), 404
+        elif 'cannot modify' in error_msg.lower() or 'not draft' in error_msg.lower():
+            return jsonify({'error': error_msg}), 403
+        elif 'not manually waivable' in error_msg.lower():
+            return jsonify({'error': error_msg}), 400
+        else:
+            return jsonify({'error': error_msg}), 400
+
+
+@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/<int:receipt_id>/pdf', methods=['GET'])
+@require_permission_v2('view_receipts')
+def download_receipt_pdf(fbo_id, receipt_id):
+    """
+    Generate and download a PDF of the receipt.
+    
+    Returns:
+        200: PDF file response
+        404: Receipt not found
+        500: PDF generation error
+    """
+    try:
+        from flask import Response
+        import io
+        
+        # Get receipt data
+        receipt = receipt_service.get_receipt_by_id(receipt_id, fbo_id)
+        if not receipt:
+            return jsonify({'error': 'Receipt not found'}), 404
+        
+        # Generate PDF
+        pdf_data = receipt_service.generate_receipt_pdf(receipt)
+        
+        # Create file response
+        pdf_stream = io.BytesIO(pdf_data)
+        filename = f"Receipt_{receipt.receipt_number or receipt_id}.pdf"
+        
+        return Response(
+            pdf_stream.getvalue(),
+            mimetype='application/pdf',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}',
+                'Content-Type': 'application/pdf'
+            }
+        )
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
     except Exception as e:
-        current_app.logger.error(f"Error fetching receipt {receipt_id}: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        current_app.logger.error(f"PDF generation error: {str(e)}")
+        return jsonify({'error': 'Failed to generate PDF'}), 500
 
 
-# Health check endpoint for receipts
 @receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/health', methods=['GET'])
 def receipt_health_check(fbo_id):
-    """Health check endpoint for receipt service."""
+    """
+    Health check endpoint for receipt service.
+    
+    Returns:
+        200: Service is healthy
+    """
     return jsonify({
         'status': 'healthy',
-        'service': 'receipt_lifecycle',
+        'service': 'receipt_service',
         'fbo_id': fbo_id,
         'timestamp': datetime.utcnow().isoformat()
     }), 200 

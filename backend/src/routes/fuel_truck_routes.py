@@ -143,7 +143,7 @@ def create_fuel_truck():
         return jsonify({"error": message}), status_code
 
 @truck_bp.route('/<int:truck_id>', methods=['GET'])
-@require_permission_v2('view_fuel_trucks', 'fuel_truck', 'truck_id')
+@require_permission_v2('view_fuel_trucks', {'resource_type': 'fuel_truck', 'id_param': 'truck_id'})
 def get_fuel_truck(truck_id):
     """Get a fuel truck by ID.
     Requires view_fuel_trucks permission for the specific truck.

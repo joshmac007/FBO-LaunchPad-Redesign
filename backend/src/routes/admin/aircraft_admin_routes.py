@@ -68,7 +68,7 @@ def create_aircraft():
     return jsonify(schema.dump(aircraft)), status
 
 @admin_bp.route('/aircraft/<string:tail_number>', methods=['GET'])
-@require_permission_v2('manage_aircraft', 'aircraft', 'tail_number')
+@require_permission_v2('manage_aircraft', {'resource_type': 'aircraft', 'id_param': 'tail_number'})
 def get_aircraft(tail_number):
     """
     ---
@@ -98,7 +98,7 @@ def get_aircraft(tail_number):
     return jsonify(schema.dump(aircraft)), status
 
 @admin_bp.route('/aircraft/<string:tail_number>', methods=['PATCH'])
-@require_permission_v2('manage_aircraft', 'aircraft', 'tail_number')
+@require_permission_v2('manage_aircraft', {'resource_type': 'aircraft', 'id_param': 'tail_number'})
 def update_aircraft(tail_number):
     """
     ---
@@ -136,7 +136,7 @@ def update_aircraft(tail_number):
     return jsonify(schema.dump(aircraft)), status
 
 @admin_bp.route('/aircraft/<string:tail_number>', methods=['DELETE'])
-@require_permission_v2('manage_aircraft', 'aircraft', 'tail_number')
+@require_permission_v2('manage_aircraft', {'resource_type': 'aircraft', 'id_param': 'tail_number'})
 def delete_aircraft(tail_number):
     """
     ---

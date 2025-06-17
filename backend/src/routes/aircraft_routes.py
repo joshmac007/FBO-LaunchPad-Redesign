@@ -134,7 +134,7 @@ def create_aircraft():
         return jsonify({"error": "Server error"}), 500
 
 @aircraft_bp.route('/<string:tail_number>', methods=['GET'])
-@require_permission_v2('view_aircraft', 'aircraft', 'tail_number')
+@require_permission_v2('view_aircraft', {'resource_type': 'aircraft', 'id_param': 'tail_number'})
 def get_aircraft_by_tail(tail_number):
     """Get an aircraft by tail number.
     Requires view_aircraft permission for the specific aircraft.
@@ -191,7 +191,7 @@ def get_aircraft_by_tail(tail_number):
         return jsonify({"error": "Server error"}), 500
 
 @aircraft_bp.route('/<string:tail_number>', methods=['PATCH'])
-@require_permission_v2('manage_aircraft', 'aircraft', 'tail_number')
+@require_permission_v2('manage_aircraft', {'resource_type': 'aircraft', 'id_param': 'tail_number'})
 def update_aircraft(tail_number):
     """Update an aircraft.
     Requires manage_aircraft permission for the specific aircraft.
@@ -277,7 +277,7 @@ def update_aircraft(tail_number):
         return jsonify({"error": "Server error"}), 500
 
 @aircraft_bp.route('/<string:tail_number>', methods=['DELETE'])
-@require_permission_v2('manage_aircraft', 'aircraft', 'tail_number')
+@require_permission_v2('manage_aircraft', {'resource_type': 'aircraft', 'id_param': 'tail_number'})
 def delete_aircraft(tail_number):
     """Delete an aircraft.
     Requires manage_aircraft permission for the specific aircraft.

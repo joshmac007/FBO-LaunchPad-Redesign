@@ -1,4 +1,12 @@
+"""
+Unit tests for Fee Calculation Service
+
+Tests the core business logic for fee, waiver, and tax calculations,
+focusing on different waiver strategies and CAA overrides.
+"""
+
 import pytest
+from unittest.mock import Mock, patch
 from decimal import Decimal
 from datetime import datetime
 from src.extensions import db
@@ -8,6 +16,7 @@ from src.models.fee_category import FeeCategory
 from src.models.aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
 from src.models.fee_rule import FeeRule, CalculationBasis, WaiverStrategy
 from src.models.waiver_tier import WaiverTier
+from src.models.fbo_aircraft_type_config import FBOAircraftTypeConfig
 from src.services.fee_calculation_service import (
     FeeCalculationService,
     FeeCalculationContext,
@@ -28,6 +37,7 @@ def setup_fbo_fee_configuration(app, db):
         db.session.query(FeeCategory).delete()
         db.session.query(AircraftType).delete()
         db.session.query(Customer).delete()
+        db.session.query(FBOAircraftTypeConfig).delete()
         db.session.commit()
         
         # Create Aircraft Types with different fuel waiver requirements
@@ -183,6 +193,24 @@ def setup_fbo_fee_configuration(app, db):
         db.session.add_all([regular_customer, caa_customer])
         db.session.commit()
         
+        # Create FBO-specific configurations for different FBOs
+        # FBO 1: 200 gallons minimum for waiver
+        fbo1_config = FBOAircraftTypeConfig(
+            fbo_location_id=1,
+            aircraft_type_id=light_jet.id,
+            base_min_fuel_gallons_for_waiver=Decimal('200.00')
+        )
+        
+        # FBO 2: 100 gallons minimum for waiver
+        fbo2_config = FBOAircraftTypeConfig(
+            fbo_location_id=2,
+            aircraft_type_id=light_jet.id,
+            base_min_fuel_gallons_for_waiver=Decimal('100.00')
+        )
+        
+        db.session.add_all([fbo1_config, fbo2_config])
+        db.session.commit()
+        
         return {
             'aircraft_types': {'light_jet': light_jet.id, 'piston_single': piston_single.id},
             'fee_categories': {'light_jet': light_jet_category.id, 'piston': piston_category.id},
@@ -193,13 +221,354 @@ def setup_fbo_fee_configuration(app, db):
                 'gpu_service': gpu_service.id,
                 'lavatory_service': lavatory_service.id
             },
-            'waiver_tiers': {'tier_1x': tier_1x.id, 'tier_2x': tier_2x.id}
+            'waiver_tiers': {'tier_1x': tier_1x.id, 'tier_2x': tier_2x.id},
+            'fbo_aircraft_type_configs': {
+                'fbo1_config': fbo1_config.id,
+                'fbo2_config': fbo2_config.id
+            }
         }
 
 
 class TestFeeCalculationService:
-    """Test suite for the FeeCalculationService."""
+    """Test cases for Fee Calculation Service"""
     
+    def setup_method(self):
+        """Set up test fixtures"""
+        self.fee_service = FeeCalculationService()
+        
+        # Standard test context
+        self.context = FeeCalculationContext(
+            fbo_location_id=1,
+            aircraft_type_id=2,
+            customer_id=3,
+            fuel_uplift_gallons=Decimal('150.0'),
+            fuel_price_per_gallon=Decimal('5.50'),
+            additional_services=[]
+        )
+    
+    @patch('src.services.fee_calculation_service.FeeCalculationService._fetch_data')
+    def test_calculate_no_waiver_fees_applied(self, mock_fetch_data, app, db):
+        """
+        Test Case 1: An order that does NOT meet any waiver thresholds. 
+        Assert that fees are applied without waivers.
+        """
+        with app.app_context():
+            # Mock data setup
+            customer = Mock(spec=Customer)
+            customer.is_caa_member = False
+            
+            aircraft_type = Mock(spec=AircraftType)
+            aircraft_type.base_min_fuel_gallons_for_waiver = Decimal('200.0')  # Higher than fuel uplift
+            
+            # Fee rule that won't be waived (fuel uplift 150 < waiver threshold)
+            fee_rule = Mock(spec=FeeRule)
+            fee_rule.id = 1
+            fee_rule.fee_code = "RAMP"
+            fee_rule.fee_name = "Ramp Fee"
+            fee_rule.amount = Decimal('100.00')
+            fee_rule.is_taxable = True
+            fee_rule.is_potentially_waivable_by_fuel_uplift = True
+            fee_rule.waiver_strategy = WaiverStrategy.SIMPLE_MULTIPLIER
+            fee_rule.simple_waiver_multiplier = Decimal('1.5')
+            fee_rule.has_caa_override = False
+            fee_rule.applies_to_fee_category_id = 1  # FIXED: Match the aircraft_fee_category_id
+            
+            mock_fetch_data.return_value = {
+                'customer': customer,
+                'aircraft_type': aircraft_type,
+                'aircraft_fee_category_id': 1,
+                'fee_rules': [fee_rule],
+                'waiver_tiers': [],
+                'fbo_aircraft_config': None  # No FBO-specific config
+            }
+            
+            # Execute calculation
+            result = self.fee_service.calculate_for_transaction(self.context)
+            
+            # Assertions
+            assert isinstance(result, FeeCalculationResult)
+            assert len(result.line_items) == 3  # Fuel + Fee + Tax
+            
+            # Check fuel line item
+            fuel_item = next(item for item in result.line_items if item.line_item_type == 'FUEL')
+            assert fuel_item.amount == Decimal('825.00')  # 150 * 5.50
+            
+            # Check fee line item (should be applied, no waiver)
+            fee_item = next(item for item in result.line_items if item.line_item_type == 'FEE')
+            assert fee_item.amount == Decimal('100.00')
+            assert fee_item.fee_code_applied == "RAMP"
+            
+            # No waiver line item should exist
+            waiver_items = [item for item in result.line_items if item.line_item_type == 'WAIVER']
+            assert len(waiver_items) == 0
+            
+            # Check totals
+            assert result.fuel_subtotal == Decimal('825.00')
+            assert result.total_fees_amount == Decimal('100.00')
+            assert result.total_waivers_amount == Decimal('0.00')
+            assert result.is_caa_applied == False
+    
+    @patch('src.services.fee_calculation_service.FeeCalculationService._fetch_data')
+    def test_calculate_simple_multiplier_waiver(self, mock_fetch_data, app, db):
+        """
+        Test Case 2: An order that DOES meet a SIMPLE_MULTIPLIER waiver.
+        Assert the specific fee is waived (negative line item is created).
+        """
+        with app.app_context():
+            # Mock data setup
+            customer = Mock(spec=Customer)
+            customer.is_caa_member = False
+
+            aircraft_type = Mock(spec=AircraftType)
+            aircraft_type.base_min_fuel_gallons_for_waiver = Decimal('100.0')  # Lower than fuel uplift
+
+            # Fee rule that WILL be waived (fuel uplift 150 >= 100 * 1.5 = 150)
+            fee_rule = Mock(spec=FeeRule)
+            fee_rule.id = 1
+            fee_rule.fee_code = "RAMP"
+            fee_rule.fee_name = "Ramp Fee"
+            fee_rule.amount = Decimal('100.00')
+            fee_rule.is_taxable = True
+            fee_rule.is_potentially_waivable_by_fuel_uplift = True
+            fee_rule.waiver_strategy = WaiverStrategy.SIMPLE_MULTIPLIER
+            fee_rule.simple_waiver_multiplier = Decimal('1.5')
+            fee_rule.has_caa_override = False
+            fee_rule.applies_to_fee_category_id = 1  # CRITICAL: Must match aircraft_fee_category_id
+
+            mock_fetch_data.return_value = {
+                'customer': customer,
+                'aircraft_type': aircraft_type,
+                'aircraft_fee_category_id': 1,
+                'fee_rules': [fee_rule],
+                'waiver_tiers': [],
+                'fbo_aircraft_config': None  # No FBO-specific config
+            }
+            
+            # Execute calculation
+            result = self.fee_service.calculate_for_transaction(self.context)
+            
+            # Assertions
+            assert isinstance(result, FeeCalculationResult)
+            assert len(result.line_items) == 4  # Fuel + Fee + Waiver + Tax
+            
+            # Check fee line item
+            fee_item = next(item for item in result.line_items if item.line_item_type == 'FEE')
+            assert fee_item.amount == Decimal('100.00')
+            assert fee_item.fee_code_applied == "RAMP"
+            
+            # Check waiver line item (should be negative amount)
+            waiver_item = next(item for item in result.line_items if item.line_item_type == 'WAIVER')
+            assert waiver_item.amount == Decimal('-100.00')  # Negative to offset fee
+            assert waiver_item.fee_code_applied == "RAMP"
+            assert "Fuel Uplift Waiver" in waiver_item.description
+            
+            # Check totals
+            assert result.total_fees_amount == Decimal('100.00')
+            assert result.total_waivers_amount == Decimal('100.00')  # Absolute value
+    
+    @patch('src.services.fee_calculation_service.FeeCalculationService._fetch_data')
+    def test_calculate_tiered_multiplier_waiver(self, mock_fetch_data, app, db):
+        """
+        Test Case 3: An order that meets a TIERED_MULTIPLIER waiver.
+        Assert all fees in the tier's fees_waived_codes are waived.
+        """
+        with app.app_context():
+            # Mock data setup
+            customer = Mock(spec=Customer)
+            customer.is_caa_member = False
+
+            aircraft_type = Mock(spec=AircraftType)
+            aircraft_type.base_min_fuel_gallons_for_waiver = Decimal('100.0')
+
+            # Multiple fee rules, some will be waived by tier
+            ramp_fee = Mock(spec=FeeRule)
+            ramp_fee.id = 1
+            ramp_fee.fee_code = "RAMP"
+            ramp_fee.fee_name = "Ramp Fee"
+            ramp_fee.amount = Decimal('100.00')
+            ramp_fee.is_taxable = True
+            ramp_fee.is_potentially_waivable_by_fuel_uplift = True
+            ramp_fee.waiver_strategy = WaiverStrategy.TIERED_MULTIPLIER
+            ramp_fee.has_caa_override = False
+            ramp_fee.applies_to_fee_category_id = 1  # CRITICAL: Must match aircraft_fee_category_id
+
+            facility_fee = Mock(spec=FeeRule)
+            facility_fee.id = 2
+            facility_fee.fee_code = "FACILITY"
+            facility_fee.fee_name = "Facility Fee"
+            facility_fee.amount = Decimal('50.00')
+            facility_fee.is_taxable = True
+            facility_fee.is_potentially_waivable_by_fuel_uplift = True
+            facility_fee.waiver_strategy = WaiverStrategy.TIERED_MULTIPLIER
+            facility_fee.has_caa_override = False
+            facility_fee.applies_to_fee_category_id = 1  # CRITICAL: Must match aircraft_fee_category_id
+
+            # Waiver tier that waives these fees
+            waiver_tier = Mock(spec=WaiverTier)
+            waiver_tier.id = 1
+            waiver_tier.tier_name = "Tier 1"
+            waiver_tier.fuel_uplift_multiplier = Decimal('1.5')
+            waiver_tier.fees_waived_codes = ["RAMP", "FACILITY"]  # Should be a list, not string
+            waiver_tier.tier_priority = 1
+            waiver_tier.is_caa_specific_tier = False
+
+            mock_fetch_data.return_value = {
+                'customer': customer,
+                'aircraft_type': aircraft_type,
+                'aircraft_fee_category_id': 1,
+                'fee_rules': [ramp_fee, facility_fee],
+                'waiver_tiers': [waiver_tier],
+                'fbo_aircraft_config': None  # No FBO-specific config
+            }
+            
+            # Mock the _evaluate_waivers method to return the waived fee codes
+            with patch.object(self.fee_service, '_evaluate_waivers') as mock_evaluate:
+                mock_evaluate.return_value = {"RAMP", "FACILITY"}
+                
+                # Execute calculation
+                result = self.fee_service.calculate_for_transaction(self.context)
+                
+                # Assertions
+                fee_items = [item for item in result.line_items if item.line_item_type == 'FEE']
+                waiver_items = [item for item in result.line_items if item.line_item_type == 'WAIVER']
+                
+                assert len(fee_items) == 2  # Both fees applied
+                assert len(waiver_items) == 2  # Both fees waived
+                
+                # Check that both fees are waived
+                waived_codes = {item.fee_code_applied for item in waiver_items}
+                assert waived_codes == {"RAMP", "FACILITY"}
+                
+                # Check waiver amounts
+                ramp_waiver = next(item for item in waiver_items if item.fee_code_applied == "RAMP")
+                facility_waiver = next(item for item in waiver_items if item.fee_code_applied == "FACILITY")
+                assert ramp_waiver.amount == Decimal('-100.00')
+                assert facility_waiver.amount == Decimal('-50.00')
+                
+                # Check totals
+                assert result.total_fees_amount == Decimal('150.00')
+                assert result.total_waivers_amount == Decimal('150.00')
+    
+    @patch('src.services.fee_calculation_service.FeeCalculationService._fetch_data')
+    def test_calculate_caa_member_overrides(self, mock_fetch_data, app, db):
+        """
+        Test Case 4: A CAA member customer.
+        Assert that CAA override amounts and waiver logic are used.
+        """
+        with app.app_context():
+            # Mock data setup
+            customer = Mock(spec=Customer)
+            customer.is_caa_member = True  # CAA member
+
+            aircraft_type = Mock(spec=AircraftType)
+            aircraft_type.base_min_fuel_gallons_for_waiver = Decimal('100.0')
+
+            # Fee rule with CAA overrides
+            fee_rule = Mock(spec=FeeRule)
+            fee_rule.id = 1
+            fee_rule.fee_code = "RAMP"
+            fee_rule.fee_name = "Ramp Fee"
+            fee_rule.amount = Decimal('100.00')  # Regular amount
+            fee_rule.is_taxable = True
+            fee_rule.is_potentially_waivable_by_fuel_uplift = True
+            fee_rule.waiver_strategy = WaiverStrategy.SIMPLE_MULTIPLIER
+            fee_rule.simple_waiver_multiplier = Decimal('2.0')
+            fee_rule.has_caa_override = True
+            fee_rule.caa_override_amount = Decimal('75.00')  # Reduced amount for CAA
+            fee_rule.caa_waiver_strategy_override = WaiverStrategy.SIMPLE_MULTIPLIER
+            fee_rule.caa_simple_waiver_multiplier_override = Decimal('1.0')  # Easier waiver
+            fee_rule.applies_to_fee_category_id = 1  # CRITICAL: Must match aircraft_fee_category_id
+
+            mock_fetch_data.return_value = {
+                'customer': customer,
+                'aircraft_type': aircraft_type,
+                'aircraft_fee_category_id': 1,
+                'fee_rules': [fee_rule],
+                'waiver_tiers': [],
+                'fbo_aircraft_config': None  # No FBO-specific config
+            }
+            
+            # Execute calculation
+            result = self.fee_service.calculate_for_transaction(self.context)
+            
+            # Assertions
+            assert result.is_caa_applied == True
+            
+            # Check fee uses CAA override amount
+            fee_item = next(item for item in result.line_items if item.line_item_type == 'FEE')
+            assert fee_item.amount == Decimal('75.00')  # CAA override amount, not regular
+            
+            # Check waiver (fuel uplift 150 >= 100 * 1.0 = 100, so waiver applies)
+            waiver_items = [item for item in result.line_items if item.line_item_type == 'WAIVER']
+            assert len(waiver_items) == 1
+            waiver_item = waiver_items[0]
+            assert waiver_item.amount == Decimal('-75.00')  # Waives the CAA amount
+    
+    def test_evaluate_waivers_tiered_multiplier(self):
+        """
+        Test the _evaluate_waivers method for tiered multiplier logic.
+        """
+        # Test data
+        fuel_uplift = Decimal('150.0')
+        base_min_fuel = Decimal('100.0')
+
+        # Create mock waiver tier (without SQLAlchemy spec to avoid app context issues)
+        tier = Mock()
+        tier.fuel_uplift_multiplier = Decimal('1.5')  # 100 * 1.5 = 150
+        tier.fees_waived_codes = ["RAMP", "FACILITY"]  # Should be a list
+        tier.tier_priority = 1
+        tier.is_caa_specific_tier = False
+
+        # Test with exact threshold match
+        waived_codes = self.fee_service._evaluate_waivers(
+            fuel_uplift, base_min_fuel, [tier], is_caa_member=False
+        )
+        assert waived_codes == {"RAMP", "FACILITY"}
+        
+        # Test with insufficient fuel uplift
+        waived_codes = self.fee_service._evaluate_waivers(
+            Decimal('140.0'), base_min_fuel, [tier], is_caa_member=False
+        )
+        assert waived_codes == set()  # Below threshold
+        
+        # Test with excess fuel uplift
+        waived_codes = self.fee_service._evaluate_waivers(
+            Decimal('200.0'), base_min_fuel, [tier], is_caa_member=False
+        )
+        assert waived_codes == {"RAMP", "FACILITY"}  # Above threshold
+    
+    def test_get_service_quantity(self):
+        """
+        Test the _get_service_quantity method.
+        """
+        # Test with additional service
+        additional_services = [
+            {'fee_code': 'GPU', 'quantity': 2},
+            {'fee_code': 'LAVATORY', 'quantity': 1}
+        ]
+        
+        assert self.fee_service._get_service_quantity('GPU', additional_services) == Decimal('2')
+        assert self.fee_service._get_service_quantity('LAVATORY', additional_services) == Decimal('1')
+        assert self.fee_service._get_service_quantity('UNKNOWN', additional_services) == Decimal('1')
+        assert self.fee_service._get_service_quantity('GPU', []) == Decimal('1')
+    
+    def test_calculate_taxes(self):
+        """
+        Test the _calculate_taxes method.
+        """
+        # Test normal tax calculation
+        taxable_amount = Decimal('100.00')
+        tax = self.fee_service._calculate_taxes(taxable_amount)
+        assert tax == Decimal('8.00')  # 8% of 100
+        
+        # Test zero amount
+        tax = self.fee_service._calculate_taxes(Decimal('0.00'))
+        assert tax == Decimal('0.00')
+        
+        # Test negative amount (shouldn't happen in practice)
+        tax = self.fee_service._calculate_taxes(Decimal('-50.00'))
+        assert tax == Decimal('0.00')  # Should not tax negative amounts
+
     def test_fuel_subtotal_calculation(self, setup_fbo_fee_configuration):
         """Test basic fuel subtotal calculation (gallons * price_per_gallon)."""
         fixture_data = setup_fbo_fee_configuration
@@ -678,4 +1047,142 @@ class TestFeeCalculationService:
         
         # Should not apply any fuel-based waivers
         waiver_line_items = [item for item in result.line_items if item.line_item_type == 'WAIVER']
-        assert len(waiver_line_items) == 0 
+        assert len(waiver_line_items) == 0
+
+    def test_fbo_specific_waiver_minimums(self, setup_fbo_fee_configuration):
+        """Test that two FBOs have different waiver minimums for the same aircraft."""
+        fixture_data = setup_fbo_fee_configuration
+        
+        # Get the Citation CJ3 aircraft type
+        from src.models.aircraft_type import AircraftType
+        from src.models.fbo_aircraft_type_config import FBOAircraftTypeConfig
+        light_jet_id = fixture_data['aircraft_types']['light_jet']
+        
+        # The fixture already created FBO configs, let's use them
+        # FBO 1 has 200 gallons minimum (from fixture)
+        # FBO 2 has 100 gallons minimum (from fixture)
+        # We need to create fee categories and rules for FBO 2 to make the test work
+        
+        from src.models.fee_category import FeeCategory
+        from src.models.fee_rule import FeeRule, CalculationBasis, WaiverStrategy
+        from src.models.waiver_tier import WaiverTier
+        from src.models.aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
+        
+        # Create fee category for FBO 2
+        light_jet_category_fbo2 = FeeCategory(
+            fbo_location_id=2,
+            name="Light Jet FBO2"
+        )
+        db.session.add(light_jet_category_fbo2)
+        db.session.commit()
+        
+        # Create aircraft type mapping for FBO 2
+        light_jet_mapping_fbo2 = AircraftTypeToFeeCategoryMapping(
+            fbo_location_id=2,
+            aircraft_type_id=light_jet_id,
+            fee_category_id=light_jet_category_fbo2.id
+        )
+        db.session.add(light_jet_mapping_fbo2)
+        db.session.commit()
+        
+        # Create a simple fee rule for FBO 2 that can be waived
+        ramp_fee_fbo2 = FeeRule(
+            fbo_location_id=2,
+            fee_name="Ramp Fee",
+            fee_code="RAMP_FBO2",
+            applies_to_fee_category_id=light_jet_category_fbo2.id,
+            amount=Decimal('50.00'),
+            currency="USD",
+            is_taxable=True,
+            is_potentially_waivable_by_fuel_uplift=True,
+            calculation_basis=CalculationBasis.NOT_APPLICABLE,
+            waiver_strategy=WaiverStrategy.SIMPLE_MULTIPLIER,
+            simple_waiver_multiplier=Decimal('1.0')
+        )
+        db.session.add(ramp_fee_fbo2)
+        db.session.commit()
+        
+        service = FeeCalculationService()
+        
+        # Test with 150 gallons fuel uplift
+        fuel_amount = Decimal('150.00')
+        
+        # Context for FBO 1 (minimum 200 gallons from fixture)
+        context_fbo1 = FeeCalculationContext(
+            fbo_location_id=1,
+            aircraft_type_id=light_jet_id,
+            customer_id=fixture_data['customers']['regular'],
+            fuel_uplift_gallons=fuel_amount,
+            fuel_price_per_gallon=Decimal('5.50'),
+            additional_services=[]
+        )
+        
+        # Context for FBO 2 (minimum 100 gallons from fixture)
+        context_fbo2 = FeeCalculationContext(
+            fbo_location_id=2,
+            aircraft_type_id=light_jet_id,
+            customer_id=fixture_data['customers']['regular'],
+            fuel_uplift_gallons=fuel_amount,
+            fuel_price_per_gallon=Decimal('5.50'),
+            additional_services=[]
+        )
+        
+        # Calculate for both FBOs
+        result_fbo1 = service.calculate_for_transaction(context_fbo1)
+        result_fbo2 = service.calculate_for_transaction(context_fbo2)
+        
+        # FBO 1: 150 gallons < 200 minimum, so no waivers should be applied
+        waiver_line_items_fbo1 = [item for item in result_fbo1.line_items if item.line_item_type == 'WAIVER']
+        assert len(waiver_line_items_fbo1) == 0, "FBO 1 should have no waivers with 150 gallons (minimum 200)"
+        
+        # FBO 2: 150 gallons > 100 minimum, so waivers should be applied
+        waiver_line_items_fbo2 = [item for item in result_fbo2.line_items if item.line_item_type == 'WAIVER']
+        assert len(waiver_line_items_fbo2) > 0, "FBO 2 should have waivers with 150 gallons (minimum 100)"
+        
+        # Verify that the calculation service correctly used the FBO-specific minimum
+        assert result_fbo1.total_waivers_amount == Decimal('0.00'), "FBO 1 should have no waiver amount"
+        assert result_fbo2.total_waivers_amount > Decimal('0.00'), "FBO 2 should have waiver amount"
+
+    def test_additional_services_in_calculation(self, setup_fbo_fee_configuration):
+        """Test that additional services are properly processed by the fee calculation service."""
+        fixture_data = setup_fbo_fee_configuration
+        service = FeeCalculationService()
+        
+        # Test with additional services
+        additional_services = [
+            {'fee_code': 'GPU', 'quantity': 1},
+            {'fee_code': 'LAV', 'quantity': 2}  # Test multiple quantity
+        ]
+        
+        context = FeeCalculationContext(
+            fbo_location_id=1,
+            aircraft_type_id=fixture_data['aircraft_types']['light_jet'],
+            customer_id=fixture_data['customers']['regular'],
+            fuel_uplift_gallons=Decimal('100.00'),  # Below waiver thresholds
+            fuel_price_per_gallon=Decimal('5.50'),
+            additional_services=additional_services
+        )
+        
+        result = service.calculate_for_transaction(context)
+        
+        # Should have line items for both additional services
+        fee_line_items = [item for item in result.line_items if item.line_item_type == 'FEE']
+        
+        # Find GPU service fee
+        gpu_fee = next((item for item in fee_line_items if item.fee_code_applied == 'GPU'), None)
+        assert gpu_fee is not None, "GPU service fee should be included"
+        assert gpu_fee.amount == Decimal('25.00'), "GPU service should have correct amount"
+        assert gpu_fee.quantity == Decimal('1'), "GPU service should have correct quantity"
+        
+        # Find Lavatory service fee (should be 2 quantities)
+        lav_fee = next((item for item in fee_line_items if item.fee_code_applied == 'LAV'), None)
+        assert lav_fee is not None, "Lavatory service fee should be included"
+        assert lav_fee.amount == Decimal('70.00'), "Lavatory service should be 2 × $35.00 = $70.00"
+        assert lav_fee.quantity == Decimal('2'), "Lavatory service should have correct quantity"
+        
+        # Total fees should include additional services
+        # Default fees: Ramp ($75) + Overnight ($50) = $125
+        # Additional services: GPU ($25) + LAV ($70) = $95
+        # Total expected: $220
+        expected_total_fees = Decimal('220.00')
+        assert result.total_fees_amount == expected_total_fees, f"Total fees should include additional services: expected {expected_total_fees}, got {result.total_fees_amount}" 

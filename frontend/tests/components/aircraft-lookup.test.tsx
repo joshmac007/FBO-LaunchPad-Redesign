@@ -16,17 +16,13 @@ vi.mock('../../app/services/aircraft-service', async () => {
 });
 
 const mockAircraft: Aircraft = {
-  id: 1,
+  id: 'N12345',
   tailNumber: 'N12345',
-  type: 'Jet',
-  model: 'Gulfstream G650',
-  owner: 'Executive Aviation LLC',
-  homeBase: 'KJFK',
-  status: 'active',
-  fuelCapacity: 6500,
-  preferredFuelType: 'Jet A',
-  mtow: 99600,
-  lastFaaSyncAt: '2023-05-01T12:00:00Z',
+  aircraftType: 'Gulfstream G650',
+  fuelType: 'Jet A',
+  customerId: 123,
+  createdAt: '2023-05-01T12:00:00Z',
+  updatedAt: '2023-05-01T12:00:00Z',
 };
 
 describe('AircraftLookup Component', () => {
@@ -108,9 +104,8 @@ describe('AircraftLookup Component', () => {
 
     await waitFor(() => {
       expect(screen.getByText(mockAircraft.tailNumber)).toBeInTheDocument();
-      expect(screen.getByText(mockAircraft.type)).toBeInTheDocument();
-      expect(screen.getByText(mockAircraft.model)).toBeInTheDocument();
-      expect(screen.getByText(mockAircraft.owner)).toBeInTheDocument();
+      expect(screen.getByText(mockAircraft.aircraftType)).toBeInTheDocument();
+      expect(screen.getByText(mockAircraft.fuelType)).toBeInTheDocument();
       expect(mockOnAircraftFound).toHaveBeenCalledWith(mockAircraft);
     });
   });

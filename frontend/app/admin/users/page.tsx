@@ -80,7 +80,18 @@ export default function UserManagement() {
   const fetchUsers = async () => {
     setIsLoadingUsers(true)
     try {
-      const fetchedUsers = await getAllUsers()
+      // Prepare filters for API call
+      const filters: { role?: string; is_active?: string } = {}
+      
+      if (roleFilter !== "all") {
+        filters.role = roleFilter
+      }
+      
+      if (statusFilter !== "all") {
+        filters.is_active = statusFilter === "active" ? "true" : "false"
+      }
+      
+      const fetchedUsers = await getAllUsers(Object.keys(filters).length > 0 ? filters : undefined)
       setUsers(fetchedUsers)
       setFilteredUsers(fetchedUsers) // Initialize filteredUsers
     } catch (error) {
@@ -93,10 +104,14 @@ export default function UserManagement() {
 
   useEffect(() => {
     fetchRoles()
-    fetchUsers()
   }, [])
 
   useEffect(() => {
+    fetchUsers()
+  }, [roleFilter, statusFilter]) // Re-fetch when filters change
+
+  useEffect(() => {
+    // Now only handle search term filtering client-side since role and status filtering happens server-side
     let filtered = users
 
     if (searchTerm) {
@@ -108,23 +123,8 @@ export default function UserManagement() {
       )
     }
 
-    if (statusFilter !== "all") {
-      const isActiveFilter = statusFilter === "active"
-      filtered = filtered.filter((user) => user.is_active === isActiveFilter)
-    }
-
-    if (roleFilter !== "all") {
-      filtered = filtered.filter((user) => 
-        user.roles.some(role => {
-          // Handle both string roles and role objects
-          const roleStr = typeof role === 'string' ? role : (role as any)?.name || String(role)
-          return roleStr.toLowerCase() === roleFilter.toLowerCase()
-        })
-      )
-    }
-
     setFilteredUsers(filtered)
-  }, [users, searchTerm, statusFilter, roleFilter])
+  }, [users, searchTerm]) // Remove roleFilter and statusFilter from dependencies since they're handled server-side
 
   const handleCreateUser = async () => {
     setIsSubmitting(true)

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Plus, Search, Download, Eye, Edit, Trash2, MoreHorizontal } from "lucide-react"
-import { getFuelOrders, type FuelOrderDisplay } from "@/app/services/fuel-order-service"
+import { getFuelOrders, cancelFuelOrder, type FuelOrderDisplay } from "@/app/services/fuel-order-service"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,6 +28,16 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 // Map backend status to frontend status
 function mapBackendStatus(backendStatus: string): string {
@@ -56,8 +66,6 @@ interface FuelOrder {
   }
   fuelType: string
   quantity: number
-  unitPrice: number
-  totalAmount: number
   status: "pending" | "in-progress" | "completed" | "cancelled"
   requestedDate: string
   completedDate?: string
@@ -74,6 +82,16 @@ export default function FuelOrdersPage() {
   const [pagination, setPagination] = useState<any>(null)
   const [isNewOrderDialogOpen, setIsNewOrderDialogOpen] = useState(false)
 
+  // Cancel order state
+  const [cancelOrderDialog, setCancelOrderDialog] = useState<{
+    isOpen: boolean
+    order: FuelOrder | null
+  }>({
+    isOpen: false,
+    order: null
+  })
+  const [isCanceling, setIsCanceling] = useState(false)
+
   // New order form state
   const [newOrder, setNewOrder] = useState({
     tailNumber: "",
@@ -82,7 +100,6 @@ export default function FuelOrdersPage() {
     customerCompany: "",
     fuelType: "100LL",
     quantity: "",
-    unitPrice: "",
     notes: "",
   })
 
@@ -98,8 +115,8 @@ export default function FuelOrdersPage() {
         
         const result = await getFuelOrders(Object.keys(filters).length > 0 ? filters : undefined)
         
-                 // Transform backend data to frontend interface
-         const transformedOrders: FuelOrder[] = result.items.map((order: FuelOrderDisplay) => ({
+        // Transform backend data to frontend interface
+        const transformedOrders: FuelOrder[] = result.items.map((order: FuelOrderDisplay) => ({
           id: order.id.toString(),
           orderNumber: `FO-${order.id.toString().padStart(6, '0')}`,
           aircraft: { 
@@ -112,9 +129,7 @@ export default function FuelOrdersPage() {
           },
           fuelType: order.fuel_type,
           quantity: parseFloat(order.quantity) || 0,
-          unitPrice: 6.5, // Default unit price - would come from pricing service
-          totalAmount: (parseFloat(order.quantity) || 0) * 6.5,
-                     status: mapBackendStatus(order.status) as "pending" | "in-progress" | "completed" | "cancelled",
+          status: mapBackendStatus(order.status) as "pending" | "in-progress" | "completed" | "cancelled",
           requestedDate: order.created_at ? new Date(order.created_at).toISOString().split('T')[0] : "",
           completedDate: order.completed_at ? new Date(order.completed_at).toISOString().split('T')[0] : undefined,
           notes: order.csr_notes || order.notes || "",
@@ -188,8 +203,6 @@ export default function FuelOrdersPage() {
       },
       fuelType: newOrder.fuelType,
       quantity: Number.parseFloat(newOrder.quantity),
-      unitPrice: Number.parseFloat(newOrder.unitPrice),
-      totalAmount: Number.parseFloat(newOrder.quantity) * Number.parseFloat(newOrder.unitPrice),
       status: "pending",
       requestedDate: new Date().toISOString().split("T")[0],
       notes: newOrder.notes,
@@ -206,9 +219,37 @@ export default function FuelOrdersPage() {
       customerCompany: "",
       fuelType: "100LL",
       quantity: "",
-      unitPrice: "",
       notes: "",
     })
+  }
+
+  const handleCancelOrder = async (order: FuelOrder) => {
+    setCancelOrderDialog({ isOpen: true, order })
+  }
+
+  const confirmCancelOrder = async () => {
+    if (!cancelOrderDialog.order) return
+
+    setIsCanceling(true)
+    try {
+      await cancelFuelOrder(parseInt(cancelOrderDialog.order.id))
+      
+      // Update the local state to reflect the cancelled order
+      setFuelOrders(orders => 
+        orders.map(order => 
+          order.id === cancelOrderDialog.order?.id 
+            ? { ...order, status: 'cancelled' as const }
+            : order
+        )
+      )
+      
+      setCancelOrderDialog({ isOpen: false, order: null })
+    } catch (error) {
+      console.error('Failed to cancel order:', error)
+      setError('Failed to cancel order. Please try again.')
+    } finally {
+      setIsCanceling(false)
+    }
   }
 
   const exportToCSV = () => {
@@ -220,8 +261,6 @@ export default function FuelOrdersPage() {
       "Company",
       "Fuel Type",
       "Quantity",
-      "Unit Price",
-      "Total",
       "Status",
       "Requested Date",
     ]
@@ -236,8 +275,6 @@ export default function FuelOrdersPage() {
           order.customer.company,
           order.fuelType,
           order.quantity,
-          order.unitPrice,
-          order.totalAmount,
           order.status,
           order.requestedDate,
         ].join(","),
@@ -341,7 +378,7 @@ export default function FuelOrdersPage() {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="fuelType">Fuel Type</Label>
                     <Select
@@ -367,17 +404,6 @@ export default function FuelOrdersPage() {
                       placeholder="50"
                       value={newOrder.quantity}
                       onChange={(e) => setNewOrder({ ...newOrder, quantity: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="unitPrice">Unit Price ($)</Label>
-                    <Input
-                      id="unitPrice"
-                      type="number"
-                      step="0.01"
-                      placeholder="6.50"
-                      value={newOrder.unitPrice}
-                      onChange={(e) => setNewOrder({ ...newOrder, unitPrice: e.target.value })}
                     />
                   </div>
                 </div>
@@ -457,7 +483,6 @@ export default function FuelOrdersPage() {
                   <TableHead>Customer</TableHead>
                   <TableHead>Fuel Type</TableHead>
                   <TableHead>Quantity</TableHead>
-                  <TableHead>Total</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="w-[70px]">Actions</TableHead>
@@ -466,7 +491,7 @@ export default function FuelOrdersPage() {
               <TableBody>
                 {filteredOrders.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       No fuel orders found
                     </TableCell>
                   </TableRow>
@@ -488,7 +513,6 @@ export default function FuelOrdersPage() {
                       </TableCell>
                       <TableCell>{order.fuelType}</TableCell>
                       <TableCell>{order.quantity} gal</TableCell>
-                      <TableCell>${order.totalAmount.toFixed(2)}</TableCell>
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
                       <TableCell>{order.requestedDate}</TableCell>
                       <TableCell>
@@ -511,7 +535,11 @@ export default function FuelOrdersPage() {
                               Edit Order
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-red-600">
+                            <DropdownMenuItem 
+                              className="text-red-600"
+                              onClick={() => handleCancelOrder(order)}
+                              disabled={order.status === 'cancelled' || order.status === 'completed'}
+                            >
                               <Trash2 className="mr-2 h-4 w-4" />
                               Cancel Order
                             </DropdownMenuItem>
@@ -526,6 +554,28 @@ export default function FuelOrdersPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Cancel Order Confirmation Dialog */}
+      <AlertDialog open={cancelOrderDialog.isOpen} onOpenChange={(open) => setCancelOrderDialog({ isOpen: open, order: null })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Fuel Order</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel order {cancelOrderDialog.order?.orderNumber}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Order</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmCancelOrder}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={isCanceling}
+            >
+              {isCanceling ? "Canceling..." : "Cancel Order"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -24,6 +24,7 @@ class UserService:
             filters (Optional[Dict[str, Any]]): Optional dictionary of filter parameters.
                 Supported filters:
                 - role_ids (List[int]): Filter by role IDs
+                - role (str): Filter by role name (case-insensitive)
                 - is_active (bool): Filter by user active status
 
         Returns:
@@ -37,8 +38,21 @@ class UserService:
             query = User.query
 
             if filters:
-                # Filter by role IDs
+                # Handle role filter (string-based) - convert to role_ids
+                role_filter = filters.get('role')
                 role_ids = filters.get('role_ids')
+                
+                if role_filter and role_ids:
+                    return None, "Cannot specify both 'role' and 'role_ids' filters", 400
+                
+                if role_filter:
+                    # Convert role name to role_ids
+                    role = Role.query.filter(func.lower(Role.name) == func.lower(role_filter)).first()
+                    if not role:
+                        return None, f"Role '{role_filter}' not found", 400
+                    role_ids = [role.id]
+                
+                # Filter by role IDs
                 if role_ids:
                     if not isinstance(role_ids, list):
                         return None, "Invalid role_ids format, must be a list", 400

@@ -61,10 +61,50 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
   const handleDownloadPDF = async () => {
     try {
       setIsDownloading(true)
-      // TODO: Implement PDF download functionality
-      console.log("Downloading PDF for receipt:", receipt.receiptNumber)
+      
+      // Get user's FBO ID
+      const { getCurrentUser } = await import("@/app/services/auth-service")
+      const user = getCurrentUser()
+      if (!user?.fbo_id) {
+        throw new Error("User is not associated with an FBO")
+      }
+      
+      // Call the PDF generation endpoint
+      const response = await fetch(`/api/fbo/${user.fbo_id}/receipts/${receipt.id}/pdf`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        },
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to generate PDF')
+      }
+      
+      // Create blob from response and trigger download
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `Receipt_${receipt.receiptNumber || receipt.id}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      toast({
+        title: "Success",
+        description: "PDF downloaded successfully",
+        className: "bg-green-500 text-white",
+      })
     } catch (error) {
       console.error("Error downloading PDF:", error)
+      toast({
+        title: "Error",
+        description: "Failed to download PDF. " + (error instanceof Error ? error.message : ""),
+        variant: "destructive",
+      })
     } finally {
       setIsDownloading(false)
     }
