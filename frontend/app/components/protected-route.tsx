@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import AccessDenied from "./access-denied"
 import { usePermissions } from "../contexts/permission-context"
+import { DASHBOARD_ACCESS, FUEL_ORDERS, SYSTEM, USERS } from "@/app/constants/permissions"
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -78,13 +79,26 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
       if (adminOnly) {
         // Admin access check
-        hasRequiredAccess = hasAnyPermission(['ACCESS_ADMIN_DASHBOARD', 'MANAGE_SETTINGS', 'MANAGE_USERS', 'MANAGE_ROLES'])
+        hasRequiredAccess = hasAnyPermission([
+          DASHBOARD_ACCESS.ACCESS_ADMIN_DASHBOARD, 
+          SYSTEM.MANAGE_SETTINGS, 
+          USERS.MANAGE_USERS, 
+          SYSTEM.MANAGE_ROLES
+        ])
       } else if (csrOnly) {
         // CSR access check
-        hasRequiredAccess = hasAnyPermission(['ACCESS_CSR_DASHBOARD', 'VIEW_ALL_ORDERS', 'CREATE_ORDER'])
+        hasRequiredAccess = hasAnyPermission([
+          DASHBOARD_ACCESS.ACCESS_CSR_DASHBOARD, 
+          FUEL_ORDERS.VIEW_ALL_ORDERS, 
+          FUEL_ORDERS.CREATE_FUEL_ORDER
+        ])
       } else if (fuelerOnly) {
         // Fueler access check
-        hasRequiredAccess = hasAnyPermission(['ACCESS_FUELER_DASHBOARD', 'PERFORM_FUELING_TASK', 'UPDATE_OWN_ORDER_STATUS'])
+        hasRequiredAccess = hasAnyPermission([
+          DASHBOARD_ACCESS.ACCESS_FUELER_DASHBOARD, 
+          FUEL_ORDERS.PERFORM_FUELING_TASK, 
+          FUEL_ORDERS.UPDATE_ORDER_STATUS
+        ])
       } else if (memberOnly) {
         // Basic member access - just need to be authenticated with active account
         hasRequiredAccess = user.is_active

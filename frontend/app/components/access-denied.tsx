@@ -12,6 +12,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { usePermissions } from "@/app/contexts/permission-context"
 import { cn } from "@/lib/utils"
+import { DASHBOARD_ACCESS, FUEL_ORDERS, SYSTEM, USERS } from "@/app/constants/permissions"
 
 // Configuration for debugging features
 const DEBUG_CONFIG = {
@@ -91,16 +92,31 @@ export default function AccessDenied({
     const permissions: string[] = []
     
     if (adminOnly) {
-      permissions.push('access_admin_dashboard', 'manage_settings', 'manage_users', 'manage_roles')
+      permissions.push(
+        DASHBOARD_ACCESS.ACCESS_ADMIN_DASHBOARD, 
+        SYSTEM.MANAGE_SETTINGS, 
+        USERS.MANAGE_USERS, 
+        SYSTEM.MANAGE_ROLES
+      )
     }
     if (csrOnly) {
-      permissions.push('access_csr_dashboard', 'view_all_orders', 'create_order')
+      permissions.push(
+        DASHBOARD_ACCESS.ACCESS_CSR_DASHBOARD, 
+        FUEL_ORDERS.VIEW_ALL_ORDERS, 
+        FUEL_ORDERS.CREATE_FUEL_ORDER
+      )
     }
     if (fuelerOnly) {
-      permissions.push('access_fueler_dashboard', 'perform_fueling_task', 'update_order_status', 'view_assigned_orders', 'complete_fuel_order')
+      permissions.push(
+        DASHBOARD_ACCESS.ACCESS_FUELER_DASHBOARD, 
+        FUEL_ORDERS.PERFORM_FUELING_TASK, 
+        FUEL_ORDERS.UPDATE_ORDER_STATUS, 
+        FUEL_ORDERS.VIEW_ASSIGNED_ORDERS, 
+        FUEL_ORDERS.COMPLETE_FUEL_ORDER
+      )
     }
     if (memberOnly) {
-      permissions.push('access_member_dashboard')
+      permissions.push(DASHBOARD_ACCESS.ACCESS_MEMBER_DASHBOARD)
     }
     
     if (requiredPermissions.length > 0) {
@@ -122,16 +138,29 @@ export default function AccessDenied({
 
   // Determine suggested dashboard redirect
   const getSuggestedDashboard = () => {
-    if (hasAnyPermission(['access_admin_dashboard', 'manage_settings', 'manage_users', 'manage_roles'])) {
+    if (hasAnyPermission([
+      DASHBOARD_ACCESS.ACCESS_ADMIN_DASHBOARD, 
+      SYSTEM.MANAGE_SETTINGS, 
+      USERS.MANAGE_USERS, 
+      SYSTEM.MANAGE_ROLES
+    ])) {
       return { label: 'Go to Admin Dashboard', href: '/admin/dashboard' }
     }
-    if (hasAnyPermission(['access_csr_dashboard', 'view_all_orders', 'create_order'])) {
+    if (hasAnyPermission([
+      DASHBOARD_ACCESS.ACCESS_CSR_DASHBOARD, 
+      FUEL_ORDERS.VIEW_ALL_ORDERS, 
+      FUEL_ORDERS.CREATE_FUEL_ORDER
+    ])) {
       return { label: 'Go to CSR Dashboard', href: '/csr/dashboard' }
     }
-    if (hasAnyPermission(['access_fueler_dashboard', 'perform_fueling_task', 'update_order_status'])) {
+    if (hasAnyPermission([
+      DASHBOARD_ACCESS.ACCESS_FUELER_DASHBOARD, 
+      FUEL_ORDERS.PERFORM_FUELING_TASK, 
+      FUEL_ORDERS.UPDATE_ORDER_STATUS
+    ])) {
       return { label: 'Go to Fueler Dashboard', href: '/fueler/dashboard' }
     }
-    if (hasAnyPermission(['access_member_dashboard']) || user?.is_active) {
+    if (hasAnyPermission([DASHBOARD_ACCESS.ACCESS_MEMBER_DASHBOARD]) || user?.is_active) {
       return { label: 'Go to Member Dashboard', href: '/member/dashboard' }
     }
     return null

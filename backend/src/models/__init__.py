@@ -1,7 +1,7 @@
 from .base import Base
 from .permission import Permission
 from .role import Role
-from .role_permission import role_permissions, user_roles
+from .role_permission import user_roles
 from .user import User
 from .user_permission import UserPermission
 from .permission_group import PermissionGroup, PermissionGroupMembership, RolePermissionGroup
@@ -26,7 +26,7 @@ __all__ = [
     'Base',
     'Permission',
     'Role',
-    'role_permissions',
+
     'user_roles',
     'User',
     'UserPermission',

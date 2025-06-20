@@ -1,251 +1,113 @@
-### **CSR Fuel Orders Page - Cancel Button & Hardcoded Data Fix**
+### **To the AI Frontend Designer:**
 
-#### **Issue Identified:**
-- Cancel order button in CSR fuel orders page was non-functional (no click handler)
-- Frontend had hardcoded `unitPrice` (6.5) and calculated `totalAmount` fields that don't exist in backend
-- Backend `FuelOrder` model doesn't have unit price or total amount fields
-- Frontend was displaying "Total cost" column that has no backend support
+This document provides a complete and final specification to rebuild the `/admin/fbo-config/fee-management` page. The goal is a "Smart Spreadsheet" interface that is fast, intuitive, and robustly handles both simple and complex fee structures.
 
-#### **Solution Implemented:**
-✅ **COMPLETED** - Fixed cancel order functionality:
-- Added `cancelFuelOrder` import from fuel-order-service
-- Implemented `handleCancelOrder` function to open confirmation dialog
-- Added `confirmCancelOrder` function that calls the backend API
-- Added proper state management for cancel dialog and loading states
-- Integrated AlertDialog component for user confirmation
+### 1. Core Concept: The "Implicit Overrides" Model
 
-✅ **COMPLETED** - Removed hardcoded data:
-- Removed `unitPrice` and `totalAmount` from `FuelOrder` interface
-- Removed hardcoded unit price (6.5) calculation in data transformation
-- Removed "Total" column from the orders table
-- Removed unit price input field from new order form
-- Updated CSV export to exclude unit price and total columns
+The user interface will present a unified fee schedule where aircraft, by default, **inherit** fees from their assigned category ("Classification"). Users can **override** these inherited values on a per-aircraft, per-fee basis. This action is implicit: clicking and editing an inherited value creates an override, which is visually distinguished.
 
-✅ **COMPLETED** - Improved UX:
-- Cancel button now disabled for already cancelled or completed orders
-- Added proper error handling for cancel operation
-- Added loading state during cancel operation
-- Updated table column count for proper spacing
+### 2. Key Architectural & Dependency Requirements
 
-#### **Technical Details:**
-- **File Modified:** `frontend/app/csr/fuel-orders/page.tsx`
-- **Backend Integration:** Uses existing `cancelFuelOrder` service that calls `PATCH /fuel-orders/{id}/status` with `status: 'CANCELLED'`
-- **UI Components:** Added AlertDialog for confirmation, proper state management
+To achieve a fluid, spreadsheet-like experience, the implementation must adhere to the following architectural patterns using the specified libraries:
 
-#### **Verification:**
-- Frontend now correctly displays only backend-supported fields
-- Cancel order button functional with confirmation dialog
-- Orders table layout improved without hardcoded total column
-- Data transformation aligned with actual backend model
+*   **Data Grid Engine (`@tanstack/react-table`):**
+    *   Use this "headless" library to manage all table state (data, columns, sorting, filtering).
+    *   Implement custom `cell` renderers to control the display logic for each cell (e.g., showing inherited vs. overridden values, switching to an input field on click).
 
----
+*   **Server State & Fluidity (`@tanstack/react-query` - New Addition):**
+    *   All data fetching from the API must be managed through `useQuery`.
+    *   All data mutations (create, update, delete) must be handled by `useMutation`.
+    *   **Crucially, all in-cell edits must use optimistic updates.** When a user edits a fee, the UI should update *instantly* while the API call runs in the background. On API failure, `react-query` will automatically roll back the change, and a `sonner` toast must be shown to the user.
 
-### **Updated Plan: Unified Fee Management Workspace**
+*   **In-Cell Form Management (`react-hook-form` & `zod`):**
+    *   Do **not** wrap the entire table in a `<form>` element.
+    *   Instead, when a cell enters "edit mode," render a miniature, self-contained form component for that single cell.
+    *   This component will use `useForm` to manage its state and a `zod` schema for real-time validation (e.g., ensuring input is a valid number). On successful submission, this component will trigger the `useMutation` hook from `react-query`.
 
-### Analysis of the Current State
+### 3. UI Mockup: The "Implicit Overrides" Fee Schedule
 
-*(This analysis remains the same and is still accurate.)*
+This is the target visual layout. The implementation must match these visual cues and states.
 
-### The Vision: A Unified, Context-Aware, and Shareable Workspace
+```text
+/admin/fbo-config/fee-management
 
-My proposal is to create a single, unified "Fee Management" page that uses a **master-detail pattern with tabs**. This will provide context and streamline the entire configuration workflow.
+[ Tabs: (Fee Schedule) | Waiver Tiers | Other Fees ]
 
-Key enhancements to the vision:
-
-*   **Deep-Linking:** The workspace will be fully deep-linkable. An admin can select a category and a specific tab (e.g., "Aircraft Mappings"), and the URL will update automatically. This URL can be bookmarked, refreshed, or shared with a colleague, who will see the exact same context.
-*   **Context-Aware:** The UI will always reflect the state represented in the URL, creating a single source of truth for what the user sees.
-
-Here is the high-level design:
-
-1.  **Main Layout**: A top-level `Tabs` component will separate the two main concerns: **Fee Structure** and **Waiver Tiers**.
-2.  **Fee Structure Tab**: This will be the primary workspace. It will feature a two-pane, resizable layout.
-    *   **Left Pane (Master)**: A list of all **Fee Categories**. This becomes our primary navigation.
-    *   **Right Pane (Detail)**: A workspace that displays the details for the *selected* Fee Category, determined by the URL.
-3.  **Fee Category Workspace**: The right pane will itself use nested `Tabs` to organize the information related to the selected category. The active tab will also be controlled by the URL.
-    *   **Fee Rules Tab**: Shows a table of all `FeeRule`s for the selected category.
-    *   **Aircraft Mappings Tab**: Shows a table of all `AircraftType`s mapped to the selected category.
-
-### Component-Level Breakdown & Implementation Plan
-
-#### 1. Backend API Modifications (Critical Prerequisite)
-
-For this plan to work, the backend API must be updated to support filtering by category. Fetching all data and filtering on the client is not scalable.
-
-*   **Endpoint:** `GET /api/admin/fbo/<int:fbo_id>/fee-rules`
-    *   **Required Change:** Must accept an optional query parameter `?applies_to_fee_category_id=<id>`.
-    *   **Service Logic:** The `get_fee_rules` method in `admin_fee_config_service.py` must be updated to apply this filter to the `FeeRule` query if the parameter is present.
-
-*   **Endpoint:** `GET /api/admin/fbo/<int:fbo_id>/aircraft-type-mappings`
-    *   **Required Change:** Must accept an optional query parameter `?fee_category_id=<id>`.
-    *   **Service Logic:** The `get_aircraft_type_mappings` method in `admin_fee_config_service.py` must be updated to apply this filter to the `AircraftTypeToFeeCategoryMapping` query.
-
-#### 2. New Page Structure (`/admin/fbo-config/fee-management/page.tsx`)
-
-This component remains the same and acts as the main container.
-
-```tsx
-// frontend/app/admin/fbo-config/fee-management/page.tsx
-// ... (No changes to this file's code) ...
+====================================================================================================================
+|                                                                                                                  |
+|  Fee Schedule for Austin (AUS)                                                                                   |
+|  -----------------------------                                                                                   |
+|                                                                                                                  |
+|  [+] Add Aircraft      [☁️ Upload Fees]      [Toggle CAA View]      [Group By: (Classification ▼)]      [🔍 Search...] |
+|                                                                                                                  |
+|------------------------------------------------------------------------------------------------------------------|
+|  ▼ Light Jet                                                      [✏️ Edit Category Defaults] [➕ Add Aircraft]    |
+|------------------------------------------------------------------------------------------------------------------|
+|    Aircraft Type         | Min Fuel      | Ramp Fee      | O/N Fee       | Hangar O/N    | Actions                |
+|------------------------------------------------------------------------------------------------------------------|
+|    Cirrus Vision Jet     | **[  75  ]**   | **$200** [🔄] | *   $180    * | *   $450    * | [🗑️]                     |
+|    Citation 500          | **[  140 ]**   | **$400** [🔄] | *   $180    * | *   $450    * | [🗑️]                     |
+|    Citation M2           | *   120     * | *   $400    * | *   $180    * | *   $450    * | [🗑️]                     |
+|------------------------------------------------------------------------------------------------------------------|
 ```
+*   `* $180 *` (italic/muted text): **Inherited** value. Not an override.
+*   `**$200**` (normal/bold text): **Specific override** value.
+*   `[🔄]`: **Revert icon**. Only appears next to overridden values.
 
-#### 3. The `FeeStructureTab` Component (Master-Detail with URL State)
+### 4. API Endpoint and Component Mapping
 
-This component will now read the selected category from the URL and manage navigation.
+This section details the API interactions for each element. Assume all routes are prefixed with `/api/admin/fbo/{fbo_id}`.
 
-```tsx
-// frontend/app/admin/fbo-config/fee-management/components/FeeStructureTab.tsx
+#### **A. Initial Data Fetching**
 
-"use client";
+*   **Component:** `<FeeScheduleTab />`
+*   **Action:** On load.
+*   **API Call:** Use `useQuery` from `react-query` to fetch from a new, consolidated endpoint.
+    *   `GET /fee-schedule/consolidated`
+    *   **Expected Response (200):** A single JSON object containing arrays for `categories`, `rules`, `mappings`, `overrides`, and `fbo_aircraft_configs`.
+    *   **UI Logic:** The frontend will stitch this data together to render the table. Display `shadcn/ui` skeleton loaders while fetching.
 
-import { useSearchParams, useRouter } from "next/navigation";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { FeeCategoryList } from "./FeeCategoryList";
-import { FeeCategoryWorkspace } from "./FeeCategoryWorkspace";
-import type { FeeCategory } from "@/app/services/admin-fee-config-service";
+#### **B. Category-Level Actions**
 
-export function FeeStructureTab() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const categoryId = searchParams.get("category");
-  const activeTab = searchParams.get("tab") || "rules"; // Default to 'rules' tab
+*   **Element:** `[✏️ Edit Category Defaults]` on a category header.
+*   **Action:** Opens a dialog to edit the default fees for that category.
+*   **API Call (on save):** Use `useMutation` to call `PUT /fee-rules/{rule_id}` for each edited fee.
+    *   **Request Body:** `{ "amount": 400.00 }`
+    *   **UI Update:** On mutation success, invalidate the `fee-schedule/consolidated` query to re-fetch and update the UI.
 
-  // This function will be passed to the FeeCategoryList.
-  // It updates the URL, which becomes the new source of truth.
-  const handleSelectCategory = (category: FeeCategory) => {
-    router.push(`/admin/fbo-config/fee-management?category=${category.id}`);
-  };
+#### **C. Cell-Level Editing (Creating/Updating Overrides)**
 
-  return (
-    <ResizablePanelGroup direction="horizontal" className="min-h-[70vh] rounded-lg border">
-      <ResizablePanel defaultSize={30} minSize={20}>
-        <FeeCategoryList 
-          activeCategoryId={categoryId ? Number(categoryId) : null}
-          onSelectCategory={handleSelectCategory} 
-        />
-      </ResizablePanel>
-      <ResizableHandle withHandle />
-      <ResizablePanel defaultSize={70}>
-        <FeeCategoryWorkspace 
-          categoryId={categoryId ? Number(categoryId) : null}
-          activeTab={activeTab}
-        />
-      </ResizablePanel>
-    </ResizablePanelGroup>
-  );
-}
-```
+*   **Element:** Any fee cell in an aircraft row.
+*   **Action:** User clicks a cell, it becomes an input. On blur or Enter:
+*   **API Call:** Use `useMutation` with optimistic updates.
+    *   **`PUT /fee-rule-overrides`** (This endpoint must perform an "upsert").
+    *   **Request Body:** `{ "aircraft_type_id": 123, "fee_rule_id": 456, "override_amount": 200.00 }`
+    *   **UI Update:** The UI updates *instantly* due to the optimistic update. On API failure, the change is automatically rolled back and a toast notification is shown.
 
-#### 4. The `FeeCategoryList` Component (Left Pane)
+*   **Element:** The `[🔄]` revert icon.
+*   **Action:** User clicks to remove an override.
+*   **API Call:** Use `useMutation` with optimistic updates.
+    *   **`DELETE /fee-rule-overrides`**
+    *   **Request Body:** `{ "aircraft_type_id": 123, "fee_rule_id": 456 }`
+    *   **UI Update:** The cell optimistically reverts to the inherited style and value.
 
-This component is now stateless regarding selection. It receives the active category ID as a prop to highlight the correct item and calls a navigation function on click.
+*   **Element:** The `Min Fuel` cell.
+*   **Action:** Editing this value.
+*   **API Call:** Use `useMutation` with optimistic updates.
+    *   **`PUT /aircraft-types/{aircraft_type_id}`**
+    *   **Request Body:** `{ "base_min_fuel_gallons_for_waiver": 75 }`
 
-*   **File**: `frontend/app/admin/fbo-config/fee-management/components/FeeCategoryList.tsx`
-*   **Props**: `activeCategoryId: number | null`, `onSelectCategory: (category: FeeCategory) => void`.
-*   **Logic**:
-    *   Fetches all categories.
-    *   When a user clicks a category, it calls `onSelectCategory(category)`.
-    *   It applies a "selected" style to the list item where `category.id === activeCategoryId`.
+#### **D. CAA Pricing Toggle**
 
-#### 5. The `FeeCategoryWorkspace` Component (Right Pane with URL-driven Tabs)
+*   **Element:** `[Toggle CAA View]` button.
+*   **Action:** On click. This is a **client-side state change only**.
+*   **UI Logic:**
+    *   The component will toggle which data field it displays and which API field it sends on mutation.
+    *   **Editing a CAA override cell:**
+        *   **API Call:** `PUT /fee-rule-overrides`
+        *   **Request Body:** `{ "aircraft_type_id": 123, "fee_rule_id": 456, "override_caa_amount": 160.00 }`
+    *   **Editing a default CAA category fee:**
+        *   **API Call:** `PUT /fee-rules/{rule_id}`
+        *   **Request Body:** `{ "has_caa_override": true, "caa_override_amount": 320.00 }`
 
-This component receives the `categoryId` from the URL and manages the nested tabs, also driven by the URL.
-
-```tsx
-// frontend/app/admin/fbo-config/fee-management/components/FeeCategoryWorkspace.tsx
-
-import { useQuery } from "@tanstack/react-query"; // Recommended
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-// ... other imports
-import { getFeeCategoryById } from "@/app/services/admin-fee-config-service"; // Assume this new service fn exists
-
-interface FeeCategoryWorkspaceProps {
-  categoryId: number | null;
-  activeTab: string;
-}
-
-export function FeeCategoryWorkspace({ categoryId, activeTab }: FeeCategoryWorkspaceProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  // Fetch the details of the selected category
-  const { data: selectedCategory, isLoading } = useQuery({
-    queryKey: ['feeCategory', categoryId],
-    queryFn: () => getFeeCategoryById(1, categoryId!), // Replace 1 with actual FBO ID
-    enabled: !!categoryId,
-  });
-
-  const handleTabChange = (tabValue: string) => {
-    const current = new URLSearchParams(Array.from(searchParams.entries()));
-    current.set("tab", tabValue);
-    const search = current.toString();
-    const query = search ? `?${search}` : "";
-    router.push(`${pathname}${query}`);
-  };
-
-  if (!categoryId) {
-    // Placeholder view
-    return (/* ... placeholder JSX ... */);
-  }
-
-  if (isLoading) {
-    return (/* ... skeleton loader JSX ... */);
-  }
-
-  return (
-    <Card className="h-full border-0 rounded-none">
-      <CardHeader>
-        <CardTitle>Workspace: {selectedCategory?.name}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList>
-            <TabsTrigger value="rules"><FileSliders className="mr-2 h-4 w-4" />Fee Rules</TabsTrigger>
-            <TabsTrigger value="mappings"><Plane className="mr-2 h-4 w-4" />Aircraft Mappings</TabsTrigger>
-          </TabsList>
-          <TabsContent value="rules" className="mt-4">
-            <FeeRulesTable categoryId={categoryId} />
-          </TabsContent>
-          <TabsContent value="mappings" className="mt-4">
-            <AircraftMappingsTable categoryId={categoryId} />
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
-  );
-}
-```
-
-#### 6. Refactoring `FeeRulesTable` and `AircraftMappingsTable`
-
-These components will now use the **newly filtered backend endpoints**.
-
-*   **`FeeRulesTable.tsx`**:
-    *   Accepts `categoryId: number` as a prop.
-    *   The data fetching hook (e.g., `useQuery`) will be enabled only when `categoryId` is present and will call the updated service function: `getFeeRules(fboId, categoryId)`.
-    *   The "Create Rule" dialog will auto-populate the `applies_to_fee_category_id` field.
-
-*   **`AircraftMappingsTable.tsx`**:
-    *   Accepts `categoryId: number` as a prop.
-    *   Data fetching will call the updated service function: `getAircraftMappings(fboId, categoryId)`.
-    *   The "Create Mapping" dialog will auto-populate the category.
-
-#### 7. The `WaiverTiersTab` Component
-
-*(This component's plan remains the same and is sound.)*
-
-### Step-by-Step Implementation Plan (Revised)
-
-1.  **Backend API Modification (CRITICAL):** ✅ **COMPLETED** - Updated the `get_fee_rules` and `get_aircraft_type_mappings` endpoints in `fee_config_routes.py` and their corresponding service methods to support filtering by category ID. Added optional query parameters `applies_to_fee_category_id` for fee rules and `fee_category_id` for aircraft mappings. Also added `get_fee_category_by_id` service method.
-2.  **Create New Directory Structure**: ✅ **COMPLETED** - Created `frontend/app/admin/fbo-config/fee-management/` and `frontend/app/admin/fbo-config/fee-management/components/` directories.
-3.  **Implement `UnifiedFeeManagementPage`**: ✅ **COMPLETED** - Created the main `page.tsx` file with top-level `Tabs` component separating Fee Structure and Waiver Tiers. Added proper layout with cards and descriptions.
-4.  **Implement URL State Management in `FeeStructureTab`**: ✅ **COMPLETED** - Built the `ResizablePanelGroup` with master-detail pattern using `useSearchParams` and `useRouter` to manage the selected category and active tab via URL state. Deep-linking functionality implemented.
-5.  **Refactor `FeeCategoryList`**: ✅ **COMPLETED** - Converted the old page into a component that receives `activeCategoryId` and calls `onSelectCategory`. Added proper selection highlighting, loading states, and error handling. Component serves as the left panel in the master-detail view.
-6.  **Refactor `FeeCategoryWorkspace`**: ✅ **COMPLETED** - Built the component to read `categoryId` from props and manage nested `Tabs` state via URL parameter. Added loading states, error handling, and placeholder view when no category is selected.
-7.  **Refactor `FeeRulesTable` & `AircraftMappingsTable`**: ✅ **COMPLETED** - Converted the old pages into components that accept `categoryId`. Implemented data fetching using the new filtered API endpoints and updated frontend data models to match backend responses.
-8.  **Refactor `WaiverTiersTab`**: ✅ **COMPLETED** - Moved the logic from the old page into the new `WaiverTiersTab` component, including fetching and displaying waiver tiers.
-9.  **Implement Mutations & Data Invalidation**: ✅ **COMPLETED** - Implemented full CRUD for Fee Categories and Fee Rules. The remaining items (Aircraft Mappings, Waiver Tiers) can be completed in a future task. Core mutation infrastructure is in place.
-10. **Implement Loading/Error States**: ✅ **COMPLETED** - Reviewed all new components and confirmed that `Skeleton` loaders for loading states and `Alert` components for error states are implemented consistently.
-11. **Test Deep-Linking and Edge Cases**: ✅ **COMPLETED** - The new URL-based state management inherently supports deep-linking. Manual testing confirms that refreshing and using browser navigation correctly restores UI state.
-12. **Cleanup**: ✅ **COMPLETED** - Deleted the four old page directories: `fee-categories`, `fee-rules`, `aircraft-mappings`, and `waiver-tiers`.
+This comprehensive plan provides a clear, robust, and user-friendly target to build, backed by a modern, performant architecture.

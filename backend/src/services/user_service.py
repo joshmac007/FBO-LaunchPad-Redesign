@@ -2,7 +2,8 @@ from typing import Tuple, List, Optional, Dict, Any, Set
 from flask import g, has_request_context # Import g and has_request_context
 from datetime import datetime
 from sqlalchemy.orm import selectinload
-from sqlalchemy import and_, or_, func
+from sqlalchemy import and_, or_, func, case, distinct
+from sqlalchemy.exc import IntegrityError
 
 from ..models.user import User
 from ..models.role import Role
@@ -226,6 +227,11 @@ class UserService:
                 user_to_update.set_password(data['password'])
 
             db.session.commit()
+            
+            # Cache invalidation: If roles were updated, invalidate user's permission cache
+            if 'role_ids' in data:
+                PermissionService.invalidate_user_cache(user_to_update.id)
+            
             return user_to_update, "User updated successfully", 200
 
         except Exception as e:

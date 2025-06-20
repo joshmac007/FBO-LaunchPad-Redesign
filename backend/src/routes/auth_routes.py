@@ -225,7 +225,7 @@ def get_my_permissions():
             schema: ErrorResponseSchema
     """
     try:
-        from src.services.enhanced_permission_service import enhanced_permission_service
+        from src.services.permission_service import enhanced_permission_service
         from flask_jwt_extended import get_jwt_identity
         from src.models.user import User
         

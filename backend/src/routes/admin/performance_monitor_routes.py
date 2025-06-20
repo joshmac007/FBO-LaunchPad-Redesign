@@ -11,7 +11,7 @@ from flask_jwt_extended import get_jwt_identity
 from ...utils.enhanced_auth_decorators_v2 import require_permission_v2, audit_permission_access
 from ...services.redis_permission_cache import redis_permission_cache
 from ...services.permission_performance_monitor import permission_performance_monitor
-from ...services.enhanced_permission_service import enhanced_permission_service
+from ...services.permission_service import enhanced_permission_service
 
 # Create admin blueprint
 performance_monitor_bp = Blueprint('performance_monitor', __name__, url_prefix='/api/admin/performance')

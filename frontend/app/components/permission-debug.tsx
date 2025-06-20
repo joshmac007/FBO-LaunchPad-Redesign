@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ChevronDown, ChevronRight, RefreshCw, Bug, User, Shield, Eye, EyeOff } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { PERMISSION_GROUPS } from "@/app/constants/permissions"
 
 export default function PermissionDebug() {
   const [isOpen, setIsOpen] = useState(false)
@@ -35,59 +36,11 @@ export default function PermissionDebug() {
     }
   }
 
-  // Test specific CSR permissions - using actual database permission names
-  const csrPermissions = [
-    // Actual permission names from the seeded database
-    'create_fuel_order',           // Allows creating new fuel orders
-    'view_all_orders',        // Allows viewing all fuel orders  
-    'review_fuel_order',          // Allows CSR/Admin to mark orders as reviewed
-    'export_orders_csv',      // Allows exporting order data to CSV
-    'view_order_statistics',       // Allows viewing order statistics
-    'edit_fuel_order',        // Allows editing fuel order details
-    'view_customers',         // Allows viewing customer list
-    'manage_customers',       // Allows creating, updating, deleting customers
-    
-    // Legacy granular permission names (in case they exist)
-    'csr_access',
-    'access_csr_dashboard',
-    'manage_orders',
-    'create_fuel_order',
-    'view_fuel_orders',
-    'edit_own_order',
-    'export_order_data',
-    'view_order_statistics',
-    'review_orders'
-  ]
-
-  const adminPermissions = [
-    // Actual permission names from the seeded database
-    'manage_users',           // Allows managing user accounts
-    'access_admin_dashboard',       // Allows access to admin panel
-    'manage_roles',           // Allows managing roles and permissions
-    
-    // Legacy granular permission names (in case they exist)
-    'admin_access',
-    'access_admin_panel',
-    'manage_system',
-    'manage_users',
-    'manage_permission_groups'
-  ]
-
-  const fuelerPermissions = [
-    // Actual permission names from the seeded database
-    'perform_fueling_task',        // Allows performing fueling operations
-    'complete_fuel_order',    // Allows updating order status
-    'access_fueler_dashboard',        // Allows completing orders
-    'view_assigned_orders',   // Allows viewing assigned orders
-    
-    // Legacy granular permission names (in case they exist)
-    'fueler_access',
-    '',
-    'perform_fueling',
-    'start_fueling_task',
-    'update_fueling_status',
-    'complete_own_order'
-  ]
+  // Use actual permission groups from constants - no more mock/test permissions
+  const csrPermissions = [...PERMISSION_GROUPS.CSR]
+  const adminPermissions = [...PERMISSION_GROUPS.ADMIN]
+  const fuelerPermissions = [...PERMISSION_GROUPS.FUELER]
+  const memberPermissions = [...PERMISSION_GROUPS.MEMBER]
 
   if (!isVisible) {
     return (
@@ -223,6 +176,24 @@ export default function PermissionDebug() {
             </CollapsibleTrigger>
             <CollapsibleContent className="pl-4 space-y-1 mt-1">
               {fuelerPermissions.map(permission => (
+                <div key={permission} className="flex items-center justify-between">
+                  <span className="text-xs">{permission}</span>
+                  <Badge variant={can(permission) ? "default" : "secondary"} className="text-xs">
+                    {can(permission) ? "✓" : "✗"}
+                  </Badge>
+                </div>
+              ))}
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Member Permission Tests */}
+          <Collapsible>
+            <CollapsibleTrigger className="flex items-center gap-1 hover:bg-muted/50 p-1 rounded">
+              <ChevronRight className="h-3 w-3" />
+              <span className="font-medium">Member Permissions ({memberPermissions.filter(p => can(p)).length}/{memberPermissions.length})</span>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pl-4 space-y-1 mt-1">
+              {memberPermissions.map(permission => (
                 <div key={permission} className="flex items-center justify-between">
                   <span className="text-xs">{permission}</span>
                   <Badge variant={can(permission) ? "default" : "secondary"} className="text-xs">

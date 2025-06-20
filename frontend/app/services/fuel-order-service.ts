@@ -56,6 +56,7 @@ export interface FuelOrderBackend {
   tail_number: string
   fuel_type?: string // Added missing fuel_type field
   requested_amount: number | string // Can be number or string depending on endpoint
+  gallons_requested?: number // From Marshmallow schema transformation
   customer_id: number
   customer_name?: string // Customer name from backend relationship
   status: string
@@ -129,13 +130,13 @@ export interface FuelOrderFilters {
 
 // Statistics interface
 export interface FuelOrderStats {
-  active_count: number
-  in_progress_count: number
-  completed_today: number
-  pending_count: number
-  avg_completion_time: number
-  total_orders: number
-  status_distribution: Record<string, number>
+  counts: {
+    active_count: number
+    pending_count: number
+    completed_today: number
+    total_orders: number
+  }
+  message: string
 }
 
 // Status enumeration (matches backend API response format)
@@ -256,7 +257,7 @@ export async function transformToDisplay(
     aircraft_id: backend.tail_number,  // Use tail_number directly as aircraft_id
     aircraft_tail_number: backend.tail_number,
     aircraft_registration: backend.tail_number,  // Use tail_number as registration
-    quantity: backend.requested_amount ? (typeof backend.requested_amount === 'string' ? backend.requested_amount : backend.requested_amount.toString()) : '0',
+    quantity: backend.gallons_requested ? backend.gallons_requested.toString() : (backend.requested_amount ? (typeof backend.requested_amount === 'string' ? backend.requested_amount : backend.requested_amount.toString()) : '0'),
     fuel_type: backend.fuel_type || 'Unknown', // Get fuel_type from backend
     customer_id: backend.customer_id,
     customer_name: backend.customer_name || `Customer ${backend.customer_id}`,

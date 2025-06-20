@@ -10,6 +10,7 @@ import { usePermissions } from "@/hooks/usePermissions"
 import AppSidebar from "@/components/layout/app-sidebar"
 import AccessDenied from "@/app/components/access-denied"
 import { cn } from "@/lib/utils"
+import { PERMISSION_GROUPS } from "@/app/constants/permissions"
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -37,12 +38,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
 
     // Check for admin access using backend permissions
-    const adminPermissions = [
-      'access_admin_dashboard',
-      'manage_settings', 
-      'manage_users',
-      'manage_roles'
-    ]
+    const adminPermissions = [...PERMISSION_GROUPS.ADMIN]
 
     const hasAdminAccess = canAny(adminPermissions) || isAdmin
 
@@ -86,12 +82,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         adminOnly={true}
         pageName="Admin Dashboard"
         pageDescription="System Administrator dashboard for managing users, permissions, and system settings."
-        anyOfPermissions={[
-          'access_admin_dashboard',
-          'manage_settings', 
-          'manage_users',
-          'manage_roles'
-        ]}
+        anyOfPermissions={[...PERMISSION_GROUPS.ADMIN]}
         suggestedActions={[
           {
             label: "Contact System Administrator",

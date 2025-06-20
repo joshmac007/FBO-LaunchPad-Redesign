@@ -3,23 +3,24 @@
 import type React from "react"
 import { createContext, useContext, useEffect, useState, useCallback } from "react"
 import { 
-  fetchAndStoreUserPermissions, 
-  getCurrentUser, 
   logout,
-  hasPermission,
-  hasAnyPermission,
-  hasAllPermissions,
-  hasResourcePermission,
-  getPermissionSource,
-  refreshUserPermissions,
+  getCurrentUser,
   type EnhancedUser,
   type EffectivePermission,
   type PermissionSummary
 } from "@/app/services/auth-service"
+import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "@/app/services/api-config"
+
+// State machine for permission loading
+type PermissionState = 'IDLE' | 'LOADING_SESSION' | 'AUTHENTICATED' | 'UNAUTHENTICATED'
 
 interface PermissionContextType {
-  // Legacy compatibility
+  // Core state
+  state: PermissionState
+  user: EnhancedUser | null
   userPermissions: string[]
+  
+  // Legacy compatibility
   userRoles: Array<{ id: number; name: string }>
   checkPermission: (permissionId: string) => boolean
   loading: boolean
@@ -27,7 +28,6 @@ interface PermissionContextType {
   // Enhanced permission features
   effectivePermissions: Record<string, EffectivePermission>
   permissionSummary: PermissionSummary | null
-  user: EnhancedUser | null
   
   // Enhanced permission checking methods
   hasPermission: (permissionName: string) => boolean
@@ -51,8 +51,12 @@ interface PermissionContextType {
 }
 
 const PermissionContext = createContext<PermissionContextType>({
-  // Legacy compatibility
+  // Core state
+  state: 'IDLE',
+  user: null,
   userPermissions: [],
+  
+  // Legacy compatibility
   userRoles: [],
   checkPermission: () => false,
   loading: true,
@@ -60,7 +64,6 @@ const PermissionContext = createContext<PermissionContextType>({
   // Enhanced features
   effectivePermissions: {},
   permissionSummary: null,
-  user: null,
   
   // Enhanced methods
   hasPermission: () => false,
@@ -86,58 +89,62 @@ const PermissionContext = createContext<PermissionContextType>({
 export const usePermissions = () => useContext(PermissionContext)
 
 export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Legacy state for backward compatibility
+  // State machine
+  const [state, setState] = useState<PermissionState>('IDLE')
+  const [user, setUser] = useState<EnhancedUser | null>(null)
   const [userPermissions, setUserPermissions] = useState<string[]>([])
+  
+  // Legacy state for backward compatibility
   const [userRoles, setUserRoles] = useState<Array<{ id: number; name: string }>>([])
-  const [loading, setLoading] = useState(true)
   
   // Enhanced state
   const [effectivePermissions, setEffectivePermissions] = useState<Record<string, EffectivePermission>>({})
   const [permissionSummary, setPermissionSummary] = useState<PermissionSummary | null>(null)
-  const [user, setUser] = useState<EnhancedUser | null>(null)
-  const [lastRefresh, setLastRefresh] = useState<string | null>(null)
 
-  // ADDED: state to track why loading finished
-  const [loadingStatus, setLoadingStatus] = useState<string>("Initializing...")
+  // Simple permission fetching - single API call as source of truth
+  const loadUserPermissions = useCallback(async () => {
+    console.log("%c[PermissionProvider] Starting permission load...", "color: blue; font-weight: bold;")
+    setState('LOADING_SESSION')
 
-  const loadUserAndPermissions = useCallback(async () => {
-    console.log("%c[PermissionProvider] Starting loadUserAndPermissions...", "color: blue; font-weight: bold;")
-    setLoading(true)
-    setLoadingStatus("Checking for authentication token...")
-
-    // START OF THE FIX
-    // We no longer check isAuthenticated() here. We will rely on the API call's outcome.
-    // The presence of a token is checked inside the service before the fetch.
+    // Check if user has token
     const currentUser = getCurrentUser()
     if (!currentUser || !currentUser.access_token) {
-      console.warn("[PermissionProvider] No token found in localStorage. User is not logged in.")
-      setUser(null)
-      setUserPermissions([])
-      setUserRoles([])
-      setEffectivePermissions({})
-      setPermissionSummary(null)
-      setLoadingStatus("User not authenticated.")
-      setLoading(false)
+      console.log("[PermissionProvider] No token found - user unauthenticated")
+      setState('UNAUTHENTICATED')
       return
     }
 
     try {
-      console.log("%c[PermissionProvider] Attempting to fetch permissions from API...", "color: blue;")
-      const response = await fetchAndStoreUserPermissions()
+      console.log("%c[PermissionProvider] Fetching permissions from API...", "color: blue;")
       
-      const updatedUser = getCurrentUser()
-      console.log("%c[PermissionProvider] Permissions fetched and user updated.", "color: green;", updatedUser)
-      setUser(updatedUser)
+      // Single API call - source of truth
+      const response = await fetch(`${API_BASE_URL}/auth/me/permissions`, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      })
 
-      // Update state with fresh data
-      setUserPermissions(response.permissions || [])
-      setEffectivePermissions(response.effective_permissions || {})
-      setPermissionSummary(response.summary || null)
-      setLastRefresh(new Date().toISOString())
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          console.error("[PermissionProvider] Authentication failed - logging out")
+          logout()
+          setState('UNAUTHENTICATED')
+          return
+        }
+        throw new Error(`API call failed: ${response.status}`)
+      }
+
+             const data = await handleApiResponse(response) as any // API returns {message: string, permissions: string[]}
+       console.log("%c[PermissionProvider] Permissions loaded successfully", "color: green;", data)
+
+       // Update state with API response
+       setUser(currentUser)
+       setUserPermissions(data.permissions || [])
+       setEffectivePermissions(data.effective_permissions || {})
+       setPermissionSummary(data.summary || null)
       
       // Set legacy roles for backward compatibility
-      if (updatedUser && updatedUser.roles && Array.isArray(updatedUser.roles)) {
-        const rolesAsObjects = updatedUser.roles.map((role, index) => ({ 
+      if (currentUser.roles && Array.isArray(currentUser.roles)) {
+        const rolesAsObjects = currentUser.roles.map((role, index) => ({ 
           id: index + 1, 
           name: role 
         }))
@@ -146,110 +153,93 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setUserRoles([])
       }
 
-      setLoadingStatus("Permissions loaded successfully.")
+      setState('AUTHENTICATED')
 
     } catch (error: any) {
-      console.error("%c[PermissionProvider] FAILED to fetch permissions.", "color: red; font-weight: bold;", error)
+      console.error("%c[PermissionProvider] Failed to load permissions", "color: red; font-weight: bold;", error)
       
-      // If the API call fails (e.g., 401 Unauthorized), it means the token is invalid.
-      // We must log the user out.
       if (error.message.includes("401") || error.message.includes("403")) {
-        console.error("[PermissionProvider] Authentication error detected. Logging out.")
-        logout() // This will clear localStorage and redirect
-        setUser(null)
-        setUserPermissions([])
-        setUserRoles([])
-        setEffectivePermissions({})
-        setPermissionSummary(null)
-        setLoadingStatus("Authentication failed.")
+        console.error("[PermissionProvider] Authentication error - logging out")
+        logout()
+        setState('UNAUTHENTICATED')
       } else {
-        // For other errors, fall back to cached permissions if available
-        if (currentUser.permissions) {
-          setUserPermissions(currentUser.permissions)
-          setEffectivePermissions(currentUser.effective_permissions || {})
-          setPermissionSummary(currentUser.permission_summary || null)
-          console.log("[PermissionProvider] Using cached permissions:", currentUser.permissions)
-          setLoadingStatus("Using cached permissions.")
-        } else {
-          setUserPermissions([])
-          setEffectivePermissions({})
-          setPermissionSummary(null)
-          setLoadingStatus("Failed to load permissions.")
-        }
+        // For other errors, transition to unauthenticated state
+        setState('UNAUTHENTICATED')
       }
-    } finally {
-      setLoading(false)
-      console.log("%c[PermissionProvider] Loading finished.", "color: blue; font-weight: bold;")
     }
-    // END OF THE FIX
   }, [])
 
   useEffect(() => {
-    loadUserAndPermissions()
-  }, [loadUserAndPermissions])
+    loadUserPermissions()
+  }, [loadUserPermissions])
 
-  // Legacy permission checking for backward compatibility
+  // Permission checking methods
   const checkPermission = useCallback((permissionId: string): boolean => {
     return userPermissions.includes(permissionId)
   }, [userPermissions])
 
-  // Enhanced permission checking methods
   const hasPermissionMethod = useCallback((permissionName: string): boolean => {
-    return hasPermission(permissionName, user)
-  }, [user])
+    return userPermissions.includes(permissionName)
+  }, [userPermissions])
 
   const hasAnyPermissionMethod = useCallback((permissionNames: string[]): boolean => {
-    return hasAnyPermission(permissionNames, user)
-  }, [user])
+    return permissionNames.some(permission => userPermissions.includes(permission))
+  }, [userPermissions])
 
   const hasAllPermissionsMethod = useCallback((permissionNames: string[]): boolean => {
-    return hasAllPermissions(permissionNames, user)
-  }, [user])
+    return permissionNames.every(permission => userPermissions.includes(permission))
+  }, [userPermissions])
 
   const hasResourcePermissionMethod = useCallback((
     permissionName: string, 
     resourceType?: string, 
     resourceId?: string
   ): boolean => {
-    return hasResourcePermission(permissionName, resourceType, resourceId, user)
-  }, [user])
+    // Check global permission first
+    if (userPermissions.includes(permissionName)) {
+      return true
+    }
+    
+    // Check resource-specific permission if provided
+    if (resourceType && resourceId) {
+      const resourceKey = `${permissionName}:${resourceType}:${resourceId}`
+      return effectivePermissions.hasOwnProperty(resourceKey)
+    }
+    
+    return false
+  }, [userPermissions, effectivePermissions])
 
   // Permission metadata methods
   const getPermissionSourceMethod = useCallback((permissionName: string): string | null => {
-    return getPermissionSource(permissionName, user)
-  }, [user])
+    const effectivePermission = effectivePermissions[permissionName]
+    return effectivePermission?.source || null
+  }, [effectivePermissions])
 
   const isPermissionFromGroupMethod = useCallback((permissionName: string): boolean => {
-    const source = getPermissionSource(permissionName, user)
+    const source = getPermissionSourceMethod(permissionName)
     return source ? source.startsWith('group:') : false
-  }, [user])
+  }, [getPermissionSourceMethod])
 
   const isPermissionFromRoleMethod = useCallback((permissionName: string): boolean => {
-    const source = getPermissionSource(permissionName, user)
+    const source = getPermissionSourceMethod(permissionName)
     return source ? source.startsWith('role:') : false
-  }, [user])
+  }, [getPermissionSourceMethod])
 
   const isDirectPermissionMethod = useCallback((permissionName: string): boolean => {
-    const source = getPermissionSource(permissionName, user)
+    const source = getPermissionSourceMethod(permissionName)
     return source === 'direct'
-  }, [user])
+  }, [getPermissionSourceMethod])
 
   // Utility methods
   const refreshPermissions = useCallback(async (): Promise<boolean> => {
-    setLoading(true)
     try {
-      const success = await refreshUserPermissions()
-      if (success) {
-        await loadUserAndPermissions()
-      }
-      return success
+      await loadUserPermissions()
+      return state === 'AUTHENTICATED'
     } catch (error) {
       console.error("Failed to refresh permissions:", error)
       return false
-    } finally {
-      setLoading(false)
     }
-  }, [loadUserAndPermissions])
+  }, [loadUserPermissions, state])
 
   const getAccessibleResources = useCallback((permissionName: string, resourceType: string): string[] => {
     if (!effectivePermissions) return []
@@ -284,7 +274,7 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       `${action}_${resourceType}`,
       `${action}_any_${resourceType}`,
       `manage_${resourceType}`,
-      `ACCESS_ADMIN_DASHBOARD`
+      `access_admin_dashboard`
     ]
     
     // If resource ID is provided, also check ownership-based permissions
@@ -292,21 +282,26 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       permissionPatterns.unshift(`${action}_own_${resourceType}`)
     }
     
-    return hasAnyPermission(permissionPatterns, user)
-  }, [user])
+    return hasAnyPermissionMethod(permissionPatterns)
+  }, [hasAnyPermissionMethod])
 
-  // Authentication check that depends on the provider's own state
+  // Authentication check
   const isAuthenticated = useCallback(() => {
-    // This check is now more reliable because it's based on the user state
-    // which is only set after a successful API call.
-    const result = !loading && !!user && !!user.access_token
-    console.log(`[PermissionProvider] isAuthenticated() called. Loading: ${loading}, User: ${user?.email}, Token exists: ${!!user?.access_token}, Result: ${result}`)
+    const result = state === 'AUTHENTICATED'
+    console.log(`[PermissionProvider] isAuthenticated() called. State: ${state}, Result: ${result}`)
     return result
-  }, [loading, user])
+  }, [state])
+
+  // Legacy loading compatibility
+  const loading = state === 'IDLE' || state === 'LOADING_SESSION'
 
   const contextValue: PermissionContextType = {
-    // Legacy compatibility
+    // Core state
+    state,
+    user,
     userPermissions,
+    
+    // Legacy compatibility
     userRoles,
     checkPermission,
     loading,
@@ -314,7 +309,6 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // Enhanced features
     effectivePermissions,
     permissionSummary,
-    user,
     
     // Enhanced methods
     hasPermission: hasPermissionMethod,

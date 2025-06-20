@@ -36,22 +36,46 @@ class FuelOrderService:
         Returns: (dict, message, status_code)
         """
         from src.models import FuelOrderStatus, FuelOrder
-        from sqlalchemy import func, case
+        from sqlalchemy import func, case, and_
         from src.extensions import db
+        from datetime import datetime, date
         try:
             # PBAC: Permission check is handled by decorator, so no need to check here
             pending_statuses = [FuelOrderStatus.DISPATCHED]
             in_progress_statuses = [FuelOrderStatus.ACKNOWLEDGED, FuelOrderStatus.EN_ROUTE, FuelOrderStatus.FUELING]
-            completed_statuses = [FuelOrderStatus.COMPLETED]
+            completed_statuses = [FuelOrderStatus.COMPLETED, FuelOrderStatus.REVIEWED]
+            
+            # Get today's date for completed_today calculation
+            today = date.today()
+            
+            # Query for basic counts and completed today
             counts = db.session.query(
                 func.count(case((FuelOrder.status.in_(pending_statuses), FuelOrder.id))).label('pending'),
                 func.count(case((FuelOrder.status.in_(in_progress_statuses), FuelOrder.id))).label('in_progress'),
-                func.count(case((FuelOrder.status.in_(completed_statuses), FuelOrder.id))).label('completed')
+                func.count(case((FuelOrder.status.in_(completed_statuses), FuelOrder.id))).label('completed'),
+                func.count(case((
+                    and_(
+                        FuelOrder.status.in_(completed_statuses),
+                        func.date(FuelOrder.completion_timestamp) == today
+                    ), 
+                    FuelOrder.id
+                ))).label('completed_today'),
+                func.count(FuelOrder.id).label('total')
             ).one_or_none()
+            
             result_counts = {
-                'pending': counts[0] if counts else 0,
-                'in_progress': counts[1] if counts else 0,
-                'completed': counts[2] if counts else 0,
+                'pending_count': counts[0] if counts else 0,
+                'active_count': counts[1] if counts else 0,  # in_progress becomes active_count
+                'completed_count': counts[2] if counts else 0,
+                'completed_today': counts[3] if counts else 0,
+                'total_orders': counts[4] if counts else 0,
+                'in_progress_count': counts[1] if counts else 0,  # Keep for backward compatibility
+                'avg_completion_time': 0,  # Placeholder for future implementation
+                'status_distribution': {
+                    'pending': counts[0] if counts else 0,
+                    'in_progress': counts[1] if counts else 0,
+                    'completed': counts[2] if counts else 0,
+                }
             }
             return result_counts, "Status counts retrieved successfully.", 200
         except Exception as e:

@@ -52,8 +52,6 @@ import {
   type AdminCustomerUpdateRequest,
 } from "../../services/customer-service" // Adjusted path
 import { toast } from "sonner" // For notifications
-import AdminLayout from "../layout"
-
 export default function CustomerManagementPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -223,26 +221,25 @@ export default function CustomerManagementPage() {
   }
 
   return (
-    <AdminLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold">Customer Management</h1>
-        <Dialog 
-          open={isCreateDialogOpen} 
-          onOpenChange={(isOpen) => {
-            setIsCreateDialogOpen(isOpen);
-            if (!isOpen) {
-              setNewCustomerData({ name: "", email: "", phone: "" }); // Reset form data
-              setCreateFormError(null); // Clear any form errors
-            }
-          }}
-        >
-          <DialogTrigger asChild>
-            {/* Ensure DialogTrigger's child is a valid trigger, e.g., Button */}
-            <Button onClick={() => setIsCreateDialogOpen(true)}>
-              <UserPlus className="mr-2 h-4 w-4" /> Add Customer
-            </Button>
-          </DialogTrigger>
+          <Dialog 
+            open={isCreateDialogOpen} 
+            onOpenChange={(isOpen) => {
+              setIsCreateDialogOpen(isOpen);
+              if (!isOpen) {
+                setNewCustomerData({ name: "", email: "", phone: "" }); // Reset form data
+                setCreateFormError(null); // Clear any form errors
+              }
+            }}
+          >
+            <DialogTrigger asChild>
+              {/* Ensure DialogTrigger's child is a valid trigger, e.g., Button */}
+              <Button onClick={() => setIsCreateDialogOpen(true)}>
+                <UserPlus className="mr-2 h-4 w-4" /> Add Customer
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Add New Customer</DialogTitle>
@@ -496,7 +493,6 @@ export default function CustomerManagementPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      </div>
-    </AdminLayout>
+    </div>
   )
 }

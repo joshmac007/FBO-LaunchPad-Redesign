@@ -2,6 +2,7 @@ from typing import Tuple, Any, List, Optional
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from src.app import db
 from src.models import Role, Permission
+from src.services.permission_service import PermissionService
 
 class RoleService:
     """Service class for managing roles and their permissions."""
@@ -136,6 +137,10 @@ class RoleService:
 
             role.permissions.append(permission)
             db.session.commit()
+            
+            # Cache invalidation: Invalidate cache for all users with this role
+            PermissionService.invalidate_role_cache(role_id)
+            
             return role, "Permission assigned successfully", 200
         except SQLAlchemyError as e:
             db.session.rollback()
@@ -159,6 +164,10 @@ class RoleService:
 
             role.permissions.remove(permission)
             db.session.commit()
+            
+            # Cache invalidation: Invalidate cache for all users with this role
+            PermissionService.invalidate_role_cache(role_id)
+            
             return role, "Permission removed successfully", 200
         except SQLAlchemyError as e:
             db.session.rollback()

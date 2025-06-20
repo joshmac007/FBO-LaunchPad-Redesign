@@ -10,7 +10,7 @@ from flask_socketio import disconnect
 from flask_jwt_extended import decode_token, JWTManager
 from jwt.exceptions import InvalidTokenError, ExpiredSignatureError
 
-from ..services.enhanced_permission_service import enhanced_permission_service
+from ..services.permission_service import enhanced_permission_service
 from ..models.user import User
 
 logger = logging.getLogger(__name__)

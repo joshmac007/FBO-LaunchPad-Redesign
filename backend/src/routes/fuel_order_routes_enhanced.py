@@ -14,7 +14,7 @@ from ..utils.enhanced_auth_decorators_v2 import (
     audit_permission_access,
     cache_user_permissions
 )
-from ..services.enhanced_permission_service import ResourceContext
+from ..services.permission_service import ResourceContext
 from ..models.fuel_order import FuelOrder
 from ..schemas.fuel_order_schema import FuelOrderSchema
 from ..extensions import db

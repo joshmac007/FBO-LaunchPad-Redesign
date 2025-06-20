@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { usePermissions } from "../contexts/permission-context"
+import { DASHBOARD_ACCESS, SYSTEM, USERS } from "@/app/constants/permissions"
 
 interface PermissionAwareProps {
   children: React.ReactNode
@@ -62,7 +63,12 @@ const PermissionAware: React.FC<PermissionAwareProps> = ({
   // Check different permission patterns
   if (adminOnly) {
     // Admin-only check - requires backend admin permissions
-    hasRequiredPermission = hasAnyPermission(['ACCESS_ADMIN_DASHBOARD', 'MANAGE_SETTINGS', 'MANAGE_USERS', 'MANAGE_ROLES'])
+    hasRequiredPermission = hasAnyPermission([
+      DASHBOARD_ACCESS.ACCESS_ADMIN_DASHBOARD, 
+      SYSTEM.MANAGE_SETTINGS, 
+      USERS.MANAGE_USERS, 
+      SYSTEM.MANAGE_ROLES
+    ])
     permissionCheckInfo = "Admin access check"
   } else if (resourcePermission) {
     // Resource-specific permission check

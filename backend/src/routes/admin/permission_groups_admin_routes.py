@@ -12,7 +12,7 @@ from ...utils.enhanced_auth_decorators_v2 import require_permission_v2, audit_pe
 from ...models.permission_group import PermissionGroup, PermissionGroupMembership, RolePermissionGroup
 from ...models.permission import Permission
 from ...models.role import Role
-from ...services.enhanced_permission_service import enhanced_permission_service
+from ...services.permission_service import enhanced_permission_service
 from ...extensions import db
 
 # Create admin blueprint

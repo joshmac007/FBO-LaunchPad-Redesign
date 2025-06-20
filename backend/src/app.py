@@ -125,6 +125,7 @@ def create_app(config_name=None):
     from src.routes.customer_routes import customer_bp
     from src.routes.admin.routes import admin_bp
     from src.routes.admin.fee_config_routes import admin_fee_config_bp
+    from src.routes.admin.performance_monitor_routes import performance_monitor_bp
     from src.routes.enhanced_user_routes import enhanced_user_bp
     from src.routes.receipt_routes import receipt_bp
     
@@ -140,6 +141,7 @@ def create_app(config_name=None):
     app.register_blueprint(customer_bp, url_prefix='/api/customers', strict_slashes=False)
     app.register_blueprint(admin_bp, url_prefix='/api/admin', strict_slashes=False)
     app.register_blueprint(admin_fee_config_bp, strict_slashes=False)
+    app.register_blueprint(performance_monitor_bp, strict_slashes=False)
     app.register_blueprint(enhanced_user_bp, url_prefix='/api/admin/users', strict_slashes=False)
     app.register_blueprint(receipt_bp, strict_slashes=False)
 

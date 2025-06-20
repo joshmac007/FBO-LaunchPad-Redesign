@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { RefreshCw, CheckCircle, XCircle } from "lucide-react"
 import { useEffect } from "react"
+import { DASHBOARD_ACCESS, FUEL_ORDERS, RECEIPTS } from "@/app/constants/permissions"
 
 export default function PermissionTestPage() {
   const {
@@ -72,13 +73,13 @@ export default function PermissionTestPage() {
           <h3 className="text-lg font-semibold">Key Permission Checks</h3>
           <ul className="list-disc space-y-2 pl-5">
             <li>
-              <strong>Has 'access_csr_dashboard':</strong> {renderCheck(hasPermission("access_csr_dashboard"))}
+              <strong>Has 'access_csr_dashboard':</strong> {renderCheck(hasPermission(DASHBOARD_ACCESS.ACCESS_CSR_DASHBOARD))}
             </li>
             <li>
-              <strong>Has 'view_receipts':</strong> {renderCheck(hasPermission("view_receipts"))}
+              <strong>Has 'view_receipts':</strong> {renderCheck(hasPermission(RECEIPTS.VIEW_RECEIPTS))}
             </li>
             <li>
-              <strong>Has 'view_all_orders':</strong> {renderCheck(hasPermission("view_all_orders"))}
+              <strong>Has 'view_all_orders':</strong> {renderCheck(hasPermission(FUEL_ORDERS.VIEW_ALL_ORDERS))}
             </li>
           </ul>
 

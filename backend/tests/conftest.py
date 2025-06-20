@@ -103,41 +103,120 @@ def test_permissions(app, db):
         db.session.commit()
 
 @pytest.fixture(scope='session')
-def test_roles(app, db, test_permissions):
-    """Create test roles."""
+def test_permission_groups(app, db, test_permissions):
+    """Create test permission groups for Golden Path architecture."""
     with app.app_context():
-        # Query permissions from the database to ensure they are attached to the session
+        from src.models.permission_group import PermissionGroup, PermissionGroupMembership, RolePermissionGroup
+        
+        # Create simplified permission groups for testing
+        # Admin group gets all permissions
+        admin_group = PermissionGroup(
+            name='test_admin_group',
+            display_name='Test Admin Group',
+            description='All permissions for testing',
+            is_system_group=True,
+            sort_order=100
+        )
+        db.session.add(admin_group)
+        db.session.flush()
+        
+        # Assign all permissions to admin group
         all_permissions = Permission.query.all()
-        perm_dict = {p.name: p for p in all_permissions}
-        # Admin role gets all permissions
-        admin_role = Role(name='Administrator', description='Full system access')
-        admin_role.permissions.extend(all_permissions)
-        # CSR role gets customer service permissions
-        csr_role = Role(name='Customer Service Representative', description='Customer service access')
-        csr_permissions = [perm_dict[n] for n in [
+        for permission in all_permissions:
+            membership = PermissionGroupMembership(
+                group_id=admin_group.id,
+                permission_id=permission.id,
+                is_active=True
+            )
+            db.session.add(membership)
+        
+        # CSR group gets customer service permissions
+        csr_group = PermissionGroup(
+            name='test_csr_group',
+            display_name='Test CSR Group',
+            description='CSR permissions for testing',
+            is_system_group=True,
+            sort_order=200
+        )
+        db.session.add(csr_group)
+        db.session.flush()
+        
+        csr_permission_names = [
             'create_fuel_order', 'manage_fuel_orders', 'view_fuel_orders', 'view_all_orders', 'view_users',
             'create_receipt', 'update_receipt', 'calculate_receipt_fees', 'generate_receipt', 
             'mark_receipt_paid', 'view_receipts', 'edit_fuel_order', 'update_order_status', 'void_receipt',
             'access_csr_dashboard'
-        ] if n in perm_dict]
-        csr_role.permissions.extend(csr_permissions)
-        # LST role gets permissions matching production permission groups
-        lst_role = Role(name='Line Service Technician', description='Line service access')
-        lst_permissions = [perm_dict[n] for n in [
-            # fuel_operations_basic permissions
+        ]
+        for perm_name in csr_permission_names:
+            permission = Permission.query.filter_by(name=perm_name).first()
+            if permission:
+                membership = PermissionGroupMembership(
+                    group_id=csr_group.id,
+                    permission_id=permission.id,
+                    is_active=True
+                )
+                db.session.add(membership)
+        
+        # LST group gets line service permissions
+        lst_group = PermissionGroup(
+            name='test_lst_group',
+            display_name='Test LST Group',
+            description='LST permissions for testing',
+            is_system_group=True,
+            sort_order=300
+        )
+        db.session.add(lst_group)
+        db.session.flush()
+        
+        lst_permission_names = [
             'create_fuel_order', 'view_assigned_orders', 'update_order_status', 
-            'complete_fuel_order', 'perform_fueling_task',
-            # fleet_management_basic permissions  
-            'view_fuel_trucks',
-            # receipts_management_basic permissions
-            'view_own_receipts',
-            # dashboard_access_fueler permissions
-            'access_fueler_dashboard'
-        ] if n in perm_dict]
-        lst_role.permissions.extend(lst_permissions)
+            'complete_fuel_order', 'perform_fueling_task', 'view_fuel_trucks',
+            'view_own_receipts', 'access_fueler_dashboard'
+        ]
+        for perm_name in lst_permission_names:
+            permission = Permission.query.filter_by(name=perm_name).first()
+            if permission:
+                membership = PermissionGroupMembership(
+                    group_id=lst_group.id,
+                    permission_id=permission.id,
+                    is_active=True
+                )
+                db.session.add(membership)
+        
+        db.session.commit()
+        return [admin_group, csr_group, lst_group]
+
+@pytest.fixture(scope='session')
+def test_roles(app, db, test_permissions, test_permission_groups):
+    """Create test roles with permission groups (Golden Path architecture)."""
+    with app.app_context():
+        from src.models.permission_group import RolePermissionGroup, PermissionGroup
+        
+        # Re-query permission groups to avoid detached instance issues
+        admin_group = PermissionGroup.query.filter_by(name='test_admin_group').first()
+        csr_group = PermissionGroup.query.filter_by(name='test_csr_group').first()
+        lst_group = PermissionGroup.query.filter_by(name='test_lst_group').first()
+        
+        # Create roles WITHOUT direct permissions (Golden Path enforcement)
+        admin_role = Role(name='Administrator', description='Full system access')
+        csr_role = Role(name='Customer Service Representative', description='Customer service access')
+        lst_role = Role(name='Line Service Technician', description='Line service access')
+        
         roles = [admin_role, csr_role, lst_role]
         for role in roles:
             db.session.add(role)
+        db.session.flush()
+        
+        # Assign permission groups to roles (Golden Path)
+        role_group_assignments = [
+            RolePermissionGroup(role_id=admin_role.id, group_id=admin_group.id, is_active=True),
+            RolePermissionGroup(role_id=csr_role.id, group_id=csr_group.id, is_active=True),
+            RolePermissionGroup(role_id=lst_role.id, group_id=lst_group.id, is_active=True)
+        ]
+        
+        for assignment in role_group_assignments:
+            db.session.add(assignment)
+        
         db.session.commit()
         return roles
 

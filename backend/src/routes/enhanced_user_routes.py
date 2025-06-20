@@ -13,11 +13,11 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from ..utils.enhanced_auth_decorators_v2 import (
-    require_permission_v2 as require_permission, 
-    require_any_permission_v2 as require_any_permission,
-    require_permission_v2  # For admin_required functionality
+    require_permission_v2, 
+    require_any_permission_v2,
+    require_permission_or_ownership_v2
 )
-from ..services.enhanced_permission_service import enhanced_permission_service
+from ..services.permission_service import enhanced_permission_service
 from ..services.user_service import UserService
 from ..models.user import User
 from ..models.permission import Permission
@@ -34,7 +34,7 @@ enhanced_user_bp = Blueprint('enhanced_user_bp', __name__)
 
 @enhanced_user_bp.route('', methods=['GET', 'OPTIONS'])
 @enhanced_user_bp.route('/', methods=['GET', 'OPTIONS'])
-@require_permission('view_users')
+@require_permission_v2('view_users')
 def get_all_users():
     """
     Get all users with optional filtering.
@@ -90,7 +90,7 @@ def get_all_users():
 # =============================================================================
 
 @enhanced_user_bp.route('/<int:user_id>/permissions', methods=['GET'])
-@require_permission('view_user_permissions', 'user', 'user_id')
+@require_permission_v2('view_user_permissions', {'resource_type': 'user', 'id_param': 'user_id'})
 def get_user_permissions(user_id):
     """
     Get all effective permissions for a specific user.
@@ -123,7 +123,7 @@ def get_user_permissions(user_id):
         return jsonify({'error': 'Failed to retrieve user permissions'}), 500
 
 @enhanced_user_bp.route('/<int:user_id>/permissions/direct', methods=['POST'])
-@require_permission('assign_direct_permissions')
+@require_permission_v2('assign_direct_permissions')
 def grant_direct_permission(user_id):
     """
     Grant a direct permission to a user.
@@ -197,7 +197,7 @@ def grant_direct_permission(user_id):
         return jsonify({'error': 'Failed to grant permission'}), 500
 
 @enhanced_user_bp.route('/<int:user_id>/permissions/direct', methods=['DELETE'])
-@require_permission('revoke_direct_permissions')
+@require_permission_v2('revoke_direct_permissions')
 def revoke_direct_permission(user_id):
     """
     Revoke a direct permission from a user.
@@ -259,7 +259,7 @@ def revoke_direct_permission(user_id):
 # =============================================================================
 
 @enhanced_user_bp.route('/permission-groups', methods=['GET'])
-@require_permission('view_permission_groups')
+@require_permission_v2('view_permission_groups')
 def get_permission_groups():
     """
     Get all permission groups with optional filtering.
@@ -296,7 +296,7 @@ def get_permission_groups():
         return jsonify({'error': 'Failed to retrieve permission groups'}), 500
 
 @enhanced_user_bp.route('/permission-groups', methods=['POST'])
-@require_permission('create_permission_groups')
+@require_permission_v2('create_permission_groups')
 def create_permission_group():
     """
     Create a new permission group.
@@ -352,7 +352,7 @@ def create_permission_group():
         return jsonify({'error': 'Failed to create permission group'}), 500
 
 @enhanced_user_bp.route('/permission-groups/<int:group_id>', methods=['PUT'])
-@require_permission('edit_permission_groups')
+@require_permission_v2('edit_permission_groups')
 def update_permission_group(group_id):
     """
     Update an existing permission group.
@@ -416,7 +416,7 @@ def update_permission_group(group_id):
         return jsonify({'error': 'Failed to update permission group'}), 500
 
 @enhanced_user_bp.route('/permission-groups/<int:group_id>', methods=['DELETE'])
-@require_permission('delete_permission_groups')
+@require_permission_v2('delete_permission_groups')
 def delete_permission_group(group_id):
     """
     Delete a permission group.
@@ -451,24 +451,25 @@ def delete_permission_group(group_id):
         return jsonify({'error': 'Failed to delete permission group'}), 500
 
 @enhanced_user_bp.route('/<int:user_id>/permission-groups', methods=['GET'])
-@require_permission('view_user_permissions', 'user', 'user_id')
+@require_permission_v2('view_user_permissions', {'resource_type': 'user', 'id_param': 'user_id'})
 def get_user_permission_groups(user_id):
     """
-    Get permission groups assigned to a specific user.
+    Get all permission groups assigned to a specific user.
     """
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-    
     try:
-        groups = user.permission_groups.all()
-        result = [group.to_dict(include_permissions=True) for group in groups]
+        # Check if user exists
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Get user's permission groups
+        groups = enhanced_permission_service.get_user_permission_groups(user_id)
         
         return jsonify({
             'user_id': user_id,
             'username': user.username,
-            'permission_groups': result,
-            'total': len(result)
+            'permission_groups': groups,
+            'total_groups': len(groups)
         }), 200
         
     except Exception as e:
@@ -476,7 +477,7 @@ def get_user_permission_groups(user_id):
         return jsonify({'error': 'Failed to retrieve user permission groups'}), 500
 
 @enhanced_user_bp.route('/<int:user_id>/permission-groups', methods=['PUT'])
-@require_permission('assign_permission_groups')
+@require_permission_v2('assign_permission_groups')
 def assign_permission_groups(user_id):
     """
     Assign permission groups to a user.
@@ -534,7 +535,7 @@ def assign_permission_groups(user_id):
 # =============================================================================
 
 @enhanced_user_bp.route('/<int:user_id>/permissions/audit', methods=['GET'])
-@require_permission('view_permission_audit')
+@require_permission_v2('view_permission_audit')
 def get_user_permission_audit(user_id):
     """
     Get audit trail for user's direct permission assignments.
@@ -586,7 +587,7 @@ def get_user_permission_audit(user_id):
 # =============================================================================
 
 @enhanced_user_bp.route('/permissions/available', methods=['GET'])
-@require_permission('view_available_permissions')
+@require_permission_v2('view_available_permissions')
 def get_available_permissions():
     """
     Get all available permissions that can be assigned.
@@ -627,7 +628,7 @@ def get_available_permissions():
         return jsonify({'error': 'Failed to retrieve available permissions'}), 500
 
 @enhanced_user_bp.route('/<int:user_id>/permissions/summary', methods=['GET'])
-@require_permission('view_user_permissions', 'user', 'user_id')
+@require_permission_v2('view_user_permissions', {'resource_type': 'user', 'id_param': 'user_id'})
 def get_user_permission_summary(user_id):
     """
     Get a concise summary of user's permissions by source.

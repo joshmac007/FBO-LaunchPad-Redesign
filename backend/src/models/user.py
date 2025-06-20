@@ -9,7 +9,7 @@ import jwt
 from ..extensions import db
 from ..models.permission import Permission
 from ..models.role import Role
-from ..models.role_permission import role_permissions, user_roles
+from ..models.role_permission import user_roles
 
 # Association table for user-permission group relationships
 user_permission_groups = db.Table('user_permission_groups',
@@ -144,7 +144,7 @@ class User(db.Model):
         try:
             # Import here to avoid circular imports
             from ..services.permission_service import PermissionService
-            return PermissionService.user_has_permission(
+            return PermissionService.check_user_permission_legacy(
                 user_id=self.id,
                 permission_name=permission_name,
                 resource_type=resource_type,

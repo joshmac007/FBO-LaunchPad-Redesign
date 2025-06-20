@@ -9,8 +9,8 @@ from typing import Dict, List, Optional, Union, Callable, Any
 from flask import request, jsonify, g
 from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 
-from ..services.enhanced_permission_service import (
-    enhanced_permission_service, 
+from ..services.permission_service import (
+    enhanced_permission_service,
     ResourceContext
 )
 

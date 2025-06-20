@@ -28,7 +28,7 @@ def handle_connect(*args, **kwargs):
             # Join role-based rooms
             # Get user permissions from enhanced permission service
             try:
-                from ..services.enhanced_permission_service import enhanced_permission_service
+                from ..services.permission_service import enhanced_permission_service
                 user_permissions = enhanced_permission_service.get_user_permissions(user.id, include_groups=True)
             except ImportError:
                 # Fallback to checking permissions individually
@@ -91,7 +91,7 @@ def handle_join_room(data):
         
         # Validate room access permissions
         try:
-            from ..services.enhanced_permission_service import enhanced_permission_service
+            from ..services.permission_service import enhanced_permission_service
             user_permissions = enhanced_permission_service.get_user_permissions(user.id, include_groups=True)
         except ImportError:
             # Fallback to checking permissions individually

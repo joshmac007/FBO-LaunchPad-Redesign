@@ -4,6 +4,7 @@ import React from "react"
 import { Button } from "@/components/ui/button"
 import { usePermissions } from "@/hooks/usePermissions"
 import { cn } from "@/lib/utils"
+import { DASHBOARD_ACCESS, FUEL_ORDERS, USERS, SYSTEM } from "@/app/constants/permissions"
 
 interface PermissionActionButtonProps {
   // Button props
@@ -129,34 +130,34 @@ export default PermissionActionButton
 export const AdminActionButton: React.FC<Omit<PermissionActionButtonProps, 'anyOfPermissions'>> = (props) => (
   <PermissionActionButton 
     {...props} 
-    anyOfPermissions={['access_admin_dashboard', 'manage_settings']}
+    anyOfPermissions={[DASHBOARD_ACCESS.ACCESS_ADMIN_DASHBOARD, SYSTEM.MANAGE_SETTINGS]}
   />
 )
 
 export const CSRActionButton: React.FC<Omit<PermissionActionButtonProps, 'anyOfPermissions'>> = (props) => (
   <PermissionActionButton 
     {...props} 
-    anyOfPermissions={['access_csr_dashboard', 'view_all_orders']}
+    anyOfPermissions={[DASHBOARD_ACCESS.ACCESS_CSR_DASHBOARD, FUEL_ORDERS.VIEW_ALL_ORDERS]}
   />
 )
 
 export const FuelerActionButton: React.FC<Omit<PermissionActionButtonProps, 'anyOfPermissions'>> = (props) => (
   <PermissionActionButton 
     {...props} 
-    anyOfPermissions={['access_fueler_dashboard', 'perform_fueling_task']}
+    anyOfPermissions={[DASHBOARD_ACCESS.ACCESS_FUELER_DASHBOARD, FUEL_ORDERS.PERFORM_FUELING_TASK]}
   />
 )
 
 export const CreateOrderButton: React.FC<Omit<PermissionActionButtonProps, 'anyOfPermissions'>> = (props) => (
   <PermissionActionButton 
     {...props} 
-    anyOfPermissions={['create_fuel_order', 'edit_fuel_order']}
+    anyOfPermissions={[FUEL_ORDERS.CREATE_FUEL_ORDER, FUEL_ORDERS.EDIT_FUEL_ORDER]}
   />
 )
 
 export const ManageUsersButton: React.FC<Omit<PermissionActionButtonProps, 'anyOfPermissions'>> = (props) => (
   <PermissionActionButton 
     {...props} 
-    anyOfPermissions={['manage_users', 'view_users']}
+    anyOfPermissions={[USERS.MANAGE_USERS, USERS.VIEW_USERS]}
   />
 ) 

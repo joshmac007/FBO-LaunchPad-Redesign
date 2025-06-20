@@ -207,7 +207,8 @@ def create_system_permission_groups():
                 'is_system_group': True,
                 'sort_order': 700,
                 'permissions': ['manage_roles', 'view_roles', 'view_permissions', 
-                             'view_role_permissions', 'manage_settings', 'admin']
+                             'view_role_permissions', 'manage_settings', 'admin',
+                             'administrative_operations']
             }
         ]
         

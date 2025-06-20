@@ -123,8 +123,8 @@ class AuthorizationLoadTester:
         start_time = time.time()
         
         try:
-            from ..services.enhanced_permission_service import enhanced_permission_service
-            from ..services.enhanced_permission_service import ResourceContext
+            from ..services.permission_service import enhanced_permission_service
+            from ..services.permission_service import ResourceContext
             
             # Create resource context if needed
             resource_context = None

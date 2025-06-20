@@ -7,6 +7,7 @@ import { usePermissions } from "@/hooks/usePermissions"
 import AppSidebar from "@/components/layout/app-sidebar"
 import AccessDenied from "@/app/components/access-denied"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { PERMISSION_GROUPS } from "@/app/constants/permissions"
 
 export default function FuelerLayout({
   children,
@@ -38,13 +39,7 @@ export default function FuelerLayout({
     }
 
     // Check for fueler access using backend permissions
-    const fuelerPermissions = [
-      'access_fueler_dashboard',
-      'perform_fueling_task',
-      'update_order_status',
-      'view_assigned_orders',
-      'complete_fuel_order'
-    ]
+    const fuelerPermissions = [...PERMISSION_GROUPS.FUELER]
 
     const hasFuelerAccess = canAny(fuelerPermissions) || isFueler
 
@@ -88,13 +83,7 @@ export default function FuelerLayout({
         fuelerOnly={true}
         pageName="Fueler Dashboard"
         pageDescription="Line Service Technician dashboard for managing assigned fuel orders and task execution."
-        anyOfPermissions={[
-          'access_fueler_dashboard',
-          'perform_fueling_task',
-          'update_order_status',
-          'view_assigned_orders',
-          'complete_fuel_order'
-        ]}
+        anyOfPermissions={[...PERMISSION_GROUPS.FUELER]}
         suggestedActions={[
           {
             label: "Contact CSR Team",
