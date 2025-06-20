@@ -1,0 +1,52 @@
+[
+  {
+    "id": 1,
+    "name": "John Admin",
+    "email": "john.admin@example.com",
+    "username": "jadmin",
+    "roles": ["Admin"],
+    "is_active": true,
+    "created_at": "2024-01-15T10:30:00Z",
+    "updated_at": "2024-01-15T10:30:00Z"
+  },
+  {
+    "id": 2,
+    "name": "Jane Manager",
+    "email": "jane.manager@example.com", 
+    "username": "jmanager",
+    "roles": ["Manager"],
+    "is_active": true,
+    "created_at": "2024-01-16T09:15:00Z",
+    "updated_at": "2024-01-16T09:15:00Z"
+  },
+  {
+    "id": 3,
+    "name": "Bob CSR",
+    "email": "bob.csr@example.com",
+    "username": "bcsr",
+    "roles": ["CSR"],
+    "is_active": true,
+    "created_at": "2024-01-17T14:20:00Z",
+    "updated_at": "2024-01-17T14:20:00Z"
+  },
+  {
+    "id": 4,
+    "name": "Alice Fueler",
+    "email": "alice.fueler@example.com",
+    "username": "afueler",
+    "roles": ["Fueler"],
+    "is_active": true,
+    "created_at": "2024-01-18T08:45:00Z",
+    "updated_at": "2024-01-18T08:45:00Z"
+  },
+  {
+    "id": 5,
+    "name": "Mike Finance",
+    "email": "mike.finance@example.com",
+    "username": "mfinance",
+    "roles": ["Finance"],
+    "is_active": false,
+    "created_at": "2024-01-19T11:10:00Z",
+    "updated_at": "2024-01-20T16:30:00Z"
+  }
+] 

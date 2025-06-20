@@ -1,60 +1,44 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { isAuthenticated } from "@/app/services/auth-service"
+import { useState } from "react"
+import { usePermissions } from "@/hooks/usePermissions"
 import AppSidebar from "@/components/layout/app-sidebar"
+import AccessDenied from "@/app/components/access-denied"
 import { cn } from "@/lib/utils"
 
-export default function CSRLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter()
+const CSRLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { loading, isAuthenticated, hasPermission, user } = usePermissions()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    // Check if user is logged in and is CSR
-    const checkAuth = async () => {
-      try {
-        if (!isAuthenticated()) {
-          router.push("/login")
-          return
-        }
+  console.log(
+    `%c[CSRLayout] Render. Loading: ${loading}, Authenticated: ${isAuthenticated()}, User Email: ${user?.email}`, 
+    "color: purple;"
+  )
 
-        const userData = localStorage.getItem("fboUser")
-        if (userData) {
-          const parsedUser = JSON.parse(userData)
-          if (!parsedUser.isLoggedIn || parsedUser.role !== "csr") {
-            router.push("/login")
-            return
-          }
-        } else {
-          router.push("/login")
-          return
-        }
-
-        setIsLoading(false)
-      } catch (error) {
-        console.error("Authentication error:", error)
-        router.push("/login")
-      }
-    }
-
-    checkAuth()
-  }, [router])
-
-  if (isLoading) {
+  if (loading) {
+    console.log("[CSRLayout] Showing loading skeleton.")
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p>Loading...</p>
-        </div>
+      <div className="flex h-screen items-center justify-center">
+        <p>Verifying CSR Access...</p>
       </div>
     )
   }
 
+  const canAccess = isAuthenticated() && hasPermission("access_csr_dashboard")
+  console.log(`[CSRLayout] Access check complete. Result: ${canAccess}`)
+
+  if (!canAccess) {
+    console.error("[CSRLayout] Access Denied. Rendering AccessDenied component.")
+    return (
+      <AccessDenied
+        pageName="CSR Module"
+        requiredPermissions={["access_csr_dashboard"]}
+      />
+    )
+  }
+
+  console.log("%c[CSRLayout] Access Granted. Rendering children.", "color: green;")
   return (
     <div className="min-h-screen bg-background">
       <AppSidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} userRole="csr" />
@@ -64,10 +48,12 @@ export default function CSRLayout({ children }: { children: React.ReactNode }) {
           sidebarCollapsed ? "lg:pl-[80px]" : "lg:pl-[280px]",
         )}
       >
-        <main className="p-4 md:p-6 lg:p-8">
+        <main className="p-4 sm:p-6 lg:p-8">
           <div className="mx-auto max-w-7xl">{children}</div>
         </main>
       </div>
     </div>
   )
 }
+
+export default CSRLayout

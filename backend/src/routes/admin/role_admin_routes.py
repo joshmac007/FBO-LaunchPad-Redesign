@@ -1,7 +1,7 @@
 from flask import request, jsonify
 from ...services.role_service import RoleService
 from ...services.permission_service import PermissionService
-from src.utils.decorators import token_required, require_permission
+from src.utils.enhanced_auth_decorators_v2 import require_permission_v2
 from ...models.user import UserRole
 from ...schemas.role_schemas import (
     RoleSchema,
@@ -16,15 +16,13 @@ from marshmallow import ValidationError
 from src.extensions import apispec
 from .routes import admin_bp
 
-@admin_bp.route('roles', methods=['GET', 'OPTIONS'])
 @admin_bp.route('/roles', methods=['GET', 'OPTIONS'])
-@token_required
-@require_permission('MANAGE_ROLES')
+@require_permission_v2('manage_roles')
 def get_roles():
     """
     ---
     get:
-      summary: List all roles (admin, MANAGE_ROLES permission required)
+      summary: List all roles (admin, manage_roles permission required)
       tags:
         - Admin - Roles
       responses:
@@ -42,15 +40,13 @@ def get_roles():
     schema = RoleSchema(many=True)
     return jsonify({"roles": schema.dump(roles)}), status
 
-@admin_bp.route('roles', methods=['POST', 'OPTIONS'])
 @admin_bp.route('/roles', methods=['POST', 'OPTIONS'])
-@token_required
-@require_permission('MANAGE_ROLES')
+@require_permission_v2('manage_roles')
 def create_role():
     """
     ---
     post:
-      summary: Create a new role (admin, MANAGE_ROLES permission required)
+      summary: Create a new role (admin, manage_roles permission required)
       tags:
         - Admin - Roles
       requestBody:
@@ -79,13 +75,12 @@ def create_role():
     return jsonify(schema.dump(role)), status
 
 @admin_bp.route('/roles/<int:role_id>', methods=['GET'])
-@token_required
-@require_permission('MANAGE_ROLES')
+@require_permission_v2('view_roles', {'resource_type': 'role', 'id_param': 'role_id'})
 def get_role(role_id):
     """
     ---
     get:
-      summary: Get a role by ID (admin, MANAGE_ROLES permission required)
+      summary: Get a role by ID (admin, view_roles permission required)
       tags:
         - Admin - Roles
       parameters:
@@ -110,13 +105,12 @@ def get_role(role_id):
     return jsonify(schema.dump(role)), status
 
 @admin_bp.route('/roles/<int:role_id>', methods=['PATCH'])
-@token_required
-@require_permission('MANAGE_ROLES')
+@require_permission_v2('manage_roles', {'resource_type': 'role', 'id_param': 'role_id'})
 def update_role(role_id):
     """
     ---
     patch:
-      summary: Update a role by ID (admin, MANAGE_ROLES permission required)
+      summary: Update a role by ID (admin, manage_roles permission required)
       tags:
         - Admin - Roles
       parameters:
@@ -149,13 +143,12 @@ def update_role(role_id):
     return jsonify(schema.dump(role)), status
 
 @admin_bp.route('/roles/<int:role_id>', methods=['DELETE'])
-@token_required
-@require_permission('MANAGE_ROLES')
+@require_permission_v2('manage_roles', {'resource_type': 'role', 'id_param': 'role_id'})
 def delete_role(role_id):
     """
     ---
     delete:
-      summary: Delete a role by ID (admin, MANAGE_ROLES permission required)
+      summary: Delete a role by ID (admin, manage_roles permission required)
       tags:
         - Admin - Roles
       parameters:
@@ -178,13 +171,12 @@ def delete_role(role_id):
     return '', 204
 
 @admin_bp.route('/roles/<int:role_id>/permissions', methods=['GET'])
-@token_required
-@require_permission('MANAGE_ROLES')
+@require_permission_v2('view_role_permissions', {'resource_type': 'role', 'id_param': 'role_id'})
 def get_role_permissions(role_id):
     """
     ---
     get:
-      summary: Get permissions assigned to a role (admin, MANAGE_ROLES permission required)
+      summary: Get permissions assigned to a role (admin, view_role_permissions permission required)
       tags:
         - Admin - Roles
       parameters:
@@ -198,19 +190,18 @@ def get_role_permissions(role_id):
           description: List of permissions assigned to the role
           content:
             application/json:
-              schema: RoleSchema
+              schema: PermissionSchema
         404:
           description: Role not found
     """
-    role, msg, status = RoleService.get_role_by_id(role_id)
-    if not role:
+    permissions, msg, status = RoleService.get_role_permissions(role_id)
+    if status != 200:
         return jsonify({"error": msg}), status
-    schema = RoleSchema()
-    return jsonify(schema.dump(role)), status
+    schema = PermissionSchema(many=True)
+    return jsonify(schema.dump(permissions)), status
 
 @admin_bp.route('/roles/<int:role_id>/permissions', methods=['POST'])
-@token_required
-@require_permission('MANAGE_ROLES')
+@require_permission_v2('manage_roles')
 def assign_permission(role_id):
     """Assign a permission to a role.
     Requires MANAGE_ROLES permission.
@@ -284,8 +275,7 @@ def assign_permission(role_id):
     return jsonify({"error": message}), status_code
 
 @admin_bp.route('/roles/<int:role_id>/permissions/<int:permission_id>', methods=['DELETE'])
-@token_required
-@require_permission('MANAGE_ROLES')
+@require_permission_v2('manage_roles')
 def remove_permission(role_id, permission_id):
     """Remove a permission from a role.
     Requires MANAGE_ROLES permission.

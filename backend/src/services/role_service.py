@@ -2,6 +2,7 @@ from typing import Tuple, Any, List, Optional
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from src.app import db
 from src.models import Role, Permission
+from src.services.permission_service import PermissionService
 
 class RoleService:
     """Service class for managing roles and their permissions."""
@@ -108,11 +109,12 @@ class RoleService:
     def get_role_permissions(cls, role_id: int) -> Tuple[List[Permission], str, int]:
         """Get all permissions assigned to a role."""
         try:
-            role = Role.query.options(db.joinedload(Role.permissions)).get(role_id)
+            role = Role.query.get(role_id)
             if not role:
                 return [], f"Role with ID {role_id} not found", 404
             
-            permissions = list(role.permissions)
+            # Since permissions is a dynamic relationship, we need to call .all() to get the actual list
+            permissions = list(role.permissions.all())
             return permissions, "Permissions retrieved successfully", 200
         except SQLAlchemyError as e:
             return [], f"Database error: {str(e)}", 500
@@ -135,6 +137,10 @@ class RoleService:
 
             role.permissions.append(permission)
             db.session.commit()
+            
+            # Cache invalidation: Invalidate cache for all users with this role
+            PermissionService.invalidate_role_cache(role_id)
+            
             return role, "Permission assigned successfully", 200
         except SQLAlchemyError as e:
             db.session.rollback()
@@ -158,6 +164,10 @@ class RoleService:
 
             role.permissions.remove(permission)
             db.session.commit()
+            
+            # Cache invalidation: Invalidate cache for all users with this role
+            PermissionService.invalidate_role_cache(role_id)
+            
             return role, "Permission removed successfully", 200
         except SQLAlchemyError as e:
             db.session.rollback()

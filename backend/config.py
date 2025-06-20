@@ -19,7 +19,7 @@ class DevelopmentConfig(Config):
 class TestingConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL') or \
-        'postgresql://localhost/fbo_launchpad_test'
+        'postgresql://fbo_user:fbo_password@localhost:5433/fbo_launchpad_test'
     WTF_CSRF_ENABLED = False
 
 class ProductionConfig(Config):

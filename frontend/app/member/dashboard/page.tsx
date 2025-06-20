@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ThumbsUp, Clock, BarChart, MoreHorizontal, FileText, CheckCircle, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
+import PermissionDebug from "@/app/components/permission-debug"
 
 // Types
 interface Task {
@@ -52,16 +53,22 @@ export default function MemberDashboard() {
       return
     }
 
-    const parsedUser = JSON.parse(userData)
-    if (!parsedUser.isLoggedIn) {
+    try {
+      const parsedUser = JSON.parse(userData)
+      if (!parsedUser.isLoggedIn) {
+        router.push("/login")
+        return
+      }
+
+      setUser(parsedUser)
+
+      // Load mock data
+      loadMockData()
+    } catch (error) {
+      console.error("Error parsing user data:", error)
       router.push("/login")
       return
     }
-
-    setUser(parsedUser)
-
-    // Load mock data
-    loadMockData()
 
     setIsLoading(false)
   }, [router])
@@ -196,6 +203,9 @@ export default function MemberDashboard() {
           <h1 className="text-2xl font-bold mb-1">Hello, {user?.name || "User"}</h1>
           <p className="text-gray-500">Track team progress here. You almost reach a goal!</p>
         </div>
+
+        {/* Permission Debug Component */}
+        <PermissionDebug />
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

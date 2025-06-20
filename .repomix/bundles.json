@@ -1,0 +1,39 @@
+{
+  "bundles": {
+    "CoreComponents-653": {
+      "name": "CoreComponents",
+      "created": "2025-06-02T19:43:32.419Z",
+      "lastUsed": "2025-06-20T01:07:16.430Z",
+      "tags": [],
+      "files": [
+        "frontend/app",
+        "frontend/components",
+        "frontend/hooks",
+        "frontend/tailwind.config.ts",
+        "frontend/next.config.mjs",
+        "backend/src",
+        "backend/migrations",
+        "backend/DATABASE_SETUP.md",
+        "backend/docker-compose.yml",
+        "backend/Dockerfile",
+        "backend/entrypoint.sh",
+        "backend/setup.py",
+        "backend/reseed_database.sh",
+        "frontend/package.json",
+        "backend/init.sql",
+        "backend/config.py"
+      ]
+    },
+    "Tests-831": {
+      "name": "Tests",
+      "created": "2025-06-17T06:43:22.885Z",
+      "lastUsed": "2025-06-17T06:46:01.875Z",
+      "tags": [],
+      "files": [
+        "backend",
+        "cypress",
+        "frontend"
+      ]
+    }
+  }
+}

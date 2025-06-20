@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "name": "Light Jet",
+    "fbo_location_id": 1
+  },
+  {
+    "id": 2,
+    "name": "Turboprop",
+    "fbo_location_id": 1
+  },
+  {
+    "id": 3,
+    "name": "Heavy Jet",
+    "fbo_location_id": 1
+  }
+] 

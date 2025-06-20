@@ -1,10 +1,11 @@
 from flask import Blueprint, request, jsonify, g
-from ..utils.decorators import token_required, require_permission
+from ..utils.enhanced_auth_decorators_v2 import require_permission_v2
 from ..models.user import UserRole
 from ..services import FuelTruckService
 from ..schemas import (
     FuelTruckListResponseSchema,
     FuelTruckCreateRequestSchema,
+    FuelTruckUpdateRequestSchema,
     FuelTruckCreateResponseSchema,
     FuelTruckSchema,
     ErrorResponseSchema
@@ -15,13 +16,12 @@ truck_bp = Blueprint('truck_bp', __name__, url_prefix='/api/fuel-trucks')
 
 @truck_bp.route('', methods=['GET', 'OPTIONS'])
 @truck_bp.route('/', methods=['GET', 'OPTIONS'])
-@token_required
-@require_permission('VIEW_TRUCKS')
+@require_permission_v2('view_fuel_trucks')
 def get_fuel_trucks():
     if request.method == 'OPTIONS':
         return jsonify({'message': 'OPTIONS request successful'}), 200
     """Get a list of fuel trucks.
-    Requires VIEW_TRUCKS permission. Supports filtering by active status.
+    Requires view_fuel_trucks permission. Supports filtering by active status.
     ---
     tags:
       - Fuel Trucks
@@ -82,11 +82,10 @@ def get_fuel_trucks():
         return jsonify({"error": message}), status_code
 
 @truck_bp.route('/', methods=['POST'])
-@token_required
-@require_permission('MANAGE_TRUCKS')
+@require_permission_v2('manage_fuel_trucks')
 def create_fuel_truck():
     """Create a new fuel truck.
-    Requires MANAGE_TRUCKS permission.
+    Requires manage_fuel_trucks permission.
     ---
     tags:
       - Fuel Trucks
@@ -144,11 +143,10 @@ def create_fuel_truck():
         return jsonify({"error": message}), status_code
 
 @truck_bp.route('/<int:truck_id>', methods=['GET'])
-@token_required
-@require_permission('VIEW_TRUCKS')
+@require_permission_v2('view_fuel_trucks', {'resource_type': 'fuel_truck', 'id_param': 'truck_id'})
 def get_fuel_truck(truck_id):
     """Get a fuel truck by ID.
-    Requires VIEW_TRUCKS permission.
+    Requires view_fuel_trucks permission for the specific truck.
     ---
     tags:
       - Fuel Trucks
@@ -198,11 +196,10 @@ def get_fuel_truck(truck_id):
         return jsonify({"error": message}), status_code
 
 @truck_bp.route('/<int:truck_id>', methods=['PATCH'])
-@token_required
-@require_permission('MANAGE_TRUCKS')
+@require_permission_v2('manage_fuel_trucks')
 def update_fuel_truck(truck_id):
     """Update a fuel truck.
-    Requires MANAGE_TRUCKS permission.
+    Requires manage_fuel_trucks permission.
     ---
     tags:
       - Fuel Trucks
@@ -219,7 +216,7 @@ def update_fuel_truck(truck_id):
       required: true
       content:
         application/json:
-          schema: FuelTruckCreateRequestSchema  # Reuse for simplicity
+          schema: FuelTruckUpdateRequestSchema
     responses:
       200:
         description: Fuel truck updated successfully
@@ -252,7 +249,7 @@ def update_fuel_truck(truck_id):
           application/json:
             schema: ErrorResponseSchema
     """
-    schema = FuelTruckCreateRequestSchema(partial=True)
+    schema = FuelTruckUpdateRequestSchema()
     try:
         data = schema.load(request.get_json())
     except Exception as e:
@@ -267,11 +264,10 @@ def update_fuel_truck(truck_id):
         return jsonify({"error": message}), status_code
 
 @truck_bp.route('/<int:truck_id>', methods=['DELETE'])
-@token_required
-@require_permission('MANAGE_TRUCKS')
+@require_permission_v2('manage_fuel_trucks')
 def delete_fuel_truck(truck_id):
     """Delete a fuel truck by ID.
-    Requires MANAGE_TRUCKS permission.
+    Requires manage_fuel_trucks permission.
     ---
     tags:
       - Fuel Trucks

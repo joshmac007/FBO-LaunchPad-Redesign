@@ -13,6 +13,7 @@ services:
       - .env
     depends_on:
       - db
+      - redis
     environment:
       - FLASK_APP=src/app.py
       - FLASK_ENV=development
@@ -29,6 +30,12 @@ services:
       - POSTGRES_DB=fbo_launchpad_dev
     ports:
       - "5433:5432"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
     restart: unless-stopped
 
 volumes:

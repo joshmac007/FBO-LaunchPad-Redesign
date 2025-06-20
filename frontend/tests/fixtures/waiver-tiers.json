@@ -1,0 +1,35 @@
+[
+  {
+    "id": 1,
+    "name": "Standard Waiver",
+    "fuel_uplift_multiplier": 1.5,
+    "fees_waived_codes": ["RAMP"],
+    "tier_priority": 1,
+    "is_caa_specific_tier": false,
+    "fbo_location_id": 1,
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "id": 2,
+    "name": "Premium Waiver",
+    "fuel_uplift_multiplier": 2.5,
+    "fees_waived_codes": ["RAMP", "GPU"],
+    "tier_priority": 2,
+    "is_caa_specific_tier": false,
+    "fbo_location_id": 1,
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "id": 3,
+    "name": "CAA Override Waiver",
+    "fuel_uplift_multiplier": 3.0,
+    "fees_waived_codes": ["OVERNIGHT"],
+    "tier_priority": 1,
+    "is_caa_specific_tier": true,
+    "fbo_location_id": 1,
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  }
+] 

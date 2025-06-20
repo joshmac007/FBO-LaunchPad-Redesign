@@ -1,0 +1,32 @@
+[
+  {
+    "id": 1,
+    "name": "Admin",
+    "description": "Administrator with full system access",
+    "permissions": ["user:create", "user:read", "user:update", "user:delete", "admin:access"]
+  },
+  {
+    "id": 2,
+    "name": "Manager",
+    "description": "Manager with limited administrative access",
+    "permissions": ["user:read", "user:update", "reports:read"]
+  },
+  {
+    "id": 3,
+    "name": "CSR",
+    "description": "Customer Service Representative",
+    "permissions": ["orders:create", "orders:read", "orders:update", "customers:read"]
+  },
+  {
+    "id": 4,
+    "name": "Fueler",
+    "description": "Fueling operations specialist",
+    "permissions": ["orders:read", "orders:update", "fuel_operations:access"]
+  },
+  {
+    "id": 5,
+    "name": "Finance",
+    "description": "Financial operations team member",
+    "permissions": ["invoices:read", "payments:read", "reports:read"]
+  }
+] 

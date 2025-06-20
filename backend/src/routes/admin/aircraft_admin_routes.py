@@ -1,21 +1,19 @@
 from flask import request, jsonify
 from ...services.aircraft_service import AircraftService
 from ...services.customer_service import CustomerService
-from src.utils.decorators import token_required, require_permission
+from src.utils.enhanced_auth_decorators_v2 import require_permission_v2
 from ...models.user import UserRole
 from ...schemas.admin_schemas import AdminAircraftSchema, AdminAircraftListResponseSchema, ErrorResponseSchema
 from src.extensions import apispec
 from .routes import admin_bp
 
-@admin_bp.route('aircraft', methods=['GET', 'OPTIONS'])
 @admin_bp.route('/aircraft', methods=['GET', 'OPTIONS'])
-@token_required
-@require_permission('MANAGE_AIRCRAFT')
+@require_permission_v2('manage_aircraft')
 def list_aircraft():
     """
     ---
     get:
-      summary: List all aircraft (admin, MANAGE_AIRCRAFT permission required)
+      summary: List all aircraft (admin, manage_aircraft permission required)
       tags:
         - Admin - Aircraft
       responses:
@@ -35,15 +33,13 @@ def list_aircraft():
     schema = AdminAircraftSchema(many=True)
     return jsonify({"aircraft": schema.dump(aircraft_list)}), status
 
-@admin_bp.route('aircraft', methods=['POST', 'OPTIONS'])
 @admin_bp.route('/aircraft', methods=['POST', 'OPTIONS'])
-@token_required
-@require_permission('MANAGE_AIRCRAFT')
+@require_permission_v2('manage_aircraft')
 def create_aircraft():
     """
     ---
     post:
-      summary: Create a new aircraft (admin, MANAGE_AIRCRAFT permission required)
+      summary: Create a new aircraft (admin, manage_aircraft permission required)
       tags:
         - Admin - Aircraft
       requestBody:
@@ -72,13 +68,12 @@ def create_aircraft():
     return jsonify(schema.dump(aircraft)), status
 
 @admin_bp.route('/aircraft/<string:tail_number>', methods=['GET'])
-@token_required
-@require_permission('MANAGE_AIRCRAFT')
+@require_permission_v2('manage_aircraft', {'resource_type': 'aircraft', 'id_param': 'tail_number'})
 def get_aircraft(tail_number):
     """
     ---
     get:
-      summary: Get an aircraft by tail number (admin, MANAGE_AIRCRAFT permission required)
+      summary: Get an aircraft by tail number (admin, manage_aircraft permission required)
       tags:
         - Admin - Aircraft
       parameters:
@@ -103,13 +98,12 @@ def get_aircraft(tail_number):
     return jsonify(schema.dump(aircraft)), status
 
 @admin_bp.route('/aircraft/<string:tail_number>', methods=['PATCH'])
-@token_required
-@require_permission('MANAGE_AIRCRAFT')
+@require_permission_v2('manage_aircraft', {'resource_type': 'aircraft', 'id_param': 'tail_number'})
 def update_aircraft(tail_number):
     """
     ---
     patch:
-      summary: Update an aircraft by tail number (admin, MANAGE_AIRCRAFT permission required)
+      summary: Update an aircraft by tail number (admin, manage_aircraft permission required)
       tags:
         - Admin - Aircraft
       parameters:
@@ -142,13 +136,12 @@ def update_aircraft(tail_number):
     return jsonify(schema.dump(aircraft)), status
 
 @admin_bp.route('/aircraft/<string:tail_number>', methods=['DELETE'])
-@token_required
-@require_permission('MANAGE_AIRCRAFT')
+@require_permission_v2('manage_aircraft', {'resource_type': 'aircraft', 'id_param': 'tail_number'})
 def delete_aircraft(tail_number):
     """
     ---
     delete:
-      summary: Delete an aircraft by tail number (admin, MANAGE_AIRCRAFT permission required)
+      summary: Delete an aircraft by tail number (admin, manage_aircraft permission required)
       tags:
         - Admin - Aircraft
       parameters:

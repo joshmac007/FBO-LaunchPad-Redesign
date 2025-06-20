@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, g
-from ..utils.decorators import token_required, require_permission
+from ..utils.enhanced_auth_decorators_v2 import require_permission_v2
 from ..models.user import UserRole
 from ..services.user_service import UserService
 from marshmallow import ValidationError
@@ -10,17 +10,17 @@ from ..schemas import (
     UserListResponseSchema,
     ErrorResponseSchema
 )
+from ..schemas.user_schemas import UserDetailSchema, UserBriefSchema
 
 # Create blueprint for user routes
 user_bp = Blueprint('user_bp', __name__, url_prefix='/api/users')
 
 @user_bp.route('', methods=['GET', 'OPTIONS'])
 @user_bp.route('/', methods=['GET', 'OPTIONS'])
-@token_required
-@require_permission('VIEW_USERS')
+@require_permission_v2('view_users')
 def get_users():
     """Get a list of users.
-    Requires VIEW_USERS permission. Supports filtering by 'role' and 'is_active'.
+    Requires view_users permission. Supports filtering by 'role' and 'is_active'.
     ---
     tags:
       - Users
@@ -76,6 +76,16 @@ def get_users():
         'role': request.args.get('role', None, type=str),
         'is_active': request.args.get('is_active', None, type=str)  # Keep as string, service handles conversion
     }
+    
+    # Handle role_ids parameter (multiple values)
+    role_ids = request.args.getlist('role_ids')
+    if role_ids:
+        try:
+            # Convert string IDs to integers
+            filters['role_ids'] = [int(rid) for rid in role_ids]
+        except ValueError:
+            return jsonify({"error": "Invalid role_ids format, must be integers"}), 400
+    
     # Remove None values so service doesn't process empty filters unnecessarily
     filters = {k: v for k, v in filters.items() if v is not None}
     
@@ -84,17 +94,9 @@ def get_users():
     
     # Handle the response
     if users is not None:
-        # Serialize the list of user objects, excluding sensitive fields
-        users_list = []
-        for user in users:
-            users_list.append({
-                "id": user.id,
-                "name": user.username,
-                "email": user.email,
-                "roles": [role.name for role in user.roles],
-                "is_active": user.is_active,
-                "created_at": user.created_at.isoformat()
-            })
+        # Use UserBriefSchema for consistent formatting with admin endpoints
+        schema = UserBriefSchema(many=True)
+        users_list = schema.dump(users)
         # Construct the final JSON response
         response = {
             "message": message,
@@ -107,11 +109,10 @@ def get_users():
 
 @user_bp.route('', methods=['POST', 'OPTIONS'])
 @user_bp.route('/', methods=['POST', 'OPTIONS'])
-@token_required
-@require_permission('MANAGE_USERS')
+@require_permission_v2('manage_users')
 def create_user():
     """Create a new user.
-    Requires MANAGE_USERS permission.
+    Requires manage_users permission.
     ---
     tags:
       - Users
@@ -182,17 +183,12 @@ def create_user():
         user, message, status_code = UserService.create_user(data)
         
         if user is not None:
-            # Return serialized user data
+            # Use UserDetailSchema for consistent formatting with admin endpoints
+            schema = UserDetailSchema()
+            user_data = schema.dump(user)
             return jsonify({
                 "message": message,
-                "user": {
-                    "id": user.id,
-                    "name": user.username,
-                    "email": user.email,
-                    "roles": [role.name for role in user.roles],
-                    "is_active": user.is_active,
-                    "created_at": user.created_at.isoformat()
-                }
+                "user": user_data
             }), status_code
         else:
             return jsonify({"error": message}), status_code
@@ -204,11 +200,10 @@ def create_user():
         }), 500
 
 @user_bp.route('/<int:user_id>', methods=['PATCH'])
-@token_required
-@require_permission('MANAGE_USERS')
+@require_permission_v2('manage_users', {'resource_type': 'user', 'id_param': 'user_id'})
 def update_user(user_id):
     """Update a user.
-    Requires MANAGE_USERS permission.
+    Requires manage_users permission.
     ---
     tags:
       - Users
@@ -220,7 +215,7 @@ def update_user(user_id):
         schema:
           type: integer
         required: true
-        description: ID of user to update
+        description: ID of the user to update
     requestBody:
       required: true
       content:
@@ -252,6 +247,11 @@ def update_user(user_id):
         content:
           application/json:
             schema: ErrorResponseSchema
+      409:
+        description: Conflict (e.g., email already exists)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
       500:
         description: Server error
         content:
@@ -265,7 +265,7 @@ def update_user(user_id):
         
         if not data:
             return jsonify({"error": "No data provided"}), 400
-            
+        
         try:
             data = schema.load(data)
         except ValidationError as e:
@@ -278,33 +278,26 @@ def update_user(user_id):
         user, message, status_code = UserService.update_user(user_id, data)
         
         if user is not None:
-            # Return serialized user data
+            # Use UserDetailSchema for consistent formatting with admin endpoints
+            schema = UserDetailSchema()
+            user_data = schema.dump(user)
             return jsonify({
                 "message": message,
-                "user": {
-                    "id": user.id,
-                    "name": user.username,
-                    "email": user.email,
-                    "roles": [role.name for role in user.roles],
-                    "is_active": user.is_active,
-                    "created_at": user.created_at.isoformat()
-                }
+                "user": user_data
             }), status_code
         else:
             return jsonify({"error": message}), status_code
             
     except Exception as e:
-        return jsonify({
-            "error": "Internal server error",
-            "details": str(e)
-        }), 500
+        from flask import current_app
+        current_app.logger.error(f"Error updating user {user_id}: {e}")
+        return jsonify({"error": "Server error"}), 500
 
 @user_bp.route('/<int:user_id>', methods=['DELETE'])
-@token_required
-@require_permission('MANAGE_USERS')
+@require_permission_v2('manage_users', {'resource_type': 'user', 'id_param': 'user_id'})
 def delete_user(user_id):
     """Delete a user.
-    Requires MANAGE_USERS permission.
+    Requires manage_users permission.
     ---
     tags:
       - Users
@@ -316,33 +309,49 @@ def delete_user(user_id):
         schema:
           type: integer
         required: true
-        description: ID of user to delete
+        description: ID of the user to delete
     responses:
-      200:
+      204:
         description: User deleted successfully
       401:
         description: Unauthorized
+        content:
+          application/json:
+            schema: ErrorResponseSchema
       403:
         description: Forbidden (missing permission)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
       404:
         description: User not found
+        content:
+          application/json:
+            schema: ErrorResponseSchema
       500:
         description: Server error
+        content:
+          application/json:
+            schema: ErrorResponseSchema
     """
-    # Call service to delete user
-    success, message, status_code = UserService.delete_user(user_id)
-    
-    if success:
-        return jsonify({"message": message}), status_code
-    else:
-        return jsonify({"error": message}), status_code
+    try:
+        deleted, message, status_code = UserService.delete_user(user_id)
+        
+        if deleted:
+            return '', 204
+        else:
+            return jsonify({"error": message}), status_code
+            
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error deleting user {user_id}: {e}")
+        return jsonify({"error": "Server error"}), 500
 
 @user_bp.route('/<int:user_id>', methods=['GET'])
-@token_required
-@require_permission('VIEW_USERS')
+@require_permission_v2('view_users', {'resource_type': 'user', 'id_param': 'user_id'})
 def get_user(user_id):
     """Get a user by ID.
-    Requires VIEW_USERS permission.
+    Requires view_users permission.
     ---
     tags:
       - Users
@@ -354,7 +363,7 @@ def get_user(user_id):
         schema:
           type: integer
         required: true
-        description: ID of user to retrieve
+        description: ID of the user to retrieve
     responses:
       200:
         description: User retrieved successfully
@@ -382,20 +391,21 @@ def get_user(user_id):
           application/json:
             schema: ErrorResponseSchema
     """
-    # Call service to get user
-    user, message, status_code = UserService.get_user_by_id(user_id)
-    
-    if user is not None:
-        return jsonify({
-            "message": message,
-            "user": {
-                "id": user.id,
-                "name": user.username,
-                "email": user.email,
-                "roles": [role.name for role in user.roles],
-                "is_active": user.is_active,
-                "created_at": user.created_at.isoformat()
-            }
-        }), status_code
-    else:
-        return jsonify({"error": message}), status_code 
+    try:
+        user, message, status_code = UserService.get_user_by_id(user_id)
+        
+        if user is not None:
+            # Use UserDetailSchema for consistent formatting with admin endpoints
+            schema = UserDetailSchema()
+            user_data = schema.dump(user)
+            return jsonify({
+                "message": message,
+                "user": user_data
+            }), status_code
+        else:
+            return jsonify({"error": message}), status_code
+            
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error getting user {user_id}: {e}")
+        return jsonify({"error": "Server error"}), 500 

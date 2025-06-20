@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
 import { LogOut, Plane, Bell, Settings, User, Shield, Plus, Search, Filter, Edit, Lock, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,15 +17,11 @@ import {
   createRole,
   updateRole,
   deleteRole,
-  getUserRoles,
-  assignRoleToUser,
-  removeRoleFromUser,
 } from "@/app/services/permission-service"
 import ProtectedRoute from "@/app/components/protected-route"
+import AdminLayout from "../layout"
 
 export default function PermissionsPage() {
-  const router = useRouter()
-  const [user, setUser] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [roles, setRoles] = useState<Role[]>([])
@@ -52,60 +47,56 @@ export default function PermissionsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null)
 
-  // User role assignment
-  const [showAssignRoleDialog, setShowAssignRoleDialog] = useState(false)
-  const [userEmail, setUserEmail] = useState("")
-  const [userRoles, setUserRoles] = useState<string[]>([])
-  const [assignmentError, setAssignmentError] = useState("")
+  // User role assignment - Disabled: Backend doesn't support user-role assignment endpoints yet
+  // const [showAssignRoleDialog, setShowAssignRoleDialog] = useState(false)
+  // const [userEmail, setUserEmail] = useState("")
+  // const [userRoles, setUserRoles] = useState<string[]>([])
+  // const [assignmentError, setAssignmentError] = useState("")
 
   useEffect(() => {
-    // Check if user is logged in and is admin
-    const userData = localStorage.getItem("fboUser")
-    if (!userData) {
-      router.push("/login")
-      return
-    }
-
-    const parsedUser = JSON.parse(userData)
-    if (!parsedUser.isLoggedIn || parsedUser.role !== "admin") {
-      router.push("/login")
-      return
-    }
-
-    setUser(parsedUser)
-
     // Load permissions and roles
     loadPermissionsAndRoles()
+  }, [])
 
-    setIsLoading(false)
-  }, [router])
+  const loadPermissionsAndRoles = async () => {
+    try {
+      setIsLoading(true)
+      const [allPermissions, allRoles] = await Promise.all([
+        getAllPermissions(),
+        getAllRoles()
+      ])
 
-  const loadPermissionsAndRoles = () => {
-    const allPermissions = getAllPermissions()
-    const allRoles = getAllRoles()
-
-    setPermissions(allPermissions)
-    setRoles(allRoles)
+      setPermissions(allPermissions)
+      setRoles(allRoles)
+    } catch (error) {
+      console.error("Error loading permissions and roles:", error)
+      setFormError("Failed to load permissions and roles")
+      // Ensure arrays are set even on error
+      setPermissions([])
+      setRoles([])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleLogout = () => {
     localStorage.removeItem("fboUser")
-    router.push("/login")
+    window.location.href = "/login"
   }
 
   // Filter permissions based on search query and category
-  const filteredPermissions = permissions.filter((permission) => {
+  const filteredPermissions = (permissions || []).filter((permission) => {
     const matchesSearch =
       permission.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       permission.description.toLowerCase().includes(searchQuery.toLowerCase())
 
-    const matchesCategory = categoryFilter === "all" || permission.category === categoryFilter
+    const matchesCategory = categoryFilter === "all" || (permission.category || "") === categoryFilter
 
     return matchesSearch && matchesCategory
   })
 
   // Filter roles based on search query
-  const filteredRoles = roles.filter(
+  const filteredRoles = (roles || []).filter(
     (role) =>
       role.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       role.description.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -146,7 +137,7 @@ export default function PermissionsPage() {
       }
 
       // Reload roles
-      loadPermissionsAndRoles()
+      await loadPermissionsAndRoles()
 
       // Reset form
       setNewRole({
@@ -170,7 +161,7 @@ export default function PermissionsPage() {
       await deleteRole(roleToDelete.id)
 
       // Reload roles
-      loadPermissionsAndRoles()
+      await loadPermissionsAndRoles()
 
       // Close dialog
       setShowDeleteConfirm(false)
@@ -203,7 +194,8 @@ export default function PermissionsPage() {
     setShowRoleForm(true)
   }
 
-  // Handle user role lookup
+  // User role assignment functions - Disabled: Backend doesn't support user-role assignment endpoints yet
+  /*
   const handleLookupUserRoles = () => {
     setAssignmentError("")
 
@@ -222,7 +214,6 @@ export default function PermissionsPage() {
     }
   }
 
-  // Handle role assignment toggle
   const handleRoleAssignmentToggle = (roleId: string) => {
     if (!userEmail) return
 
@@ -241,14 +232,16 @@ export default function PermissionsPage() {
       setAssignmentError("Failed to update role assignment")
     }
   }
+  */
 
   // Group permissions by category
-  const permissionsByCategory = permissions.reduce(
+  const permissionsByCategory = (permissions || []).reduce(
     (acc, permission) => {
-      if (!acc[permission.category]) {
-        acc[permission.category] = []
+      const category = permission.category || "uncategorized"
+      if (!acc[category]) {
+        acc[category] = []
       }
-      acc[permission.category].push(permission)
+      acc[category].push(permission)
       return acc
     },
     {} as Record<string, Permission[]>,
@@ -266,45 +259,10 @@ export default function PermissionsPage() {
   }
 
   return (
-    <ProtectedRoute requiredPermission="manage_roles">
-      <div className="min-h-screen bg-background">
-        {/* Admin Header */}
-        <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-40">
-          <div className="container flex h-16 items-center justify-between px-4">
-            <div className="flex items-center gap-2">
-              <Plane className="h-6 w-6 text-primary rotate-45" />
-              <span className="text-xl font-bold">FBO LaunchPad</span>
-              <span className="bg-primary/10 text-primary text-xs px-2 py-1 rounded-md ml-2">Admin</span>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" className="gap-2">
-                <Bell className="h-4 w-4" />
-                <span className="sr-only">Notifications</span>
-              </Button>
-              <Button variant="ghost" size="sm" className="gap-2">
-                <Settings className="h-4 w-4" />
-                <span className="sr-only">Settings</span>
-              </Button>
-              <div className="flex items-center gap-2">
-                <div className="rounded-full bg-primary/10 p-1">
-                  <User className="h-5 w-5 text-primary" />
-                </div>
-                <span className="text-sm font-medium hidden md:inline-block">Administrator</span>
-              </div>
-              <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
-                <LogOut className="h-4 w-4" />
-                <span className="hidden md:inline-block">Logout</span>
-              </Button>
-            </div>
-          </div>
-        </header>
-
-        <main className="container px-4 md:px-6 py-6 md:py-8">
-          <div className="flex flex-col gap-6">
+      <div className="space-y-6 p-4 md:p-6">
             <div className="flex items-center justify-between">
               <h1 className="text-3xl font-bold">Permissions & Roles</h1>
-              <Button variant="outline" size="sm" onClick={() => router.push("/admin/dashboard")} className="gap-2">
+              <Button variant="outline" size="sm" onClick={() => window.location.href = "/admin/dashboard"} className="gap-2">
                 Back to Dashboard
               </Button>
             </div>
@@ -340,6 +298,7 @@ export default function PermissionsPage() {
                       <span>Create Role</span>
                     </Button>
                   )}
+                  {/* User role assignment disabled - Backend doesn't support user-role assignment endpoints yet
                   <Button
                     variant="outline"
                     onClick={() => setShowAssignRoleDialog(true)}
@@ -348,6 +307,7 @@ export default function PermissionsPage() {
                     <User className="h-4 w-4" />
                     <span>Assign Roles</span>
                   </Button>
+                  */}
                 </div>
               </div>
 
@@ -443,20 +403,20 @@ export default function PermissionsPage() {
                             <CardContent>
                               <div className="space-y-2">
                                 <div className="text-sm text-muted-foreground">
-                                  <strong>Permissions ({role.permissions.length}):</strong>
+                                  <strong>Permissions ({(role.permissions || []).length}):</strong>
                                 </div>
                                 <div className="flex flex-wrap gap-1">
-                                  {role.permissions.slice(0, 5).map((permissionId) => {
-                                    const permission = permissions.find((p) => p.id === permissionId)
+                                  {(role.permissions || []).slice(0, 5).map((permissionId) => {
+                                    const permission = permissions.find((p) => p.id.toString() === permissionId.toString())
                                     return permission ? (
                                       <Badge key={permissionId} variant="secondary" className="text-xs">
                                         {permission.name}
                                       </Badge>
                                     ) : null
                                   })}
-                                  {role.permissions.length > 5 && (
+                                  {(role.permissions || []).length > 5 && (
                                     <Badge variant="outline" className="text-xs">
-                                      +{role.permissions.length - 5} more
+                                      +{(role.permissions || []).length - 5} more
                                     </Badge>
                                   )}
                                 </div>
@@ -491,7 +451,7 @@ export default function PermissionsPage() {
                               permission.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                               permission.description.toLowerCase().includes(searchQuery.toLowerCase())
 
-                            const matchesCategory = categoryFilter === "all" || permission.category === categoryFilter
+                            const matchesCategory = categoryFilter === "all" || (permission.category || "") === categoryFilter
 
                             return matchesSearch && matchesCategory
                           })
@@ -510,7 +470,7 @@ export default function PermissionsPage() {
                                       <div className="flex items-center justify-between">
                                         <h4 className="font-medium">{permission.name}</h4>
                                         <Badge variant="outline" className="text-xs">
-                                          {permission.category.replace("_", " ")}
+                                          {(permission.category || "").replace("_", " ")}
                                         </Badge>
                                       </div>
                                       <p className="text-sm text-muted-foreground">{permission.description}</p>
@@ -585,8 +545,8 @@ export default function PermissionsPage() {
                                   <label key={permission.id} className="flex items-center space-x-2 text-sm">
                                     <input
                                       type="checkbox"
-                                      checked={newRole.permissions.includes(permission.id)}
-                                      onChange={() => handlePermissionToggle(permission.id)}
+                                      checked={newRole.permissions.includes(permission.id.toString())}
+                                      onChange={() => handlePermissionToggle(permission.id.toString())}
                                       className="rounded border-gray-300"
                                     />
                                     <span>{permission.name}</span>
@@ -649,7 +609,7 @@ export default function PermissionsPage() {
               </div>
             )}
 
-            {/* User Role Assignment Dialog */}
+            {/* User Role Assignment Dialog - Disabled: Backend doesn't support user-role assignment endpoints yet
             {showAssignRoleDialog && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
                 <Card className="w-full max-w-md">
@@ -688,7 +648,7 @@ export default function PermissionsPage() {
                                   className="rounded border-gray-300"
                                 />
                                 <span>{role.name}</span>
-                                <span className="text-muted-foreground">- {role.description}</span>
+                                <span className="text-muted-foreground">- {role.description</span>
                               </label>
                             ))}
                           </div>
@@ -713,9 +673,7 @@ export default function PermissionsPage() {
                 </Card>
               </div>
             )}
-          </div>
-        </main>
-      </div>
-    </ProtectedRoute>
+            */}
+    </div>
   )
 }

@@ -9,7 +9,13 @@ import jwt
 from ..extensions import db
 from ..models.permission import Permission
 from ..models.role import Role
-from ..models.role_permission import role_permissions, user_roles
+from ..models.role_permission import user_roles
+
+# Association table for user-permission group relationships
+user_permission_groups = db.Table('user_permission_groups',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
+    db.Column('permission_group_id', db.Integer, db.ForeignKey('permission_groups.id'), primary_key=True)
+)
 
 class UserRole(Enum):
     """
@@ -30,9 +36,37 @@ class User(db.Model):
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # LST-specific fields
+    employee_id = db.Column(db.String(20), nullable=True, unique=True, index=True)
+    status = db.Column(db.String(20), nullable=True, default='active', index=True)
+    shift = db.Column(db.String(20), nullable=True)
+    certifications = db.Column(db.JSON, nullable=True)
+    performance_rating = db.Column(db.Float, nullable=True)
+    orders_completed = db.Column(db.Integer, nullable=True, default=0)
+    average_time = db.Column(db.Float, nullable=True)
+    last_active = db.Column(db.DateTime, nullable=True)
+    hire_date = db.Column(db.DateTime, nullable=True)
+    
+    # FBO association for multi-tenancy
+    fbo_location_id = db.Column(db.Integer, nullable=True, index=True)
+    
     roles = db.relationship(
         'Role',
         secondary=user_roles,
+        backref=db.backref('users', lazy='dynamic'),
+        lazy='dynamic'
+    )
+    
+    # Enhanced permission system relationships
+    # Note: These relationships are defined in the respective model files
+    # direct_permissions - defined in UserPermission model
+    # permission_groups - defined in PermissionGroup model via user_permission_groups table
+    
+    # Add the actual relationships
+    permission_groups = db.relationship(
+        'PermissionGroup',
+        secondary=user_permission_groups,
         backref=db.backref('users', lazy='dynamic'),
         lazy='dynamic'
     )
@@ -45,15 +79,38 @@ class User(db.Model):
 
     def to_dict(self):
         """Convert user object to dictionary."""
-        return {
+        result = {
             'id': self.id,
             'username': self.username,
             'email': self.email,
             'name': self.name,
             'roles': [role.name for role in self.roles.all()],
             'is_active': self.is_active,
-            'created_at': self.created_at.isoformat()
+            'created_at': self.created_at.isoformat(),
+            'fbo_id': self.fbo_location_id
         }
+        
+        # Add LST-specific fields if they exist
+        if self.employee_id is not None:
+            result['employee_id'] = self.employee_id
+        if self.status is not None:
+            result['status'] = self.status
+        if self.shift is not None:
+            result['shift'] = self.shift
+        if self.certifications is not None:
+            result['certifications'] = self.certifications
+        if self.performance_rating is not None:
+            result['performance_rating'] = self.performance_rating
+        if self.orders_completed is not None:
+            result['orders_completed'] = self.orders_completed
+        if self.average_time is not None:
+            result['average_time'] = self.average_time
+        if self.last_active is not None:
+            result['last_active'] = self.last_active.isoformat()
+        if self.hire_date is not None:
+            result['hire_date'] = self.hire_date.isoformat()
+            
+        return result
 
     @property
     def role_list(self):
@@ -63,30 +120,52 @@ class User(db.Model):
     def __repr__(self):
         return f'<User {self.username}>'
 
-    def has_permission(self, permission_name: str) -> bool:
+    def has_permission(self, permission_name: str, resource_type: str = None, resource_id: str = None) -> bool:
         """
-        Check if the user has a specific permission through any of their assigned roles.
+        Enhanced permission checking that supports the new granular permission system.
+        Checks permissions from multiple sources: direct assignments, permission groups, and legacy roles.
         
         Args:
             permission_name (str): The name of the permission to check for.
+            resource_type (str): Optional resource type for resource-specific permissions.
+            resource_id (str): Optional resource ID for resource-specific permissions.
             
         Returns:
-            bool: True if the user has the permission through any role, False otherwise.
+            bool: True if the user has the permission, False otherwise.
             
         Note:
-            This method uses SQLAlchemy's EXISTS subquery for efficient permission checking
-            and caches results for the duration of the request.
+            This method now uses the enhanced PermissionService for comprehensive permission checking.
+            Falls back to legacy role-based checking for backward compatibility.
         """
         if not self.is_active:
             return False
-            
+        
+        # Use the enhanced permission service for comprehensive checking
+        try:
+            # Import here to avoid circular imports
+            from ..services.permission_service import PermissionService
+            return PermissionService.check_user_permission_legacy(
+                user_id=self.id,
+                permission_name=permission_name,
+                resource_type=resource_type,
+                resource_id=resource_id
+            )
+        except ImportError:
+            # Fallback to legacy role-based checking if PermissionService is not available
+            return self._legacy_has_permission(permission_name)
+    
+    def _legacy_has_permission(self, permission_name: str) -> bool:
+        """
+        Legacy permission checking method for backward compatibility.
+        Only checks role-based permissions.
+        """
         # Use request-level caching if available
         if has_request_context():
             # Initialize permission cache if it doesn't exist
             if not hasattr(g, '_permission_cache'):
                 g._permission_cache = {}
             
-            cache_key = f'user_{self.id}_perm_{permission_name}'
+            cache_key = f'user_{self.id}_legacy_perm_{permission_name}'
             if cache_key in g._permission_cache:
                 return g._permission_cache[cache_key]
             
@@ -108,6 +187,36 @@ class User(db.Model):
                 User.roles.any(Role.permissions.any(Permission.name == permission_name))
             )
         )).scalar()
+    
+    def get_effective_permissions(self, include_resource_context: bool = False) -> dict:
+        """
+        Get all effective permissions for this user from all sources.
+        
+        Args:
+            include_resource_context (bool): Whether to include resource-specific permissions
+            
+        Returns:
+            dict: Dictionary of effective permissions
+        """
+        try:
+            from ..services.permission_service import PermissionService
+            return PermissionService.get_user_effective_permissions(
+                user_id=self.id,
+                include_resource_context=include_resource_context
+            )
+        except ImportError:
+            # Fallback to legacy role-based permissions
+            permissions = {}
+            for role in self.roles:
+                for role_perm in role.permissions:
+                    perm = role_perm.permission
+                    if perm and perm.is_active:
+                        permissions[perm.name] = {
+                            'permission': perm.name,
+                            'source': f'role:{role.name}',
+                            'role_id': role.id
+                        }
+            return permissions
 
     def generate_token(self, expires_in=3600):
         """
@@ -122,10 +231,12 @@ class User(db.Model):
         Note:
             The token includes user ID, roles, and expiration time.
             Uses the app's JWT_SECRET_KEY for signing.
+            Uses 'sub' claim for Flask-JWT-Extended compatibility.
         """
         now = datetime.utcnow()
         payload = {
-            'user_id': self.id,
+            'sub': str(self.id),  # Flask-JWT-Extended expects 'sub' claim as string
+            'user_id': self.id,  # Keep for backward compatibility
             'username': self.username,
             'roles': [role.name for role in self.roles],
             'is_active': self.is_active,

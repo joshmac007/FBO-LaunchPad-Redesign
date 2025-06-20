@@ -24,9 +24,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application
 COPY src/ src/
 COPY migrations/ migrations/
+COPY entrypoint.sh .
+
+# Make entrypoint script executable
+RUN chmod +x entrypoint.sh
 
 # Expose the application port
 EXPOSE 5000
 
-# Command to run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "src.app:create_app()", "--workers", "4", "--reload", "--log-level", "info"] 
+# Set the entrypoint
+ENTRYPOINT ["./entrypoint.sh"]
+
+# Command to run the application with SocketIO support
+CMD ["python", "-c", "from src.app import create_app; from src.extensions import socketio; app = create_app(); socketio.run(app, host='0.0.0.0', port=5000, debug=True)"] 

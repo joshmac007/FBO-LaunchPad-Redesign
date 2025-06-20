@@ -6,56 +6,72 @@ import { Plane, ArrowLeft, Printer, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import Link from "next/link"
+import { usePermissions } from "@/app/contexts/permission-context"
+import { getCurrentUser } from "@/app/services/auth-service"
 
 export default function FuelingReceipt() {
   const router = useRouter()
   const params = useParams()
-  const [user, setUser] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const { user, loading: permissionsLoading, isAuthenticated } = usePermissions()
   const [order, setOrder] = useState<any>(null)
   const [notFound, setNotFound] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
 
+  // Check authentication and redirect if necessary
   useEffect(() => {
-    // Check if user is logged in and is Fueler
-    const userData = localStorage.getItem("fboUser")
-    if (!userData) {
+    if (!permissionsLoading && !isAuthenticated()) {
       router.push("/login")
       return
     }
 
-    const parsedUser = JSON.parse(userData)
-    if (!parsedUser.isLoggedIn || parsedUser.role !== "fueler") {
-      router.push("/login")
-      return
+    // Check if user has fueler role (using correct role names from backend)
+    if (!permissionsLoading && user) {
+      const currentUser = getCurrentUser()
+      const hasRequiredRole = currentUser?.roles?.includes('Line Service Technician')
+      
+      if (!hasRequiredRole) {
+        // Redirect to appropriate dashboard based on their role
+        if (currentUser?.roles?.includes('System Administrator')) {
+          router.push("/admin/dashboard")
+        } else if (currentUser?.roles?.includes('Customer Service Representative')) {
+          router.push("/csr/dashboard")
+        } else {
+          router.push("/member/dashboard")
+        }
+        return
+      }
     }
+  }, [permissionsLoading, isAuthenticated, user, router])
 
-    setUser(parsedUser)
+  // Load receipt data
+  useEffect(() => {
+    if (!permissionsLoading && isAuthenticated() && user && !dataLoaded) {
+      // Load fuel order
+      const orderId = params.id
+      const storedOrders = localStorage.getItem("fboFuelOrders")
 
-    // Load fuel order
-    const orderId = params.id
-    const storedOrders = localStorage.getItem("fboFuelOrders")
+      if (storedOrders) {
+        const orders = JSON.parse(storedOrders)
+        const foundOrder = orders.find((o: any) => o.id.toString() === orderId)
 
-    if (storedOrders) {
-      const orders = JSON.parse(storedOrders)
-      const foundOrder = orders.find((o: any) => o.id.toString() === orderId)
-
-      if (foundOrder) {
-        setOrder(foundOrder)
+        if (foundOrder) {
+          setOrder(foundOrder)
+        } else {
+          setNotFound(true)
+        }
       } else {
         setNotFound(true)
       }
-    } else {
-      setNotFound(true)
+      setDataLoaded(true)
     }
-
-    setIsLoading(false)
-  }, [router, params.id])
+  }, [permissionsLoading, isAuthenticated, user, params.id, dataLoaded])
 
   const handlePrint = () => {
     window.print()
   }
 
-  if (isLoading) {
+  // Show loading while permissions are being fetched or user is being authenticated
+  if (permissionsLoading || !dataLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -64,6 +80,11 @@ export default function FuelingReceipt() {
         </div>
       </div>
     )
+  }
+
+  // If not authenticated, don't render (useEffect will handle redirect)
+  if (!isAuthenticated()) {
+    return null
   }
 
   if (notFound) {

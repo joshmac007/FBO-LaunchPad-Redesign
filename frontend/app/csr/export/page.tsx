@@ -24,7 +24,9 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { isAuthenticated } from "@/app/services/auth-service"
+import { isOfflineMode } from "@/app/services/utils"
+import Link from "next/link"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   exportFuelOrdersUrl,
   getFuelOrders,
@@ -32,8 +34,6 @@ import {
   filterFuelOrders,
   downloadCSV,
 } from "@/app/services/fuel-order-service"
-import { isOfflineMode } from "@/app/services/utils"
-import Link from "next/link"
 
 // Mock receipt data for export
 const mockReceipts = [
@@ -118,35 +118,21 @@ export default function ExportDataPage() {
   })
 
   useEffect(() => {
-    // Check if user is logged in and is CSR
-    if (!isAuthenticated()) {
-      router.push("/login")
-      return
-    }
-
-    const userData = localStorage.getItem("fboUser")
-    if (userData) {
-      const parsedUser = JSON.parse(userData)
-      if (!parsedUser.isLoggedIn || parsedUser.role !== "csr") {
-        router.push("/login")
-        return
-      }
-    }
-
     // Load statistics
     loadStatistics()
     setIsLoading(false)
-  }, [router])
+  }, [])
 
   const loadStatistics = async () => {
     try {
       // Load fuel order statistics
-      const fuelOrders = await getFuelOrders()
+      const fuelOrdersResponse = await getFuelOrders()
+      const fuelOrders = fuelOrdersResponse.items || []
       const fuelStats = {
         total: fuelOrders.length,
-        pending: fuelOrders.filter((order) => order.status === "PENDING").length,
-        inProgress: fuelOrders.filter((order) => order.status === "IN_PROGRESS").length,
-        completed: fuelOrders.filter((order) => order.status === "COMPLETED").length,
+        pending: fuelOrders.filter((order: any) => order.status === "PENDING").length,
+        inProgress: fuelOrders.filter((order: any) => order.status === "IN_PROGRESS").length,
+        completed: fuelOrders.filter((order: any) => order.status === "COMPLETED").length,
       }
       setFuelOrderStats(fuelStats)
 
@@ -184,7 +170,8 @@ export default function ExportDataPage() {
     try {
       if (isOfflineMode()) {
         // Get local fuel orders
-        const allFuelOrders = await getFuelOrders()
+        const allFuelOrdersResponse = await getFuelOrders()
+        const allFuelOrders = allFuelOrdersResponse.items || []
 
         // Filter based on criteria
         const filteredOrders = filterFuelOrders(

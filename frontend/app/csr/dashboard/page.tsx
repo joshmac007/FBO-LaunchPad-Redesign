@@ -6,15 +6,20 @@ import { motion } from "framer-motion"
 import { BarChart3, Clock, CheckCircle, AlertCircle, FileText, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { getFuelOrders, getFuelOrderStats, type FuelOrderDisplay } from "@/app/services/fuel-order-service"
+import { getRecentReceipts, type Receipt } from "@/app/services/receipt-service"
+import PermissionDebug from "@/app/components/permission-debug"
 
 export default function CSRDashboard() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
-  const [fuelOrders, setFuelOrders] = useState<any[]>([])
+  const [fuelOrders, setFuelOrders] = useState<FuelOrderDisplay[]>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("all")
   const [currentDate, setCurrentDate] = useState<string>("")
-  const [recentReceipts, setRecentReceipts] = useState<any[]>([])
+  const [recentReceipts, setRecentReceipts] = useState<Receipt[]>([])
+  const [receiptsLoading, setReceiptsLoading] = useState(false)
 
   useEffect(() => {
     // Set current date
@@ -27,49 +32,6 @@ export default function CSRDashboard() {
       }),
     )
 
-    // Mock receipts data
-    setRecentReceipts([
-      {
-        id: "R-2001",
-        tailNumber: "N12345",
-        customer: "SkyWay Airlines",
-        fuelType: "Jet A",
-        quantity: 795,
-        totalAmount: 3975.0,
-        date: new Date(Date.now() - 2 * 60 * 60 * 1000),
-        paymentMethod: "Credit Card",
-        status: "Paid",
-        fuelerName: "Tyler Johnson",
-        location: "Gate A-12",
-      },
-      {
-        id: "R-2002",
-        tailNumber: "N98765",
-        customer: "Mountain Air",
-        fuelType: "Jet A",
-        quantity: 650,
-        totalAmount: 3250.0,
-        date: new Date(Date.now() - 8 * 60 * 60 * 1000),
-        paymentMethod: "Account",
-        status: "Paid",
-        fuelerName: "Josh Davis",
-        location: "Gate B-5",
-      },
-      {
-        id: "R-2003",
-        tailNumber: "N54789",
-        customer: "Executive Jets",
-        fuelType: "Jet A",
-        quantity: 1200,
-        totalAmount: 6000.0,
-        date: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        paymentMethod: "Credit Card",
-        status: "Paid",
-        fuelerName: "Sarah Miller",
-        location: "Gate C-8",
-      },
-    ])
-
     // Get user data
     const userData = localStorage.getItem("fboUser")
     if (userData) {
@@ -77,90 +39,38 @@ export default function CSRDashboard() {
     }
 
     loadFuelOrders()
+    loadRecentReceipts()
   }, [])
 
   const loadFuelOrders = async () => {
     try {
       setOrdersLoading(true)
+      setError(null)
 
-      // Load from localStorage
-      const storedOrders = localStorage.getItem("fboFuelOrders")
-      if (storedOrders) {
-        setFuelOrders(JSON.parse(storedOrders))
-      } else {
-        // If no orders in localStorage, initialize with mock data
-        const mockOrders = [
-          {
-            id: "FO-1001",
-            tailNumber: "N12345",
-            customer: "SkyWay Airlines",
-            fuelType: "Jet A",
-            requestedQuantity: 800,
-            actualQuantity: 795,
-            status: "COMPLETED",
-            completedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-            aircraftType: "Boeing 737",
-            gate: "Gate A-12",
-            fuelerName: "Tyler Johnson",
-            notes: "Standard fueling procedure completed successfully",
-          },
-          {
-            id: "FO-1002",
-            tailNumber: "N54321",
-            customer: "Charter Express",
-            fuelType: "Jet A",
-            requestedQuantity: 500,
-            status: "IN_PROGRESS",
-            aircraftType: "Cessna Citation",
-            gate: "Gate B-3",
-            fuelerName: "Josh Davis",
-            notes: "Currently fueling - estimated completion in 30 minutes",
-          },
-          {
-            id: "FO-1003",
-            tailNumber: "N78901",
-            customer: "Private Owner",
-            fuelType: "Avgas",
-            requestedQuantity: 100,
-            status: "PENDING",
-            aircraftType: "Cirrus SR22",
-            gate: "Gate C-1",
-            notes: "Waiting for aircraft arrival",
-          },
-          {
-            id: "FO-1004",
-            tailNumber: "N45678",
-            customer: "Air Charter Services",
-            fuelType: "Jet A",
-            requestedQuantity: 750,
-            status: "PENDING",
-            aircraftType: "Gulfstream G650",
-            gate: "Gate A-8",
-            notes: "Priority customer - expedite when possible",
-          },
-          {
-            id: "FO-1005",
-            tailNumber: "N98765",
-            customer: "Mountain Air",
-            fuelType: "Jet A",
-            requestedQuantity: 650,
-            actualQuantity: 650,
-            status: "COMPLETED",
-            completedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
-            aircraftType: "Bombardier Global 6000",
-            gate: "Gate B-5",
-            fuelerName: "Josh Davis",
-            notes: "Completed without issues",
-          },
-        ]
-        localStorage.setItem("fboFuelOrders", JSON.stringify(mockOrders))
-        setFuelOrders(mockOrders)
-      }
+      // Load fuel orders from backend API
+      const response = await getFuelOrders()
+      setFuelOrders(response.items || [])
     } catch (error) {
       console.error("Error loading fuel orders:", error)
+      setError("Failed to load fuel orders. Please try again.")
       setFuelOrders([])
     } finally {
       setOrdersLoading(false)
+    }
+  }
+
+  const loadRecentReceipts = async () => {
+    try {
+      setReceiptsLoading(true)
+      
+      // Load recent receipts from backend API
+      const receipts = await getRecentReceipts(3) // Get last 3 receipts for dashboard
+      setRecentReceipts(receipts)
+    } catch (error) {
+      console.error("Error loading recent receipts:", error)
+      setRecentReceipts([])
+    } finally {
+      setReceiptsLoading(false)
     }
   }
 
@@ -169,13 +79,18 @@ export default function CSRDashboard() {
   }
 
   const getFilteredOrders = () => {
+    // Safety check to ensure fuelOrders is an array
+    if (!Array.isArray(fuelOrders)) {
+      return []
+    }
+    
     switch (activeTab) {
       case "pending":
-        return fuelOrders.filter((o) => o.status === "PENDING")
+        return fuelOrders.filter((o) => o.status === "Pending")
       case "in_progress":
-        return fuelOrders.filter((o) => o.status === "IN_PROGRESS")
+        return fuelOrders.filter((o) => o.status === "In Progress")
       case "completed":
-        return fuelOrders.filter((o) => o.status === "COMPLETED")
+        return fuelOrders.filter((o) => o.status === "Completed")
       default:
         return fuelOrders
     }
@@ -183,23 +98,24 @@ export default function CSRDashboard() {
 
   // Get counts for quick statistics
   const getOrderCounts = () => {
-    const pending = fuelOrders.filter((o) => o.status === "PENDING").length
-    const inProgress = fuelOrders.filter((o) => o.status === "IN_PROGRESS").length
-    const completed = fuelOrders.filter((o) => o.status === "COMPLETED").length
+    // Safety check to ensure fuelOrders is an array
+    if (!Array.isArray(fuelOrders)) {
+      return { pending: 0, inProgress: 0, completed: 0, total: 0 }
+    }
+    
+    const pending = fuelOrders.filter((o) => o.status === "Pending").length
+    const inProgress = fuelOrders.filter((o) => o.status === "In Progress").length
+    const completed = fuelOrders.filter((o) => o.status === "Completed").length
 
     return { pending, inProgress, completed, total: fuelOrders.length }
   }
 
-  const handleViewFuelOrderDetails = (orderId: string) => {
-    // Store the order details in localStorage for the detail page
-    const order = fuelOrders.find((o) => o.id === orderId)
-    if (order) {
-      localStorage.setItem(`fuelOrder_${orderId}`, JSON.stringify(order))
-      router.push(`/csr/fuel-orders/${orderId}`)
-    }
+  const handleViewFuelOrderDetails = (orderId: number) => {
+    // Navigate to order details page
+    router.push(`/csr/fuel-orders/${orderId}`)
   }
 
-  const handleViewReceiptDetails = (receiptId: string) => {
+  const handleViewReceiptDetails = (receiptId: number) => {
     // Store the receipt details in localStorage for the detail page
     const receipt = recentReceipts.find((r) => r.id === receiptId)
     if (receipt) {
@@ -210,27 +126,25 @@ export default function CSRDashboard() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case "PENDING":
+      case "Pending":
         return (
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-warning dark:bg-warning"></div>
-            <span className="text-foreground text-sm font-medium">{status === "PENDING" ? "Pending" : status}</span>
+            <span className="text-foreground text-sm font-medium">Pending</span>
           </div>
         )
-      case "IN_PROGRESS":
+      case "In Progress":
         return (
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-primary dark:bg-primary"></div>
-            <span className="text-foreground text-sm font-medium">
-              {status === "IN_PROGRESS" ? "In Progress" : status}
-            </span>
+            <span className="text-foreground text-sm font-medium">In Progress</span>
           </div>
         )
-      case "COMPLETED":
+      case "Completed":
         return (
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-success dark:bg-success"></div>
-            <span className="text-foreground text-sm font-medium">{status === "COMPLETED" ? "Completed" : status}</span>
+            <span className="text-foreground text-sm font-medium">Completed</span>
           </div>
         )
       default:
@@ -365,6 +279,9 @@ export default function CSRDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Permission Debug Component (development only) */}
+      <PermissionDebug />
+      
       {/* Welcome section */}
       <motion.div className="bg-card p-6 rounded-lg border" initial="initial" animate="animate" variants={cardVariants}>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -449,6 +366,11 @@ export default function CSRDashboard() {
           </Button>
         </CardHeader>
         <CardContent>
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4">
+              <p className="text-red-500 text-sm">{error}</p>
+            </div>
+          )}
           {ordersLoading ? (
             <div className="flex justify-center items-center py-8">
               <motion.div
@@ -501,9 +423,9 @@ export default function CSRDashboard() {
                       >
                         <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-foreground">{order.id}</td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">
-                          {order.tailNumber}
+                          {order.aircraft_tail_number}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{order.customer}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{order.customer_name}</td>
                         <td className="px-4 py-3 whitespace-nowrap">{getStatusBadge(order.status)}</td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
                           <Button
@@ -539,68 +461,88 @@ export default function CSRDashboard() {
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Receipt ID
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Tail Number
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Customer
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Amount
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentReceipts.map((receipt, index) => (
-                  <motion.tr
-                    key={receipt.id}
-                    custom={index}
-                    variants={listItemVariants}
-                    initial="initial"
-                    animate="animate"
-                    whileHover="hover"
-                    className="cursor-pointer border-b"
-                    onClick={() => handleViewReceiptDetails(receipt.id)}
-                  >
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-foreground">{receipt.id}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{receipt.tailNumber}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{receipt.customer}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">
-                      {formatCurrency(receipt.totalAmount)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">
-                      {formatTimestamp(receipt.date)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleViewReceiptDetails(receipt.id)
-                        }}
-                      >
-                        View Receipt
-                      </Button>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {receiptsLoading ? (
+            <div className="flex justify-center items-center py-8">
+              <motion.div
+                className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full"
+                animate={{
+                  rotate: 360,
+                  transition: {
+                    repeat: Number.POSITIVE_INFINITY,
+                    duration: 1,
+                    ease: "linear",
+                  },
+                }}
+              ></motion.div>
+            </div>
+          ) : recentReceipts.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No recent receipts found
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Receipt ID
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Tail Number
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Customer
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Amount
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentReceipts.map((receipt, index) => (
+                    <motion.tr
+                      key={receipt.id}
+                      custom={index}
+                      variants={listItemVariants}
+                      initial="initial"
+                      animate="animate"
+                      whileHover="hover"
+                      className="cursor-pointer border-b"
+                      onClick={() => handleViewReceiptDetails(receipt.id)}
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-foreground">{receipt.receiptNumber || receipt.id}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{receipt.tailNumber}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{receipt.customer}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">
+                        {formatCurrency(receipt.amount)}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">
+                        {formatTimestamp(receipt.createdAt)}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleViewReceiptDetails(receipt.id)
+                          }}
+                        >
+                          View Receipt
+                        </Button>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

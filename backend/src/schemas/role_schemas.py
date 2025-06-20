@@ -1,4 +1,4 @@
-from marshmallow import Schema, fields
+from marshmallow import Schema, fields, post_dump
 
 class RoleSchema(Schema):
     """Schema for role responses."""
@@ -6,6 +6,15 @@ class RoleSchema(Schema):
     name = fields.String(required=True)
     description = fields.String(required=False, allow_none=True)
     created_at = fields.DateTime(dump_only=True)
+    permissions = fields.Method("get_permissions", dump_only=True)
+    
+    def get_permissions(self, obj):
+        """Get permission IDs for the role."""
+        try:
+            # Handle dynamic relationship - get all permissions and return their IDs
+            return [permission.id for permission in obj.permissions.all()]
+        except Exception:
+            return []
 
 class RoleCreateRequestSchema(Schema):
     """Schema for role creation requests."""

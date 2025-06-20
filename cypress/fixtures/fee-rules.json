@@ -1,0 +1,44 @@
+[
+  {
+    "id": 1,
+    "fee_name": "Ramp Fee",
+    "fee_code": "RAMP",
+    "applies_to_fee_category_id": 1,
+    "amount": 50.00,
+    "currency": "USD",
+    "type": "per_aircraft",
+    "fbo_location_id": 1,
+    "fee_category": {
+      "id": 1,
+      "name": "Light Jet"
+    }
+  },
+  {
+    "id": 2,
+    "fee_name": "Overnight Fee",
+    "fee_code": "OVERNIGHT",
+    "applies_to_fee_category_id": 2,
+    "amount": 25.00,
+    "currency": "USD",
+    "type": "per_aircraft",
+    "fbo_location_id": 1,
+    "fee_category": {
+      "id": 2,
+      "name": "Turboprop"
+    }
+  },
+  {
+    "id": 3,
+    "fee_name": "Handling Fee",
+    "fee_code": "HANDLING",
+    "applies_to_fee_category_id": 3,
+    "amount": 150.00,
+    "currency": "USD",
+    "type": "per_aircraft",
+    "fbo_location_id": 1,
+    "fee_category": {
+      "id": 3,
+      "name": "Heavy Jet"
+    }
+  }
+] 
