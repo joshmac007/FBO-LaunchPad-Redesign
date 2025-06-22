@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { usePermissions } from "@/hooks/usePermissions"
 import AppSidebar from "@/components/layout/app-sidebar"
 import AccessDenied from "@/app/components/access-denied"
@@ -11,10 +11,17 @@ import { QueryProvider } from "@/app/providers/query-provider"
 const CSRLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { loading, isAuthenticated, hasPermission, user } = usePermissions()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [isClient, setIsClient] = useState(false)
 
-  if (loading) {
+  // Ensure consistent rendering between server and client
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  // Always render loading state during SSR and initial hydration
+  if (!isClient || loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-background">
         <p>Verifying CSR Access...</p>
       </div>
     )

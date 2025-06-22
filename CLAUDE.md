@@ -1,295 +1,417 @@
-# CLAUDE.md
+# Task Master AI - Claude Code Integration Guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Essential Commands
 
-## Project Overview
+### Core Workflow Commands
 
-**FBO LaunchPad** is a comprehensive Fixed Base Operator management system for aircraft fueling operations, built with a dual architecture: Flask/Python backend with PostgreSQL, and Next.js/TypeScript frontend.
-
-**Key User Roles:**
-- **System Administrator:** Full system access, manages users, roles, permissions
-- **Customer Service Representative (CSR):** Manages fuel orders, customer interactions  
-- **Line Service Technician (LST/Fueler):** Executes fuel orders, updates statuses
-- **Member:** Basic user with limited view access
-
-## Development Environment & Commands
-
-### Backend (Dockerized)
-The backend runs in Docker containers managed by `docker-compose.yml`. **Always execute Flask commands inside the backend container.**
-
-**Essential Commands:**
 ```bash
-# Start backend and database
-cd backend && docker-compose up -d
+# Project Setup
+task-master init                                    # Initialize Task Master in current project
+task-master parse-prd .taskmaster/docs/prd.txt      # Generate tasks from PRD document
+task-master models --setup                        # Configure AI models interactively
 
-# Database migrations
-docker-compose exec backend flask db upgrade
+# Daily Development Workflow
+task-master list                                   # Show all tasks with status
+task-master next                                   # Get next available task to work on
+task-master show <id>                             # View detailed task information (e.g., task-master show 1.2)
+task-master set-status --id=<id> --status=done    # Mark task complete
 
-# Seed initial data (permissions, roles, users)
-docker-compose exec backend flask seed run
+# Task Management
+task-master add-task --prompt="description" --research        # Add new task with AI assistance
+task-master expand --id=<id> --research --force              # Break task into subtasks
+task-master update-task --id=<id> --prompt="changes"         # Update specific task
+task-master update --from=<id> --prompt="changes"            # Update multiple tasks from ID onwards
+task-master update-subtask --id=<id> --prompt="notes"        # Add implementation notes to subtask
 
-# Create permission groups and assign roles
-docker-compose exec backend flask create-permission-groups run
+# Analysis & Planning
+task-master analyze-complexity --research          # Analyze task complexity
+task-master complexity-report                      # View complexity analysis
+task-master expand --all --research               # Expand all eligible tasks
 
-# Create admin user
-docker-compose exec backend flask create-admin
-
-# Run backend tests
-docker-compose exec backend python -m pytest
-
-# View logs
-docker-compose logs -f backend
+# Dependencies & Organization
+task-master add-dependency --id=<id> --depends-on=<id>       # Add task dependency
+task-master move --from=<id> --to=<id>                       # Reorganize task hierarchy
+task-master validate-dependencies                            # Check for dependency issues
+task-master generate                                         # Update task markdown files (usually auto-called)
 ```
 
-**Database Access:**
-- Internal Docker: `postgresql://fbo_user:fbo_password@db:5432/fbo_launchpad_dev`
-- Host machine: `postgresql://fbo_user:fbo_password@localhost:5433/fbo_launchpad_dev`
-- Backend API: `http://localhost:5001`
+## Key Files & Project Structure
 
-### Frontend
-```bash
-cd frontend
+### Core Files
 
-# Development server (runs on http://localhost:3000)
-npm run dev
+- `.taskmaster/tasks/tasks.json` - Main task data file (auto-managed)
+- `.taskmaster/config.json` - AI model configuration (use `task-master models` to modify)
+- `.taskmaster/docs/prd.txt` - Product Requirements Document for parsing
+- `.taskmaster/tasks/*.txt` - Individual task files (auto-generated from tasks.json)
+- `.env` - API keys for CLI usage
 
-# Build production
-npm run build
+### Claude Code Integration Files
 
-# Run unit tests
-npm test
+- `CLAUDE.md` - Auto-loaded context for Claude Code (this file)
+- `.claude/settings.json` - Claude Code tool allowlist and preferences
+- `.claude/commands/` - Custom slash commands for repeated workflows
+- `.mcp.json` - MCP server configuration (project-specific)
 
-# Run E2E tests
-npm run test:e2e
-npm run test:e2e:open
+### Directory Structure
 
-# Lint code
-npm run lint
+```
+project/
+├── .taskmaster/
+│   ├── tasks/              # Task files directory
+│   │   ├── tasks.json      # Main task database
+│   │   ├── task-1.md      # Individual task files
+│   │   └── task-2.md
+│   ├── docs/              # Documentation directory
+│   │   ├── prd.txt        # Product requirements
+│   ├── reports/           # Analysis reports directory
+│   │   └── task-complexity-report.json
+│   ├── templates/         # Template files
+│   │   └── example_prd.txt  # Example PRD template
+│   └── config.json        # AI models & settings
+├── .claude/
+│   ├── settings.json      # Claude Code configuration
+│   └── commands/         # Custom slash commands
+├── .env                  # API keys
+├── .mcp.json            # MCP configuration
+└── CLAUDE.md            # This file - auto-loaded by Claude Code
 ```
 
-**Important:** Frontend development server should run on `http://localhost:3000`. API calls to `/api/*` are proxied to `http://localhost:5001/api/*` via Next.js rewrites.
+## MCP Integration
 
-### Full System E2E Testing
-```bash
-# Run Cypress E2E tests (requires both backend and frontend running)
-npx cypress run
-npx cypress open
+Task Master provides an MCP server that Claude Code can connect to. Configure in `.mcp.json`:
 
-# Run specific test file
-npx cypress run --spec "cypress/e2e/fuel-order-creation.cy.js"
-```
-
-## Architecture Overview
-
-### Backend Structure
-- **Framework:** Flask with SQLAlchemy ORM
-- **Database:** PostgreSQL with Alembic migrations
-- **Authentication:** JWT with enhanced Permission-Based Access Control (PBAC)
-- **API Style:** RESTful with Marshmallow schema validation
-- **Caching:** Redis for permission caching
-- **WebSockets:** Flask-SocketIO for real-time updates
-
-**Key Backend Directories:**
-- `src/models/` - SQLAlchemy models with relationships
-- `src/routes/` - API endpoints organized by resource
-- `src/services/` - Business logic layer  
-- `src/schemas/` - Marshmallow request/response schemas
-- `src/utils/` - Authentication decorators and utilities
-- `migrations/` - Alembic database migrations
-
-### Frontend Structure  
-- **Framework:** Next.js 15+ with App Router
-- **Language:** TypeScript with strict typing
-- **UI:** shadcn/ui components built on Radix UI primitives
-- **Styling:** Tailwind CSS with design tokens
-- **State:** React Context API + TanStack Query for server state
-- **Forms:** React Hook Form with Zod validation
-
-**Key Frontend Directories:**
-- `app/` - All routes, layouts, and pages (App Router)
-- `app/services/` - **API communication layer** (never call `fetch` directly in components)
-- `app/contexts/` - Global state management
-- `app/constants/permissions.ts` - **Single source of truth for permission strings**
-- `components/ui/` - Base shadcn/ui components
-- `components/` - Reusable application components
-
-## Permission System
-
-**Critical:** This system uses granular Permission-Based Access Control. All access decisions are based on specific permission strings, not role names.
-
-### Permission Architecture
-1. **Direct User Permissions** - Specific permissions assigned to users
-2. **Permission Groups** - Collections of permissions assigned to users or roles  
-3. **Role-based Permissions** - Permissions inherited through user roles
-4. **Legacy Role Permissions** - Direct role-to-permission mappings
-
-### Key Permission Files
-- `backend/src/seeds.py` - **Canonical list of all permission strings** (`all_permissions`)
-- `backend/src/migration_scripts/permission_groups_schema.py` - Permission group definitions
-- `backend/src/services/permission_service.py` - Central permission resolution logic
-- `frontend/app/constants/permissions.ts` - Frontend permission constants
-- `frontend/app/contexts/permission-context.tsx` - Client-side permission state
-
-### Permission Usage Patterns
-
-**Backend API Protection:**
-```python
-from src.utils.enhanced_auth_decorators_v2 import require_permission_v2
-
-@require_permission_v2('create_fuel_order')
-def create_fuel_order():
-    # Route implementation
-```
-
-**Frontend Permission Checks:**
-```typescript
-import { usePermissions } from '@/hooks/usePermissions'
-import { FUEL_ORDERS } from '@/app/constants/permissions'
-
-const { hasPermission } = usePermissions()
-
-// Conditional rendering
-{hasPermission(FUEL_ORDERS.CREATE) && <CreateButton />}
-
-// Permission-aware components
-<PermissionActionButton
-  requiredPermission={FUEL_ORDERS.DELETE}
-  onClick={handleDelete}
->
-  Delete Order
-</PermissionActionButton>
-```
-
-## Data Flow & API Patterns
-
-### Service Layer Pattern
-**All API communication must go through service files.** Components should never call `fetch` directly.
-
-```typescript
-// ✅ Correct - in service file
-export async function getFuelOrders(): Promise<FuelOrderDisplay[]> {
-  const response = await fetch(`${API_BASE_URL}/fuel-orders`, {
-    headers: getAuthHeaders(),
-  })
-  return handleApiResponse(response)
+```json
+{
+  "mcpServers": {
+    "task-master-ai": {
+      "command": "npx",
+      "args": ["-y", "--package=task-master-ai", "task-master-ai"],
+      "env": {
+        "ANTHROPIC_API_KEY": "your_key_here",
+        "PERPLEXITY_API_KEY": "your_key_here",
+        "OPENAI_API_KEY": "OPENAI_API_KEY_HERE",
+        "GOOGLE_API_KEY": "GOOGLE_API_KEY_HERE",
+        "XAI_API_KEY": "XAI_API_KEY_HERE",
+        "OPENROUTER_API_KEY": "OPENROUTER_API_KEY_HERE",
+        "MISTRAL_API_KEY": "MISTRAL_API_KEY_HERE",
+        "AZURE_OPENAI_API_KEY": "AZURE_OPENAI_API_KEY_HERE",
+        "OLLAMA_API_KEY": "OLLAMA_API_KEY_HERE"
+      }
+    }
+  }
 }
-
-// ✅ Correct - in component
-import { getFuelOrders } from '@/app/services/fuel-order-service'
-
-const { data: orders } = useQuery({
-  queryKey: ['fuel-orders'],
-  queryFn: getFuelOrders
-})
 ```
 
-### Data Transformation
-Services handle mapping between backend API format and frontend display format:
-- `FuelOrderBackend` - API contract interface
-- `FuelOrderDisplay` - Frontend optimized interface  
-- `transformToDisplay()` / `transformToBackend()` - Conversion utilities
+### Essential MCP Tools
 
-## Database Seeding & Initialization
+```javascript
+help; // = shows available taskmaster commands
+// Project setup
+initialize_project; // = task-master init
+parse_prd; // = task-master parse-prd
 
-**Critical for development setup:**
+// Daily workflow
+get_tasks; // = task-master list
+next_task; // = task-master next
+get_task; // = task-master show <id>
+set_task_status; // = task-master set-status
+
+// Task management
+add_task; // = task-master add-task
+expand_task; // = task-master expand
+update_task; // = task-master update-task
+update_subtask; // = task-master update-subtask
+update; // = task-master update
+
+// Analysis
+analyze_project_complexity; // = task-master analyze-complexity
+complexity_report; // = task-master complexity-report
+```
+
+## Claude Code Workflow Integration
+
+### Standard Development Workflow
+
+#### 1. Project Initialization
 
 ```bash
-# 1. Seed base data (permissions, roles, users, fuel trucks)
-docker-compose exec backend flask seed run
+# Initialize Task Master
+task-master init
 
-# 2. Create permission groups and role assignments  
-docker-compose exec backend flask create-permission-groups run
+# Create or obtain PRD, then parse it
+task-master parse-prd .taskmaster/docs/prd.txt
+
+# Analyze complexity and expand tasks
+task-master analyze-complexity --research
+task-master expand --all --research
 ```
 
-**Both commands are idempotent** and safe to re-run. The `backend/entrypoint.sh` script automatically runs these if the database is empty.
+If tasks already exist, another PRD can be parsed (with new information only!) using parse-prd with --append flag. This will add the generated tasks to the existing list of tasks..
 
-**Convenience Script:**
+#### 2. Daily Development Loop
+
 ```bash
-cd backend
-./reseed_database.sh reseed    # Re-run seeding commands
-./reseed_database.sh fresh     # Full database reset + restart
+# Start each session
+task-master next                           # Find next available task
+task-master show <id>                     # Review task details
+
+# During implementation, check in code context into the tasks and subtasks
+task-master update-subtask --id=<id> --prompt="implementation notes..."
+
+# Complete tasks
+task-master set-status --id=<id> --status=done
 ```
 
-## Testing Strategy
+#### 3. Multi-Claude Workflows
 
-### Test Credentials (from seeds.py)
-- Admin: `admin@fbolaunchpad.com` / `Admin123!`
-- CSR: `csr@fbolaunchpad.com` / `CSR123!`  
-- Fueler: `fueler@fbolaunchpad.com` / `Fueler123!`
-- Member: `member@fbolaunchpad.com` / `Member123!`
+For complex projects, use multiple Claude Code sessions:
 
-### Running Tests
 ```bash
-# Backend unit tests (inside container)
-docker-compose exec backend python -m pytest
-docker-compose exec backend python -m pytest tests/test_fuel_order_api.py -v
+# Terminal 1: Main implementation
+cd project && claude
 
-# Frontend unit tests
-cd frontend && npm test
-npm test -- --watch
+# Terminal 2: Testing and validation
+cd project-test-worktree && claude
 
-# E2E tests (requires both services running)
-npm run test:e2e
+# Terminal 3: Documentation updates
+cd project-docs-worktree && claude
 ```
 
-## Common Development Pitfalls
+### Custom Slash Commands
 
-### 1. Docker Database Operations
-**Always run Flask commands inside the Docker container.** The backend connects to PostgreSQL using the Docker service name `db:5432`, not `localhost`.
+Create `.claude/commands/taskmaster-next.md`:
 
-### 2. Frontend Service Layer
-**Never bypass the service layer.** If you find `fetch()` calls directly in components, refactor them into service files. This often causes authentication issues when mock data bypasses proper API flows.
+```markdown
+Find the next available Task Master task and show its details.
 
-### 3. Permission String Management  
-**Use constants, not hardcoded strings.** All permission checks should reference `frontend/app/constants/permissions.ts` or the backend's `seeds.py` definitions.
+Steps:
 
-### 4. API Response Handling
-Always use `handleApiResponse()` from `api-config.ts` for consistent error handling and authentication flow.
+1. Run `task-master next` to get the next task
+2. If a task is available, run `task-master show <id>` for full details
+3. Provide a summary of what needs to be implemented
+4. Suggest the first implementation step
+```
 
-## Performance Considerations
+Create `.claude/commands/taskmaster-complete.md`:
 
-### Critical Performance Files
-- `frontend/app/csr/fuel-orders/page.tsx` - Heavy data processing with real-time polling
-- `frontend/app/admin/fbo-config/fee-management/components/FeeScheduleTable.tsx` - Complex table with React Table
-- `frontend/app/contexts/permission-context.tsx` - Global state affecting all components
+```markdown
+Complete a Task Master task: $ARGUMENTS
 
-### Optimization Patterns
-- Use `React.memo` for expensive table row components
-- Implement `useCallback` for event handlers to prevent re-renders  
-- Add debouncing for search inputs (300ms minimum)
-- Use TanStack Query with appropriate `staleTime` (15+ minutes for static data)
-- Consider virtual scrolling for large tables
+Steps:
 
-## Development Workflow
+1. Review the current task with `task-master show $ARGUMENTS`
+2. Verify all implementation is complete
+3. Run any tests related to this task
+4. Mark as complete: `task-master set-status --id=$ARGUMENTS --status=done`
+5. Show the next available task with `task-master next`
+```
 
-1. **Start Backend:** `cd backend && docker-compose up -d`
-2. **Seed Database:** `docker-compose exec backend flask seed run && docker-compose exec backend flask create-permission-groups run`  
-3. **Start Frontend:** `cd frontend && npm run dev`
-4. **Verify Setup:** Navigate to `http://localhost:3000` and login with test credentials
-5. **Run Tests:** Backend tests in container, frontend tests on host, E2E with both running
+## Tool Allowlist Recommendations
 
-## Code Style Guidelines
+Add to `.claude/settings.json`:
 
-### Frontend
-- **Styling:** Tailwind CSS only, no inline styles or CSS files
-- **Components:** shadcn/ui for primitives, compose for features
-- **File Naming:** kebab-case for files, PascalCase for components
-- **Imports:** Always use path aliases (`@/components`, `@/services`)
-- **Forms:** React Hook Form + Zod validation required
+```json
+{
+  "allowedTools": [
+    "Edit",
+    "Bash(task-master *)",
+    "Bash(git commit:*)",
+    "Bash(git add:*)",
+    "Bash(npm run *)",
+    "mcp__task_master_ai__*"
+  ]
+}
+```
 
-### Backend  
-- **Models:** SQLAlchemy with proper relationships and constraints
-- **Routes:** Organized by resource with consistent RESTful patterns
-- **Schemas:** Marshmallow for all request/response validation
-- **Services:** Business logic separated from route handlers
-- **Testing:** Pytest with fixtures for database state
+## Configuration & Setup
 
-## Security Requirements
+### API Keys Required
 
-- All API endpoints protected with JWT authentication
-- Permission checks on both frontend (UX) and backend (security)
-- No hardcoded credentials or API keys in code
-- Audit logging for sensitive operations
-- CORS properly configured for development/production
+At least **one** of these API keys must be configured:
 
-This system requires careful attention to the dual architecture, permission system, and Docker-based development workflow. Always consult the permission system documentation and test with multiple user roles.
+- `ANTHROPIC_API_KEY` (Claude models) - **Recommended**
+- `PERPLEXITY_API_KEY` (Research features) - **Highly recommended**
+- `OPENAI_API_KEY` (GPT models)
+- `GOOGLE_API_KEY` (Gemini models)
+- `MISTRAL_API_KEY` (Mistral models)
+- `OPENROUTER_API_KEY` (Multiple models)
+- `XAI_API_KEY` (Grok models)
+
+An API key is required for any provider used across any of the 3 roles defined in the `models` command.
+
+### Model Configuration
+
+```bash
+# Interactive setup (recommended)
+task-master models --setup
+
+# Set specific models
+task-master models --set-main claude-3-5-sonnet-20241022
+task-master models --set-research perplexity-llama-3.1-sonar-large-128k-online
+task-master models --set-fallback gpt-4o-mini
+```
+
+## Task Structure & IDs
+
+### Task ID Format
+
+- Main tasks: `1`, `2`, `3`, etc.
+- Subtasks: `1.1`, `1.2`, `2.1`, etc.
+- Sub-subtasks: `1.1.1`, `1.1.2`, etc.
+
+### Task Status Values
+
+- `pending` - Ready to work on
+- `in-progress` - Currently being worked on
+- `done` - Completed and verified
+- `deferred` - Postponed
+- `cancelled` - No longer needed
+- `blocked` - Waiting on external factors
+
+### Task Fields
+
+```json
+{
+  "id": "1.2",
+  "title": "Implement user authentication",
+  "description": "Set up JWT-based auth system",
+  "status": "pending",
+  "priority": "high",
+  "dependencies": ["1.1"],
+  "details": "Use bcrypt for hashing, JWT for tokens...",
+  "testStrategy": "Unit tests for auth functions, integration tests for login flow",
+  "subtasks": []
+}
+```
+
+## Claude Code Best Practices with Task Master
+
+### Context Management
+
+- Use `/clear` between different tasks to maintain focus
+- This CLAUDE.md file is automatically loaded for context
+- Use `task-master show <id>` to pull specific task context when needed
+
+### Iterative Implementation
+
+1. `task-master show <subtask-id>` - Understand requirements
+2. Explore codebase and plan implementation
+3. `task-master update-subtask --id=<id> --prompt="detailed plan"` - Log plan
+4. `task-master set-status --id=<id> --status=in-progress` - Start work
+5. Implement code following logged plan
+6. `task-master update-subtask --id=<id> --prompt="what worked/didn't work"` - Log progress
+7. `task-master set-status --id=<id> --status=done` - Complete task
+
+### Complex Workflows with Checklists
+
+For large migrations or multi-step processes:
+
+1. Create a markdown PRD file describing the new changes: `touch task-migration-checklist.md` (prds can be .txt or .md)
+2. Use Taskmaster to parse the new prd with `task-master parse-prd --append` (also available in MCP)
+3. Use Taskmaster to expand the newly generated tasks into subtasks. Consdier using `analyze-complexity` with the correct --to and --from IDs (the new ids) to identify the ideal subtask amounts for each task. Then expand them.
+4. Work through items systematically, checking them off as completed
+5. Use `task-master update-subtask` to log progress on each task/subtask and/or updating/researching them before/during implementation if getting stuck
+
+### Git Integration
+
+Task Master works well with `gh` CLI:
+
+```bash
+# Create PR for completed task
+gh pr create --title "Complete task 1.2: User authentication" --body "Implements JWT auth system as specified in task 1.2"
+
+# Reference task in commits
+git commit -m "feat: implement JWT auth (task 1.2)"
+```
+
+### Parallel Development with Git Worktrees
+
+```bash
+# Create worktrees for parallel task development
+git worktree add ../project-auth feature/auth-system
+git worktree add ../project-api feature/api-refactor
+
+# Run Claude Code in each worktree
+cd ../project-auth && claude    # Terminal 1: Auth work
+cd ../project-api && claude     # Terminal 2: API work
+```
+
+## Troubleshooting
+
+### AI Commands Failing
+
+```bash
+# Check API keys are configured
+cat .env                           # For CLI usage
+
+# Verify model configuration
+task-master models
+
+# Test with different model
+task-master models --set-fallback gpt-4o-mini
+```
+
+### MCP Connection Issues
+
+- Check `.mcp.json` configuration
+- Verify Node.js installation
+- Use `--mcp-debug` flag when starting Claude Code
+- Use CLI as fallback if MCP unavailable
+
+### Task File Sync Issues
+
+```bash
+# Regenerate task files from tasks.json
+task-master generate
+
+# Fix dependency issues
+task-master fix-dependencies
+```
+
+DO NOT RE-INITIALIZE. That will not do anything beyond re-adding the same Taskmaster core files.
+
+## Important Notes
+
+### AI-Powered Operations
+
+These commands make AI calls and may take up to a minute:
+
+- `parse_prd` / `task-master parse-prd`
+- `analyze_project_complexity` / `task-master analyze-complexity`
+- `expand_task` / `task-master expand`
+- `expand_all` / `task-master expand --all`
+- `add_task` / `task-master add-task`
+- `update` / `task-master update`
+- `update_task` / `task-master update-task`
+- `update_subtask` / `task-master update-subtask`
+
+### File Management
+
+- Never manually edit `tasks.json` - use commands instead
+- Never manually edit `.taskmaster/config.json` - use `task-master models`
+- Task markdown files in `tasks/` are auto-generated
+- Run `task-master generate` after manual changes to tasks.json
+
+### Claude Code Session Management
+
+- Use `/clear` frequently to maintain focused context
+- Create custom slash commands for repeated Task Master workflows
+- Configure tool allowlist to streamline permissions
+- Use headless mode for automation: `claude -p "task-master next"`
+
+### Multi-Task Updates
+
+- Use `update --from=<id>` to update multiple future tasks
+- Use `update-task --id=<id>` for single task updates
+- Use `update-subtask --id=<id>` for implementation logging
+
+### Research Mode
+
+- Add `--research` flag for research-based AI enhancement
+- Requires a research model API key like Perplexity (`PERPLEXITY_API_KEY`) in environment
+- Provides more informed task creation and updates
+- Recommended for complex technical tasks
+
+---
+
+_This guide ensures Claude Code has immediate access to Task Master's essential functionality for agentic development workflows._

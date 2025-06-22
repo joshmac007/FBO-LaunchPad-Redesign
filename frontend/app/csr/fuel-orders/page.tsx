@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, Suspense, useRef, useMemo } from "rea
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from "next/link"
 import { useQuery, keepPreviousData } from "@tanstack/react-query"
+import { useSearchDebounce } from "@/hooks/useDebounce"
+import { FuelOrderTableRow } from "@/app/components/FuelOrderTableRow"
 import { 
   Plus, Search, Download, Eye, Edit, Trash2, MoreHorizontal, 
   Filter, RefreshCw, Clock, Users, TrendingUp, Calendar,
@@ -153,15 +155,13 @@ function EnhancedFuelOrdersPageInternal() {
     additiveRequested: false
   })
 
-  // Auto-refresh toggle
-  const [autoRefresh, setAutoRefresh] = useState(true)
-
   useEffect(() => {
     if (tailNumberParam) {
       setSearchTerm(tailNumberParam);
     }
   }, [tailNumberParam]);
 
+  // Use React Query with improved caching (temporarily without WebSocket due to connection issues)
   const {
     data,
     isLoading: queryIsLoading,
@@ -170,50 +170,48 @@ function EnhancedFuelOrdersPageInternal() {
     isFetching,
     refetch,
   } = useQuery<{ orders: FuelOrderDisplay[]; stats: FuelOrderStats }, Error>({
-    // 1. The query key uniquely identifies this data based on current filters.
     queryKey: ['fuelOrders', { statusFilter, priorityFilter, fuelTypeFilter, dateRangeFilter }],
-    
-    // 2. The query function fetches and transforms the data.
     queryFn: async () => {
-      // Only one API call is needed.
       const backendOrders = await getFuelOrders({ 
         status: statusFilter.toLowerCase() === "all" ? undefined : statusFilter, 
         priority: priorityFilter.toLowerCase() === "all" ? undefined : priorityFilter, 
-        // The filter key should be 'fuel_type' to match the service layer
         fuel_type: fuelTypeFilter.toLowerCase() === "all" ? undefined : fuelTypeFilter 
       });
 
-      // The transformation logic now uses the simplified transformToDisplay function.
-      // We use Promise.all here only to map over the array concurrently.
       const transformedOrders = await Promise.all(
         backendOrders.orders.map((bo: FuelOrderBackend) => transformToDisplay(bo))
       );
       
       return { orders: transformedOrders, stats: backendOrders.stats };
     },
-
-    // 3. Configure caching and refetching behavior.
-    staleTime: 5 * 60 * 1000, // Data is fresh for 5 minutes
-    refetchInterval: autoRefresh ? 30000 : false, // Automatically refetch every 30 seconds if enabled
+    staleTime: 15 * 60 * 1000, // 15 minutes - improved from 5 minutes
+    refetchInterval: 60000, // Reduced from 30 seconds to 1 minute
     placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false, // Prevent unnecessary refetches
   });
+
+  // For now, assume connected since we're using standard React Query
+  const isConnected = true;
+
+  // Debounce search input to prevent excessive re-renders and filtering operations
+  const { debouncedSearchTerm, isSearching } = useSearchDebounce(searchTerm, 300);
 
   const filteredOrders = useMemo(() => {
     let orders = data?.orders || [];
     
     // Server-side filters are handled by useQuery, so we don't need to filter by status/priority/fuelType here.
-    // We only need to apply the client-side search term filter.
+    // We only need to apply the client-side search term filter with debounced value.
 
-    if (searchTerm) {
+    if (debouncedSearchTerm) {
       orders = orders.filter(order =>
-        order.aircraft_tail_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())
+        order.aircraft_tail_number.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        order.customer_name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        order.orderNumber.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
       );
     }
 
     return orders;
-  }, [data?.orders, searchTerm]);
+  }, [data?.orders, debouncedSearchTerm]);
 
   // Event handlers
   const handleCreateOrder = async () => {
@@ -263,9 +261,9 @@ function EnhancedFuelOrdersPageInternal() {
     }
   }
 
-  const handleCancelOrder = async (order: FuelOrder) => {
+  const handleCancelOrder = useCallback(async (order: FuelOrderDisplay) => {
     setCancelOrderDialog({ isOpen: true, order })
-  }
+  }, [])
 
   const confirmCancelOrder = async () => {
     if (!cancelOrderDialog.order) return
@@ -302,21 +300,21 @@ function EnhancedFuelOrdersPageInternal() {
     }
   }
 
-  const toggleOrderSelection = (orderId: string) => {
+  const toggleOrderSelection = useCallback((orderId: string) => {
     setSelectedOrders(prev => 
       prev.includes(orderId) 
         ? prev.filter(id => id !== orderId)
         : [...prev, orderId]
     )
-  }
+  }, [])
 
-  const toggleAllOrders = () => {
+  const toggleAllOrders = useCallback(() => {
     if (selectedOrders.length === filteredOrders.length) {
       setSelectedOrders([])
     } else {
       setSelectedOrders(filteredOrders.map(o => o.id.toString()))
     }
-  }
+  }, [selectedOrders.length, filteredOrders])
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -429,6 +427,20 @@ function EnhancedFuelOrdersPageInternal() {
     toast.info("Refreshing fuel orders...");
   }, [refetch]);
 
+  const handleMarkComplete = useCallback(async (order: FuelOrderDisplay) => {
+    try {
+      await updateFuelOrderStatus(parseInt(order.id.toString()), { status: "COMPLETED" });
+      refetch();
+    } catch (error) {
+      toast.error("Failed to mark order as complete.");
+    }
+  }, [refetch]);
+
+  const handleViewOrder = useCallback((order: FuelOrderDisplay) => {
+    // Navigate to order detail view - implement as needed
+    console.log("View order:", order.id);
+  }, []);
+
   if (queryIsLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -463,15 +475,10 @@ function EnhancedFuelOrdersPageInternal() {
             <p className="text-muted-foreground">Manage and track all fuel orders with advanced tools</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className={autoRefresh ? "bg-green-50 border-green-200" : ""}
-            >
-              <Bell className={`h-4 w-4 mr-2 ${autoRefresh ? "text-green-600" : ""}`} />
-              Auto-refresh {autoRefresh ? "ON" : "OFF"}
-            </Button>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm bg-blue-50 border border-blue-200 text-blue-700">
+              <div className="w-2 h-2 rounded-full bg-blue-500" />
+              Auto-refresh (1min)
+            </div>
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isFetching}>
               {isFetching ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -692,8 +699,13 @@ function EnhancedFuelOrdersPageInternal() {
                   placeholder="Order #, tail number, customer, LST..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 pr-10"
                 />
+                {isSearching && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                )}
               </div>
             </div>
             <div>
@@ -818,53 +830,15 @@ function EnhancedFuelOrdersPageInternal() {
 <TableBody>
   {filteredOrders.length > 0 ? (
     filteredOrders.map((order) => (
-      <TableRow key={order.id}>
-        <TableCell>
-          <Checkbox
-            checked={selectedOrders.includes(order.id.toString())}
-            onCheckedChange={() => toggleOrderSelection(order.id.toString())}
-            aria-label={`Select order ${order.orderNumber}`}
-          />
-        </TableCell>
-        <TableCell className="font-medium">{order.orderNumber}</TableCell>
-        <TableCell>{order.aircraft_tail_number}</TableCell>
-        <TableCell>{order.customer_name}</TableCell>
-        <TableCell>{order.fuel_type}</TableCell>
-        <TableCell>{order.quantity}</TableCell>
-        <TableCell>{getStatusBadge(order.status)}</TableCell>
-        <TableCell>{getPriorityBadge(order.priority)}</TableCell>
-        <TableCell>{order.assigned_lst_name}</TableCell>
-        <TableCell>{order.assigned_truck_name}</TableCell>
-        <TableCell>{new Date(order.created_at).toLocaleString()}</TableCell>
-        <TableCell>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Open menu</span>
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuItem
-                onClick={() => router.push(`/csr/fuel-orders/${order.id}`)}
-              >
-                <Eye className="mr-2 h-4 w-4" /> View Details
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Edit className="mr-2 h-4 w-4" /> Edit Order
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setCancelOrderDialog({ isOpen: true, order: order as any })}
-                className="text-red-600"
-              >
-                <Trash2 className="mr-2 h-4 w-4" /> Cancel Order
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </TableCell>
-      </TableRow>
+      <FuelOrderTableRow
+        key={order.id}
+        order={order}
+        isSelected={selectedOrders.includes(order.id.toString())}
+        onToggleSelection={toggleOrderSelection}
+        onView={handleViewOrder}
+        onCancel={handleCancelOrder}
+        onMarkComplete={handleMarkComplete}
+      />
     ))
   ) : (
     <TableRow>

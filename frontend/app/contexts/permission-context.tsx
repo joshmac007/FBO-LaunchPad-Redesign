@@ -1,22 +1,17 @@
 "use client"
 
-import type React from "react"
-import { createContext, useContext, useEffect, useState, useCallback } from "react"
+import React, { createContext, useContext, useCallback } from "react"
 import { 
   logout,
-  getCurrentUser,
   type EnhancedUser,
   type EffectivePermission,
   type PermissionSummary
 } from "@/app/services/auth-service"
-import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "@/app/services/api-config"
-
-// State machine for permission loading
-type PermissionState = 'IDLE' | 'LOADING_SESSION' | 'AUTHENTICATED' | 'UNAUTHENTICATED'
+import { usePermissionsQuery, usePermissionsStatus } from "@/hooks/usePermissionsQuery"
+import { useQueryClient } from "@tanstack/react-query"
 
 interface PermissionContextType {
-  // Core state
-  state: PermissionState
+  // Core state (now powered by React Query)
   user: EnhancedUser | null
   userPermissions: string[]
   
@@ -41,18 +36,22 @@ interface PermissionContextType {
   isPermissionFromRole: (permissionName: string) => boolean
   isDirectPermission: (permissionName: string) => boolean
   
-  // Utility methods
-  refreshPermissions: () => Promise<boolean>
+  // Utility methods (now React Query powered)
+  refreshPermissions: () => Promise<void>
   getAccessibleResources: (permissionName: string, resourceType: string) => string[]
   canPerformAction: (action: string, resourceType: string, resourceId?: string) => boolean
   
   // Authentication method
   isAuthenticated: () => boolean
+  
+  // React Query state
+  isLoading: boolean
+  isError: boolean
+  error: Error | null
 }
 
 const PermissionContext = createContext<PermissionContextType>({
   // Core state
-  state: 'IDLE',
   user: null,
   userPermissions: [],
   
@@ -78,93 +77,54 @@ const PermissionContext = createContext<PermissionContextType>({
   isDirectPermission: () => false,
   
   // Utility methods
-  refreshPermissions: async () => false,
+  refreshPermissions: async () => {},
   getAccessibleResources: () => [],
   canPerformAction: () => false,
   
   // Authentication
   isAuthenticated: () => false,
+  
+  // React Query state
+  isLoading: true,
+  isError: false,
+  error: null,
 })
 
 export const usePermissions = () => useContext(PermissionContext)
 
 export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // State machine
-  const [state, setState] = useState<PermissionState>('IDLE')
-  const [user, setUser] = useState<EnhancedUser | null>(null)
-  const [userPermissions, setUserPermissions] = useState<string[]>([])
+  const queryClient = useQueryClient()
   
-  // Legacy state for backward compatibility
-  const [userRoles, setUserRoles] = useState<Array<{ id: number; name: string }>>([])
-  
-  // Enhanced state
-  const [effectivePermissions, setEffectivePermissions] = useState<Record<string, EffectivePermission>>({})
-  const [permissionSummary, setPermissionSummary] = useState<PermissionSummary | null>(null)
+  // Use React Query hooks for permissions data
+  const { data: permissionsData, isLoading, isError, error } = usePermissionsQuery()
+  const { isAuthenticated: authStatus, user } = usePermissionsStatus()
 
-  // Simple permission fetching - single API call as source of truth
-  const loadUserPermissions = useCallback(async () => {
-    setState('LOADING_SESSION')
-
-    // Check if user has token
-    const currentUser = getCurrentUser()
-    if (!currentUser || !currentUser.access_token) {
-      setState('UNAUTHENTICATED')
-      return
+  // Handle authentication errors by triggering logout
+  React.useEffect(() => {
+    if (isError && error?.message.includes('401') || error?.message.includes('403')) {
+      logout()
+      // Clear all queries on logout
+      queryClient.clear()
     }
+  }, [isError, error, queryClient])
 
-    try {
-      // Single API call - source of truth
-      const response = await fetch(`${API_BASE_URL}/auth/me/permissions`, {
-        method: "GET",
-        headers: getAuthHeaders(),
-      })
+  // Extract data from React Query response
+  const userPermissions = permissionsData?.permissions || []
+  const effectivePermissions = permissionsData?.effective_permissions || {}
+  const permissionSummary = permissionsData?.summary || null
 
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          logout()
-          setState('UNAUTHENTICATED')
-          return
-        }
-        throw new Error(`API call failed: ${response.status}`)
-      }
-
-             const data = await handleApiResponse(response) as any // API returns {message: string, permissions: string[]}
-
-       // Update state with API response
-       setUser(currentUser)
-       setUserPermissions(data.permissions || [])
-       setEffectivePermissions(data.effective_permissions || {})
-       setPermissionSummary(data.summary || null)
-      
-      // Set legacy roles for backward compatibility
-      if (currentUser.roles && Array.isArray(currentUser.roles)) {
-        const rolesAsObjects = currentUser.roles.map((role, index) => ({ 
-          id: index + 1, 
-          name: role 
-        }))
-        setUserRoles(rolesAsObjects)
-      } else {
-        setUserRoles([])
-      }
-
-      setState('AUTHENTICATED')
-
-    } catch (error: any) {
-      if (error.message.includes("401") || error.message.includes("403")) {
-        logout()
-        setState('UNAUTHENTICATED')
-      } else {
-        // For other errors, transition to unauthenticated state
-        setState('UNAUTHENTICATED')
-      }
+  // Legacy roles compatibility
+  const userRoles = React.useMemo(() => {
+    if (user?.roles && Array.isArray(user.roles)) {
+      return user.roles.map((role, index) => ({ 
+        id: index + 1, 
+        name: role 
+      }))
     }
-  }, [])
+    return []
+  }, [user?.roles])
 
-  useEffect(() => {
-    loadUserPermissions()
-  }, [loadUserPermissions])
-
-  // Permission checking methods
+  // Permission checking methods (now using React Query data)
   const checkPermission = useCallback((permissionId: string): boolean => {
     return userPermissions.includes(permissionId)
   }, [userPermissions])
@@ -221,15 +181,11 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return source === 'direct'
   }, [getPermissionSourceMethod])
 
-  // Utility methods
-  const refreshPermissions = useCallback(async (): Promise<boolean> => {
-    try {
-      await loadUserPermissions()
-      return state === 'AUTHENTICATED'
-    } catch (error) {
-      return false
-    }
-  }, [loadUserPermissions, state])
+  // Utility methods (now React Query powered)
+  const refreshPermissions = useCallback(async (): Promise<void> => {
+    // Invalidate and refetch permissions query
+    await queryClient.invalidateQueries({ queryKey: ['user', 'permissions'] })
+  }, [queryClient])
 
   const getAccessibleResources = useCallback((permissionName: string, resourceType: string): string[] => {
     if (!effectivePermissions) return []
@@ -275,25 +231,20 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return hasAnyPermissionMethod(permissionPatterns)
   }, [hasAnyPermissionMethod])
 
-  // Authentication check
+  // Authentication check (using React Query status)
   const isAuthenticated = useCallback((): boolean => {
-    const result = state === 'AUTHENTICATED'
-    return result
-  }, [state])
-
-  // Legacy loading compatibility
-  const loading = state === 'IDLE' || state === 'LOADING_SESSION'
+    return authStatus && !isError
+  }, [authStatus, isError])
 
   const contextValue: PermissionContextType = {
-    // Core state
-    state,
+    // Core state (powered by React Query)
     user,
     userPermissions,
     
     // Legacy compatibility
     userRoles,
     checkPermission,
-    loading,
+    loading: isLoading, // React Query loading state
     
     // Enhanced features
     effectivePermissions,
@@ -311,13 +262,18 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     isPermissionFromRole: isPermissionFromRoleMethod,
     isDirectPermission: isDirectPermissionMethod,
     
-    // Utility methods
+    // Utility methods (React Query powered)
     refreshPermissions,
     getAccessibleResources,
     canPerformAction,
     
     // Authentication
     isAuthenticated,
+    
+    // React Query state
+    isLoading,
+    isError,
+    error,
   }
 
   return (
