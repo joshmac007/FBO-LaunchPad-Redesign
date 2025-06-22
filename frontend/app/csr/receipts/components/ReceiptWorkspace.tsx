@@ -288,7 +288,7 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
 
   const isReadOnly = state.receipt.status !== 'DRAFT'
   const canCalculateFees = state.receipt.status === 'DRAFT'
-  const canGenerateReceipt = state.receipt.grandTotalAmount !== undefined && state.receipt.grandTotalAmount > 0
+  const canGenerateReceipt = state.receipt.grand_total_amount !== undefined && parseFloat(state.receipt.grand_total_amount) > 0
   const canMarkAsPaid = state.receipt.status === 'GENERATED'
 
   return (

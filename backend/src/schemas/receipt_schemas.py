@@ -70,6 +70,9 @@ class ReceiptSchema(Schema):
     fuel_order_id = fields.Integer(dump_only=True, allow_none=True)
     customer_id = fields.Integer(dump_only=True)
     
+    # Fuel order reference data (for display purposes)
+    fuel_order_tail_number = fields.String(dump_only=True, allow_none=True)
+    
     # Snapshot data
     aircraft_type_at_receipt_time = fields.String(dump_only=True, allow_none=True)
     fuel_type_at_receipt_time = fields.String(dump_only=True, allow_none=True)

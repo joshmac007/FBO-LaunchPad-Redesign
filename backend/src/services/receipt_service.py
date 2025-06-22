@@ -102,12 +102,37 @@ class ReceiptService:
             if fuel_order.aircraft and fuel_order.aircraft.aircraft_type:
                 aircraft_type_name = fuel_order.aircraft.aircraft_type
             
-            # Calculate fuel quantity dispensed
+            # Calculate fuel quantity dispensed - use multiple sources to ensure we get quantity
             fuel_quantity_gallons = None
+            
+            # Priority 1: Use meter readings difference (most accurate)
             if fuel_order.start_meter_reading and fuel_order.end_meter_reading:
                 fuel_quantity_gallons = fuel_order.end_meter_reading - fuel_order.start_meter_reading
             
-            # Create the receipt record
+            # Priority 2: Use gallons_dispensed field if meter readings not available
+            elif fuel_order.gallons_dispensed:
+                fuel_quantity_gallons = fuel_order.gallons_dispensed
+            
+            # Priority 3: Use requested_amount as fallback
+            elif fuel_order.requested_amount:
+                fuel_quantity_gallons = fuel_order.requested_amount
+            
+            # Log the quantity source for debugging
+            current_app.logger.info(f"Receipt {fuel_order_id}: Using fuel quantity {fuel_quantity_gallons} gallons from " + 
+                                  ("meter readings" if fuel_order.start_meter_reading and fuel_order.end_meter_reading
+                                   else "gallons_dispensed" if fuel_order.gallons_dispensed
+                                   else "requested_amount" if fuel_order.requested_amount
+                                   else "no source available"))
+            
+            # Calculate preliminary fuel subtotal (will be refined during fee calculation)
+            fuel_subtotal = Decimal('0.00')
+            fuel_unit_price = None
+            if fuel_quantity_gallons:
+                # Get basic fuel price for preliminary calculation
+                fuel_unit_price = self._get_fuel_price(fbo_location_id, fuel_order.fuel_type)
+                fuel_subtotal = Decimal(str(fuel_quantity_gallons)) * fuel_unit_price
+            
+            # Create the receipt record with all fuel order data pre-populated
             receipt = Receipt(
                 fbo_location_id=fbo_location_id,
                 fuel_order_id=fuel_order_id,
@@ -115,15 +140,32 @@ class ReceiptService:
                 aircraft_type_at_receipt_time=aircraft_type_name,
                 fuel_type_at_receipt_time=fuel_order.fuel_type,
                 fuel_quantity_gallons_at_receipt_time=fuel_quantity_gallons,
+                fuel_unit_price_at_receipt_time=fuel_unit_price,
+                fuel_subtotal=fuel_subtotal,
+                grand_total_amount=fuel_subtotal,  # Initial total is just fuel cost
                 status=ReceiptStatus.DRAFT,
                 created_by_user_id=user_id,
                 updated_by_user_id=user_id
             )
             
             db.session.add(receipt)
+            db.session.flush()  # Get the receipt ID before creating line items
+            
+            # Create initial fuel line item if we have fuel data
+            if fuel_quantity_gallons and fuel_unit_price:
+                fuel_line_item = ReceiptLineItem(
+                    receipt_id=receipt.id,
+                    line_item_type=LineItemType.FUEL,
+                    description=f"{fuel_order.fuel_type} Fuel",
+                    quantity=fuel_quantity_gallons,
+                    unit_price=fuel_unit_price,
+                    amount=fuel_subtotal
+                )
+                db.session.add(fuel_line_item)
+            
             db.session.commit()  # Explicit commit for proper transaction handling
             
-            current_app.logger.info(f"Created draft receipt {receipt.id} for fuel order {fuel_order_id}")
+            current_app.logger.info(f"Created draft receipt {receipt.id} for fuel order {fuel_order_id} with fuel quantity {fuel_quantity_gallons} gallons")
             return receipt
             
         except IntegrityError as e:
@@ -742,7 +784,7 @@ class ReceiptService:
             elif item.line_item_type == LineItemType.FEE:
                 total_fees_amount += item.amount
             elif item.line_item_type == LineItemType.WAIVER:
-                total_waivers_amount += abs(item.amount)  # Store as positive value
+                total_waivers_amount += item.amount  # Store as negative value (matching line item amount)
             elif item.line_item_type == LineItemType.TAX:
                 tax_amount += item.amount
         

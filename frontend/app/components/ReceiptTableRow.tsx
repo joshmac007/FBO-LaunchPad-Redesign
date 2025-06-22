@@ -93,7 +93,7 @@ const ReceiptTableRow = memo(({
         <Checkbox
           checked={isSelected}
           onCheckedChange={() => onToggleSelection(receipt.id.toString())}
-          aria-label={`Select receipt ${receipt.receiptNumber}`}
+          aria-label={`Select receipt ${receipt.receipt_number}`}
         />
       </TableCell>
       <TableCell className="font-medium">
@@ -101,18 +101,18 @@ const ReceiptTableRow = memo(({
           onClick={() => onView(receipt)}
           className="text-blue-600 hover:text-blue-800 hover:underline"
         >
-          {receipt.receiptNumber}
+          {receipt.receipt_number}
         </button>
       </TableCell>
       <TableCell>
-        {formatDate(receipt.generatedAt || receipt.createdAt)}
+        {formatDate(receipt.generated_at || receipt.created_at)}
       </TableCell>
-      <TableCell>{receipt.tailNumber}</TableCell>
+      <TableCell>{receipt.fuel_order_id}</TableCell>
       <TableCell>
-        {receipt.customer || `Account: ${receipt.tailNumber}`}
+        {receipt.customer_id || `Customer: ${receipt.customer_id}`}
       </TableCell>
       <TableCell className="text-right font-medium">
-        {formatCurrency(receipt.grandTotalAmount || receipt.amount)}
+        {formatCurrency(parseFloat(receipt.grand_total_amount))}
       </TableCell>
       <TableCell>{getStatusBadge(receipt.status)}</TableCell>
       <TableCell>
@@ -184,10 +184,9 @@ const ReceiptTableRow = memo(({
   return (
     prevProps.receipt.id === nextProps.receipt.id &&
     prevProps.receipt.status === nextProps.receipt.status &&
-    prevProps.receipt.receiptNumber === nextProps.receipt.receiptNumber &&
-    prevProps.receipt.amount === nextProps.receipt.amount &&
-    prevProps.receipt.grandTotalAmount === nextProps.receipt.grandTotalAmount &&
-    prevProps.receipt.updatedAt === nextProps.receipt.updatedAt &&
+    prevProps.receipt.receipt_number === nextProps.receipt.receipt_number &&
+    prevProps.receipt.grand_total_amount === nextProps.receipt.grand_total_amount &&
+    prevProps.receipt.updated_at === nextProps.receipt.updated_at &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.onToggleSelection === nextProps.onToggleSelection &&
     prevProps.onView === nextProps.onView &&

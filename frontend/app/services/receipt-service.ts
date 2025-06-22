@@ -1,219 +1,228 @@
 import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config"
 import { getCurrentUserFboId } from "./auth-service"
-import { isOfflineMode } from "./utils"
 
-// Receipt model - Updated for Plan 5 requirements
-export interface Receipt {
-  id: number
-  receiptNumber: string
-  fuelOrderId: number
-  customerId?: number
-  tailNumber: string
-  customer: string
-  fuelType: string
-  quantity: number
-  amount: number
-  paymentMethod: string
-  status: 'DRAFT' | 'GENERATED' | 'PAID' | 'VOID' | 'PENDING' | 'REFUNDED'
-  createdAt: string
-  updatedAt?: string
-  generatedAt?: string
-  paidAt?: string
-  fuelerName: string
-  location: string
-  notes?: string
-  refundAmount?: number
-  refundReason?: string
-  refundedAt?: string
-  
-  // New fields for Plan 5
-  aircraftTypeAtReceiptTime?: string
-  fuelTypeAtReceiptTime?: string
-  fuelQuantityGallonsAtReceiptTime?: number
-  fuelUnitPriceAtReceiptTime?: number
-  fuelSubtotal?: number
-  totalFeesAmount?: number
-  totalWaiversAmount?: number
-  taxAmount?: number
-  grandTotalAmount?: number
-  isCaaApplied?: boolean
-  createdByUserId?: number
-  updatedByUserId?: number
-}
-
-// Receipt Line Item
+// Receipt Line Item - Matches backend ReceiptLineItemSchema exactly
 export interface ReceiptLineItem {
   id: number
-  receiptId: number
-  lineItemType: 'FUEL' | 'FEE' | 'WAIVER' | 'TAX' | 'DISCOUNT'
+  receipt_id: number
+  line_item_type: 'FUEL' | 'FEE' | 'WAIVER' | 'TAX' | 'DISCOUNT'
   description: string
-  feeCodeApplied?: string
-  quantity: number
-  unitPrice: number
-  amount: number
+  fee_code_applied?: string | null
+  quantity: string  // String to handle Decimal serialization from backend
+  unit_price: string  // String to handle Decimal serialization from backend
+  amount: string  // String to handle Decimal serialization from backend
+  created_at: string
+  updated_at: string
+}
+
+// Receipt - Matches backend ReceiptSchema exactly
+export interface Receipt {
+  id: number
+  receipt_number?: string | null
+  fbo_location_id: number
+  fuel_order_id?: number | null
+  customer_id: number
+  
+  // Fuel order reference data
+  fuel_order_tail_number?: string | null
+  
+  // Snapshot data
+  aircraft_type_at_receipt_time?: string | null
+  fuel_type_at_receipt_time?: string | null
+  fuel_quantity_gallons_at_receipt_time?: string | null
+  fuel_unit_price_at_receipt_time?: string | null
+  
+  // Calculated totals
+  fuel_subtotal: string
+  total_fees_amount: string
+  total_waivers_amount: string
+  tax_amount: string
+  grand_total_amount: string
+  
+  // Status and metadata
+  status: 'DRAFT' | 'GENERATED' | 'PAID' | 'VOID'
+  is_caa_applied: boolean
+  
+  // Timestamps
+  generated_at?: string | null
+  paid_at?: string | null
+  created_at: string
+  updated_at: string
+  
+  // User tracking
+  created_by_user_id: number
+  updated_by_user_id: number
+  
+  // Optional nested line items
+  line_items?: ReceiptLineItem[]
 }
 
 // Create Receipt Request
 export interface CreateReceiptRequest {
-  fuelOrderId: number
-  tailNumber: string
-  customer: string
-  fuelType: string
-  quantity: number
-  amount: number
-  paymentMethod: string
-  fuelerName: string
-  location: string
-  notes?: string
+  fuel_order_id: number
 }
 
-// Draft Update Payload for Plan 5
+// Draft Update Payload
 export interface DraftUpdatePayload {
-  customerId?: number
-  aircraftType?: string
+  customer_id?: number
+  aircraft_type?: string
   notes?: string
-  [key: string]: any
+  additional_services?: Array<{
+    fee_code: string
+    quantity: number
+  }>
 }
 
-// Extended Receipt interface for Plan 5 with line items
+// Extended Receipt interface with guaranteed line items
 export interface ExtendedReceipt extends Receipt {
-  lineItems: ReceiptLineItem[]
+  line_items: ReceiptLineItem[]
 }
 
 // Mock receipt data for offline mode
 const mockReceipts: Receipt[] = [
   {
     id: 1,
-    receiptNumber: "RCP-2024-001",
-    fuelOrderId: 1,
-    tailNumber: "N123AB",
-    customer: "Delta Airlines",
-    fuelType: "Jet A",
-    quantity: 500,
-    amount: 2750.0,
-    paymentMethod: "Corporate Account",
+    receipt_number: "RCP-2024-001",
+    fbo_location_id: 1,
+    fuel_order_id: 1,
+    customer_id: 1,
+    fuel_subtotal: "2750.00",
+    total_fees_amount: "100.00",
+    total_waivers_amount: "0.00",
+    tax_amount: "0.00",
+    grand_total_amount: "2850.00",
     status: "PAID",
-    createdAt: "2024-01-15T10:30:00Z",
-    updatedAt: "2024-01-15T10:35:00Z",
-    fuelerName: "Mike Johnson",
-    location: "Gate A1",
-    notes: "Standard refueling operation",
+    is_caa_applied: false,
+    created_at: "2024-01-15T10:30:00Z",
+    updated_at: "2024-01-15T10:35:00Z",
+    created_by_user_id: 1,
+    updated_by_user_id: 1,
   },
   {
     id: 2,
-    receiptNumber: "RCP-2024-002",
-    fuelOrderId: 2,
-    tailNumber: "N456CD",
-    customer: "United Airlines",
-    fuelType: "Jet A",
-    quantity: 750,
-    amount: 4125.0,
-    paymentMethod: "Credit Card",
+    receipt_number: "RCP-2024-002",
+    fbo_location_id: 1,
+    fuel_order_id: 2,
+    customer_id: 2,
+    fuel_subtotal: "4125.00",
+    total_fees_amount: "150.00",
+    total_waivers_amount: "0.00",
+    tax_amount: "0.00",
+    grand_total_amount: "4275.00",
     status: "PAID",
-    createdAt: "2024-01-15T14:45:00Z",
-    updatedAt: "2024-01-15T14:50:00Z",
-    fuelerName: "Sarah Wilson",
-    location: "Gate B3",
-    notes: "Priority refueling",
+    is_caa_applied: false,
+    created_at: "2024-01-15T14:45:00Z",
+    updated_at: "2024-01-15T14:50:00Z",
+    created_by_user_id: 2,
+    updated_by_user_id: 2,
   },
   {
     id: 3,
-    receiptNumber: "RCP-2024-003",
-    fuelOrderId: 3,
-    tailNumber: "N789EF",
-    customer: "American Airlines",
-    fuelType: "Jet A",
-    quantity: 300,
-    amount: 1650.0,
-    paymentMethod: "Corporate Account",
-    status: "PENDING",
-    createdAt: "2024-01-16T09:15:00Z",
-    fuelerName: "Tom Davis",
-    location: "Gate C2",
+    receipt_number: "RCP-2024-003",
+    fbo_location_id: 1,
+    fuel_order_id: 3,
+    customer_id: 3,
+    fuel_subtotal: "1650.00",
+    total_fees_amount: "75.00",
+    total_waivers_amount: "0.00",
+    tax_amount: "0.00",
+    grand_total_amount: "1725.00",
+    status: "DRAFT",
+    is_caa_applied: false,
+    created_at: "2024-01-16T09:15:00Z",
+    updated_at: "2024-01-16T09:15:00Z",
+    created_by_user_id: 3,
+    updated_by_user_id: 3,
   },
   {
     id: 4,
-    receiptNumber: "RCP-2024-004",
-    fuelOrderId: 4,
-    tailNumber: "N321GH",
-    customer: "Southwest Airlines",
-    fuelType: "Jet A",
-    quantity: 450,
-    amount: 2475.0,
-    paymentMethod: "Credit Card",
+    receipt_number: "RCP-2024-004",
+    fbo_location_id: 1,
+    fuel_order_id: 4,
+    customer_id: 4,
+    fuel_subtotal: "2475.00",
+    total_fees_amount: "125.00",
+    total_waivers_amount: "0.00",
+    tax_amount: "0.00",
+    grand_total_amount: "2600.00",
     status: "PAID",
-    createdAt: "2024-01-16T11:20:00Z",
-    updatedAt: "2024-01-16T11:25:00Z",
-    fuelerName: "Lisa Chen",
-    location: "Gate D1",
-    notes: "Quick turnaround required",
+    is_caa_applied: false,
+    created_at: "2024-01-16T11:20:00Z",
+    updated_at: "2024-01-16T11:25:00Z",
+    created_by_user_id: 4,
+    updated_by_user_id: 4,
   },
   {
     id: 5,
-    receiptNumber: "RCP-2024-005",
-    fuelOrderId: 5,
-    tailNumber: "N654IJ",
-    customer: "JetBlue Airways",
-    fuelType: "Jet A",
-    quantity: 600,
-    amount: 3300.0,
-    paymentMethod: "Corporate Account",
-    status: "REFUNDED",
-    createdAt: "2024-01-17T08:30:00Z",
-    updatedAt: "2024-01-17T16:45:00Z",
-    fuelerName: "Mark Rodriguez",
-    location: "Gate E2",
-    refundAmount: 3300.0,
-    refundReason: "Flight cancelled",
-    refundedAt: "2024-01-17T16:45:00Z",
+    receipt_number: "RCP-2024-005",
+    fbo_location_id: 1,
+    fuel_order_id: 5,
+    customer_id: 5,
+    fuel_subtotal: "3300.00",
+    total_fees_amount: "200.00",
+    total_waivers_amount: "0.00",
+    tax_amount: "0.00",
+    grand_total_amount: "3500.00",
+    status: "VOID",
+    is_caa_applied: false,
+    created_at: "2024-01-17T08:30:00Z",
+    updated_at: "2024-01-17T16:45:00Z",
+    created_by_user_id: 5,
+    updated_by_user_id: 5,
   },
   {
     id: 6,
-    receiptNumber: "RCP-2024-006",
-    fuelOrderId: 6,
-    tailNumber: "N987KL",
-    customer: "Alaska Airlines",
-    fuelType: "Jet A",
-    quantity: 400,
-    amount: 2200.0,
-    paymentMethod: "Cash",
+    receipt_number: "RCP-2024-006",
+    fbo_location_id: 1,
+    fuel_order_id: 6,
+    customer_id: 6,
+    fuel_subtotal: "2200.00",
+    total_fees_amount: "100.00",
+    total_waivers_amount: "0.00",
+    tax_amount: "0.00",
+    grand_total_amount: "2300.00",
     status: "PAID",
-    createdAt: "2024-01-17T13:15:00Z",
-    updatedAt: "2024-01-17T13:20:00Z",
-    fuelerName: "Jennifer Park",
-    location: "Gate F3",
+    is_caa_applied: false,
+    created_at: "2024-01-17T13:15:00Z",
+    updated_at: "2024-01-17T13:20:00Z",
+    created_by_user_id: 6,
+    updated_by_user_id: 6,
   },
   {
     id: 7,
-    receiptNumber: "RCP-2024-007",
-    fuelOrderId: 7,
-    tailNumber: "N147MN",
-    customer: "Frontier Airlines",
-    fuelType: "Jet A",
-    quantity: 350,
-    amount: 1925.0,
-    paymentMethod: "Check",
-    status: "PENDING",
-    createdAt: "2024-01-18T10:45:00Z",
-    fuelerName: "David Kim",
-    location: "Gate G1",
-    notes: "Waiting for check clearance",
+    receipt_number: "RCP-2024-007",
+    fbo_location_id: 1,
+    fuel_order_id: 7,
+    customer_id: 7,
+    fuel_subtotal: "1925.00",
+    total_fees_amount: "75.00",
+    total_waivers_amount: "0.00",
+    tax_amount: "0.00",
+    grand_total_amount: "2000.00",
+    status: "DRAFT",
+    is_caa_applied: false,
+    created_at: "2024-01-18T10:45:00Z",
+    updated_at: "2024-01-18T10:45:00Z",
+    created_by_user_id: 7,
+    updated_by_user_id: 7,
   },
   {
     id: 8,
-    receiptNumber: "RCP-2024-008",
-    fuelOrderId: 8,
-    tailNumber: "N258OP",
-    customer: "Spirit Airlines",
-    fuelType: "Jet A",
-    quantity: 275,
-    amount: 1512.5,
-    paymentMethod: "Credit Card",
+    receipt_number: "RCP-2024-008",
+    fbo_location_id: 1,
+    fuel_order_id: 8,
+    customer_id: 8,
+    fuel_subtotal: "1512.50",
+    total_fees_amount: "50.00",
+    total_waivers_amount: "0.00",
+    tax_amount: "0.00",
+    grand_total_amount: "1562.50",
     status: "PAID",
-    createdAt: "2024-01-18T15:30:00Z",
-    updatedAt: "2024-01-18T15:35:00Z",
-    fuelerName: "Amanda Foster",
-    location: "Gate H2",
+    is_caa_applied: false,
+    created_at: "2024-01-18T15:30:00Z",
+    updated_at: "2024-01-18T15:35:00Z",
+    created_by_user_id: 8,
+    updated_by_user_id: 8,
   },
 ]
 
@@ -221,28 +230,32 @@ const mockReceipts: Receipt[] = [
 const mockLineItems: ReceiptLineItem[] = [
   {
     id: 1,
-    receiptId: 1,
-    lineItemType: 'FUEL',
+    receipt_id: 1,
+    line_item_type: 'FUEL',
     description: 'Jet A Fuel',
-    quantity: 500,
-    unitPrice: 5.50,
-    amount: 2750.0
+    quantity: '500',
+    unit_price: '5.50',
+    amount: '2750.00',
+    created_at: "2024-01-15T10:30:00Z",
+    updated_at: "2024-01-15T10:35:00Z",
   },
   {
     id: 2,
-    receiptId: 1,
-    lineItemType: 'FEE',
+    receipt_id: 1,
+    line_item_type: 'FEE',
     description: 'Ramp Fee',
-    feeCodeApplied: 'RAMP_FEE',
-    quantity: 1,
-    unitPrice: 100.0,
-    amount: 100.0
+    fee_code_applied: 'RAMP_FEE',
+    quantity: '1',
+    unit_price: '100.00',
+    amount: '100.00',
+    created_at: "2024-01-15T10:30:00Z",
+    updated_at: "2024-01-15T10:35:00Z",
   }
 ]
 
 // Initialize localStorage with mock data if not present
 function initializeMockData() {
-  if (isOfflineMode() && !localStorage.getItem("fboReceipts")) {
+  if (!localStorage.getItem("fboReceipts")) {
     localStorage.setItem("fboReceipts", JSON.stringify(mockReceipts))
   }
 }
@@ -268,49 +281,6 @@ export interface ReceiptListResponse {
 
 // Get receipts with server-side filtering and pagination
 export async function getReceipts(filters?: ReceiptListFilters): Promise<ReceiptListResponse> {
-  if (isOfflineMode()) {
-    initializeMockData()
-    const storedReceipts = localStorage.getItem("fboReceipts")
-    const allReceipts = storedReceipts ? JSON.parse(storedReceipts) : mockReceipts
-    
-    // Apply client-side filtering for offline mode
-    let filteredReceipts = allReceipts
-    
-    if (filters?.status && filters.status !== 'all') {
-      filteredReceipts = filteredReceipts.filter((r: Receipt) => r.status === filters.status)
-    }
-    
-    if (filters?.date_from) {
-      const fromDate = new Date(filters.date_from)
-      filteredReceipts = filteredReceipts.filter((r: Receipt) => 
-        new Date(r.createdAt) >= fromDate
-      )
-    }
-    
-    if (filters?.date_to) {
-      const toDate = new Date(filters.date_to)
-      filteredReceipts = filteredReceipts.filter((r: Receipt) => 
-        new Date(r.createdAt) <= toDate
-      )
-    }
-    
-    // Apply pagination for offline mode
-    const page = filters?.page || 1
-    const perPage = filters?.per_page || 50
-    const startIndex = (page - 1) * perPage
-    const endIndex = startIndex + perPage
-    const paginatedReceipts = filteredReceipts.slice(startIndex, endIndex)
-    
-    return {
-      receipts: paginatedReceipts,
-      total: filteredReceipts.length,
-      page,
-      per_page: perPage,
-      total_pages: Math.ceil(filteredReceipts.length / perPage)
-    }
-  }
-
-  // Online mode - use server-side filtering and pagination
   const fboId = getCurrentUserFboId();
   
   // Build query string from filters
@@ -341,42 +311,11 @@ export async function getReceipts(filters?: ReceiptListFilters): Promise<Receipt
   })
 
   const data = await handleApiResponse<ReceiptListResponse>(response)
-  
-  // Handle potential data type mismatches (Decimal as string -> number)
-  if (data.receipts) {
-    data.receipts = data.receipts.map(receipt => ({
-      ...receipt,
-      amount: typeof receipt.amount === 'string' ? parseFloat(receipt.amount) : receipt.amount,
-      grandTotalAmount: typeof receipt.grandTotalAmount === 'string' ? 
-        parseFloat(receipt.grandTotalAmount) : receipt.grandTotalAmount,
-      fuelSubtotal: typeof receipt.fuelSubtotal === 'string' ? 
-        parseFloat(receipt.fuelSubtotal) : receipt.fuelSubtotal,
-      totalFeesAmount: typeof receipt.totalFeesAmount === 'string' ? 
-        parseFloat(receipt.totalFeesAmount) : receipt.totalFeesAmount,
-      totalWaiversAmount: typeof receipt.totalWaiversAmount === 'string' ? 
-        parseFloat(receipt.totalWaiversAmount) : receipt.totalWaiversAmount,
-      taxAmount: typeof receipt.taxAmount === 'string' ? 
-        parseFloat(receipt.taxAmount) : receipt.taxAmount,
-    }))
-  }
-  
   return data
 }
 
 // Get recent receipts for dashboard display (limited to most recent ones)
 export async function getRecentReceipts(limit: number = 5): Promise<Receipt[]> {
-  if (isOfflineMode()) {
-    initializeMockData()
-    const storedReceipts = localStorage.getItem("fboReceipts")
-    const receipts = storedReceipts ? JSON.parse(storedReceipts) : mockReceipts
-    
-    // Sort by created date descending and limit
-    return receipts
-      .sort((a: Receipt, b: Receipt) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, limit)
-  }
-
-  // Online mode - fetch from API with pagination
   const fboId = getCurrentUserFboId();
   const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts?per_page=${limit}&page=1`, {
     method: "GET",
@@ -391,25 +330,6 @@ export async function getRecentReceipts(limit: number = 5): Promise<Receipt[]> {
 
 // Get receipt by ID (alias for Plan 5 compatibility)
 export async function getReceiptById(id: number): Promise<ExtendedReceipt> {
-  if (isOfflineMode()) {
-    initializeMockData()
-    const storedReceipts = localStorage.getItem("fboReceipts")
-    const receipts = storedReceipts ? JSON.parse(storedReceipts) : mockReceipts
-    
-    const receipt = receipts.find((r: Receipt) => r.id === id)
-    if (!receipt) {
-      throw new Error("Receipt not found")
-    }
-    
-    // Convert Receipt to ExtendedReceipt by adding mock line items
-    const extendedReceipt: ExtendedReceipt = {
-      ...receipt,
-      lineItems: mockLineItems.filter(item => item.receiptId === id)
-    }
-    
-    return extendedReceipt
-  }
-
   const fboId = getCurrentUserFboId();
 
   const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${id}`, {
@@ -424,132 +344,102 @@ export async function getReceiptById(id: number): Promise<ExtendedReceipt> {
 
 // Get receipt by ID
 export async function getReceipt(id: number): Promise<Receipt> {
-  if (isOfflineMode()) {
-    initializeMockData()
-    const storedReceipts = localStorage.getItem("fboReceipts")
-    if (!storedReceipts) {
-      throw new Error("Receipt not found")
-    }
-
-    const receipts = JSON.parse(storedReceipts) as Receipt[]
-    const receipt = receipts.find((r) => r.id === id)
-
-    if (!receipt) {
-      throw new Error("Receipt not found")
-    }
-
-    return receipt
+  initializeMockData()
+  const storedReceipts = localStorage.getItem("fboReceipts")
+  if (!storedReceipts) {
+    throw new Error("Receipt not found")
   }
 
-  // Online mode - fetch from API
-  const response = await fetch(`${API_BASE_URL}/receipts/${id}`, {
-    method: "GET",
-    headers: getAuthHeaders(),
-  })
+  const receipts = JSON.parse(storedReceipts) as Receipt[]
+  const receipt = receipts.find((r) => r.id === id)
 
-  return handleApiResponse<Receipt>(response)
+  if (!receipt) {
+    throw new Error("Receipt not found")
+  }
+
+  return receipt
 }
 
 // Create a new receipt
 export async function createReceipt(receiptData: CreateReceiptRequest): Promise<Receipt> {
-  if (isOfflineMode()) {
-    initializeMockData()
-    const newReceipt: Receipt = {
-      ...receiptData,
-      id: Date.now(),
-      receiptNumber: `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-3)}`,
-      status: "PENDING",
-      createdAt: new Date().toISOString(),
-    }
-
-    const storedReceipts = localStorage.getItem("fboReceipts")
-    const receipts = storedReceipts ? (JSON.parse(storedReceipts) as Receipt[]) : []
-
-    receipts.push(newReceipt)
-    localStorage.setItem("fboReceipts", JSON.stringify(receipts))
-
-    return newReceipt
+  initializeMockData()
+  const newReceipt: Receipt = {
+    ...receiptData,
+    id: Date.now(),
+    receipt_number: `RCP-${new Date().getFullYear()}-${String(Date.now()).slice(-3)}`,
+    status: "DRAFT",
+    created_at: new Date().toISOString(),
+    created_by_user_id: 1,
+    updated_by_user_id: 1,
+    fbo_location_id: 0,
+    customer_id: 0,
+    fuel_subtotal: "",
+    total_fees_amount: "",
+    total_waivers_amount: "",
+    tax_amount: "",
+    grand_total_amount: "",
+    is_caa_applied: false,
+    updated_at: ""
   }
 
-  // Online mode - create via API
-  const response = await fetch(`${API_BASE_URL}/receipts`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: JSON.stringify(receiptData),
-  })
+  const storedReceipts = localStorage.getItem("fboReceipts")
+  const receipts = storedReceipts ? (JSON.parse(storedReceipts) as Receipt[]) : []
 
-  return handleApiResponse<Receipt>(response)
+  receipts.push(newReceipt)
+  localStorage.setItem("fboReceipts", JSON.stringify(receipts))
+
+  return newReceipt
 }
 
 // Update a receipt
 export async function updateReceipt(id: number, updates: Partial<Receipt>): Promise<Receipt> {
-  if (isOfflineMode()) {
-    initializeMockData()
-    const storedReceipts = localStorage.getItem("fboReceipts")
-    if (!storedReceipts) {
-      throw new Error("Receipt not found")
-    }
-
-    const receipts = JSON.parse(storedReceipts) as Receipt[]
-    const index = receipts.findIndex((r) => r.id === id)
-
-    if (index === -1) {
-      throw new Error("Receipt not found")
-    }
-
-    const updatedReceipt = {
-      ...receipts[index],
-      ...updates,
-      updatedAt: new Date().toISOString(),
-    }
-
-    // If status is changing to REFUNDED, add refunded timestamp
-    if (updates.status === "REFUNDED" && receipts[index].status !== "REFUNDED") {
-      updatedReceipt.refundedAt = new Date().toISOString()
-    }
-
-    receipts[index] = updatedReceipt
-    localStorage.setItem("fboReceipts", JSON.stringify(receipts))
-
-    return updatedReceipt
+  initializeMockData()
+  const storedReceipts = localStorage.getItem("fboReceipts")
+  if (!storedReceipts) {
+    throw new Error("Receipt not found")
   }
 
-  // Online mode - update via API
-  const response = await fetch(`${API_BASE_URL}/receipts/${id}`, {
-    method: "PUT",
-    headers: getAuthHeaders(),
-    body: JSON.stringify(updates),
-  })
+  const receipts = JSON.parse(storedReceipts) as Receipt[]
+  const index = receipts.findIndex((r) => r.id === id)
 
-  return handleApiResponse<Receipt>(response)
+  if (index === -1) {
+    throw new Error("Receipt not found")
+  }
+
+  const updatedReceipt = {
+    ...receipts[index],
+    ...updates,
+    updated_at: new Date().toISOString(),
+  }
+
+  // If status is changing to GENERATED, add generated timestamp
+  if (updates.status === "GENERATED" && receipts[index].status !== "GENERATED") {
+    updatedReceipt.generated_at = new Date().toISOString()
+  }
+
+  receipts[index] = updatedReceipt
+  localStorage.setItem("fboReceipts", JSON.stringify(receipts))
+
+  return updatedReceipt
 }
 
 // Delete a receipt
 export async function deleteReceipt(id: number): Promise<boolean> {
-  if (isOfflineMode()) {
-    const storedReceipts = localStorage.getItem("fboReceipts")
-    if (!storedReceipts) {
-      return false
-    }
-
-    const receipts = JSON.parse(storedReceipts) as Receipt[]
-    const updatedReceipts = receipts.filter((r) => r.id !== id)
-
-    if (updatedReceipts.length === receipts.length) {
-      return false // No receipt was removed
-    }
-
-    localStorage.setItem("fboReceipts", JSON.stringify(updatedReceipts))
-    return true
+  initializeMockData()
+  const storedReceipts = localStorage.getItem("fboReceipts")
+  if (!storedReceipts) {
+    return false
   }
 
-  // Online mode - delete via API
-  const response = await fetch(`${API_BASE_URL}/receipts/${id}`, {
-    method: "DELETE",
-    headers: getAuthHeaders(),
-  })
+  const receipts = JSON.parse(storedReceipts) as Receipt[]
+  const updatedReceipts = receipts.filter((r) => r.id !== id)
 
-  return response.ok
+  if (updatedReceipts.length === receipts.length) {
+    return false // No receipt was removed
+  }
+
+  localStorage.setItem("fboReceipts", JSON.stringify(updatedReceipts))
+  return true
 }
 
 // Filter receipts
@@ -566,11 +456,12 @@ export function filterReceipts(
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase()
       const matchesSearch =
-        receipt.receiptNumber.toLowerCase().includes(searchLower) ||
-        receipt.tailNumber.toLowerCase().includes(searchLower) ||
-        receipt.customer.toLowerCase().includes(searchLower) ||
-        receipt.fuelerName.toLowerCase().includes(searchLower) ||
-        receipt.location.toLowerCase().includes(searchLower)
+        receipt.receipt_number?.toLowerCase().includes(searchLower) ||
+        receipt.fuel_quantity_gallons_at_receipt_time?.toLowerCase().includes(searchLower) ||
+        receipt.fuel_type_at_receipt_time?.toLowerCase().includes(searchLower) ||
+        receipt.customer_id.toString().includes(searchLower) ||
+        receipt.created_by_user_id.toString().includes(searchLower) ||
+        receipt.fbo_location_id.toString().includes(searchLower)
 
       if (!matchesSearch) {
         return false
@@ -578,7 +469,7 @@ export function filterReceipts(
     }
 
     // Filter by start date
-    if (startDate && new Date(receipt.createdAt) < new Date(startDate)) {
+    if (startDate && new Date(receipt.created_at) < new Date(startDate)) {
       return false
     }
 
@@ -586,7 +477,7 @@ export function filterReceipts(
     if (endDate) {
       const endDateTime = new Date(endDate)
       endDateTime.setHours(23, 59, 59, 999) // End of the day
-      if (new Date(receipt.createdAt) > endDateTime) {
+      if (new Date(receipt.created_at) > endDateTime) {
         return false
       }
     }
@@ -597,7 +488,7 @@ export function filterReceipts(
     }
 
     // Filter by payment method
-    if (paymentMethod && paymentMethod !== "ALL" && receipt.paymentMethod !== paymentMethod) {
+    if (paymentMethod && paymentMethod !== "ALL" && receipt.fuel_type_at_receipt_time !== paymentMethod) {
       return false
     }
 
@@ -612,25 +503,29 @@ export function sortReceipts(receipts: Receipt[], sortBy: string, sortOrder: "as
     let bValue: any
 
     switch (sortBy) {
-      case "receiptNumber":
-        aValue = a.receiptNumber
-        bValue = b.receiptNumber
+      case "receipt_number":
+        aValue = a.receipt_number
+        bValue = b.receipt_number
         break
-      case "customer":
-        aValue = a.customer
-        bValue = b.customer
+      case "customer_id":
+        aValue = a.customer_id
+        bValue = b.customer_id
         break
-      case "amount":
-        aValue = a.amount
-        bValue = b.amount
+      case "fuel_quantity_gallons_at_receipt_time":
+        aValue = a.fuel_quantity_gallons_at_receipt_time
+        bValue = b.fuel_quantity_gallons_at_receipt_time
         break
-      case "createdAt":
-        aValue = new Date(a.createdAt)
-        bValue = new Date(b.createdAt)
+      case "fuel_type_at_receipt_time":
+        aValue = a.fuel_type_at_receipt_time
+        bValue = b.fuel_type_at_receipt_time
         break
-      case "tailNumber":
-        aValue = a.tailNumber
-        bValue = b.tailNumber
+      case "created_at":
+        aValue = new Date(a.created_at)
+        bValue = new Date(b.created_at)
+        break
+      case "fbo_location_id":
+        aValue = a.fbo_location_id
+        bValue = b.fbo_location_id
         break
       case "status":
         aValue = a.status
@@ -662,21 +557,12 @@ export function convertReceiptsToCSV(receipts: Receipt[]): string {
     "Receipt ID",
     "Receipt Number",
     "Fuel Order ID",
-    "Tail Number",
-    "Customer",
+    "Fuel Quantity (Gallons)",
     "Fuel Type",
-    "Quantity (Gallons)",
-    "Amount",
-    "Payment Method",
-    "Status",
+    "Customer ID",
+    "FBO Location ID",
     "Created At",
     "Updated At",
-    "Fueler Name",
-    "Location",
-    "Notes",
-    "Refund Amount",
-    "Refund Reason",
-    "Refunded At",
   ]
 
   // Create CSV content
@@ -685,23 +571,14 @@ export function convertReceiptsToCSV(receipts: Receipt[]): string {
     ...receipts.map((receipt) =>
       [
         receipt.id,
-        receipt.receiptNumber,
-        receipt.fuelOrderId,
-        receipt.tailNumber,
-        receipt.customer,
-        receipt.fuelType,
-        receipt.quantity,
-        receipt.amount,
-        receipt.paymentMethod,
-        receipt.status,
-        receipt.createdAt,
-        receipt.updatedAt || "",
-        receipt.fuelerName,
-        receipt.location,
-        receipt.notes ? `"${receipt.notes.replace(/"/g, '""')}"` : "",
-        receipt.refundAmount || "",
-        receipt.refundReason ? `"${receipt.refundReason.replace(/"/g, '""')}"` : "",
-        receipt.refundedAt || "",
+        receipt.receipt_number,
+        receipt.fuel_order_id,
+        receipt.fuel_quantity_gallons_at_receipt_time,
+        receipt.fuel_type_at_receipt_time,
+        receipt.customer_id,
+        receipt.fbo_location_id,
+        receipt.created_at,
+        receipt.updated_at || "",
       ].join(","),
     ),
   ].join("\n")
@@ -730,110 +607,50 @@ export function downloadReceiptsCSV(csvContent: string, filename: string): void 
 
 // Get receipt statistics
 export function getReceiptStatistics(receipts: Receipt[]) {
-  const stats = {
+  const stats: {
+    total: number;
+    paid: number;
+    draft: number;
+    generated: number;
+    void: number;
+    totalAmount: number;
+  } = {
     total: receipts.length,
     paid: receipts.filter((r) => r.status === "PAID").length,
-    pending: receipts.filter((r) => r.status === "PENDING").length,
-    refunded: receipts.filter((r) => r.status === "REFUNDED").length,
-    totalAmount: receipts.reduce((sum, r) => sum + r.amount, 0),
-    totalRefunded: receipts.filter((r) => r.status === "REFUNDED").reduce((sum, r) => sum + (r.refundAmount || 0), 0),
-  }
+    draft: receipts.filter((r) => r.status === "DRAFT").length,
+    generated: receipts.filter((r) => r.status === "GENERATED").length,
+    void: receipts.filter((r) => r.status === "VOID").length,
+    totalAmount: receipts.reduce((sum, r) => sum + parseFloat(r.grand_total_amount), 0),
+    // No "REFUNDED" status exists, so remove refunded/totalRefunded
+  };
 
-  return stats
+  return stats;
 }
 
 // Plan 5: New functions for receipt generation and editing workflow
 
 // Create draft receipt from fuel order
-export async function createDraftReceipt(fuelOrderId: number): Promise<ExtendedReceipt> {
+export async function createDraftReceipt(fuel_order_id: number): Promise<ExtendedReceipt> {
   const fboId = getCurrentUserFboId();
 
   const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/draft`, {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify({ fuel_order_id: fuelOrderId }),
+    body: JSON.stringify({ fuel_order_id }),
   });
 
-  // The backend returns { message: "...", receipt: {...} }
-  // handleApiResponse will parse this and give us the inner object.
   const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response);
-  
-  // Return the actual receipt object from the backend, which includes the real database ID.
   return data.receipt;
 }
 
 // Update draft receipt
 export async function updateDraftReceipt(receiptId: number, updateData: DraftUpdatePayload): Promise<ExtendedReceipt> {
-  if (isOfflineMode()) {
-    // Mock implementation
-    const storedReceipts = localStorage.getItem("fboReceipts")
-    if (!storedReceipts) {
-      throw new Error("Receipt not found")
-    }
-
-    const receipts = JSON.parse(storedReceipts) as Receipt[]
-    const index = receipts.findIndex((r) => r.id === receiptId)
-
-    if (index === -1) {
-      throw new Error("Receipt not found")
-    }
-
-    const updatedReceipt = {
-      ...receipts[index],
-      updatedAt: new Date().toISOString(),
-    }
-    
-    // Map frontend fields to receipt fields for offline mode
-    if (updateData.customerId !== undefined) {
-      updatedReceipt.customerId = updateData.customerId
-    }
-    
-    if (updateData.aircraftType !== undefined) {
-      updatedReceipt.aircraftTypeAtReceiptTime = updateData.aircraftType
-    }
-    
-    if (updateData.notes !== undefined) {
-      updatedReceipt.notes = updateData.notes
-    }
-
-    receipts[index] = updatedReceipt
-    localStorage.setItem("fboReceipts", JSON.stringify(receipts))
-
-    return {
-      ...updatedReceipt,
-      lineItems: mockLineItems.filter(item => item.receiptId === receiptId)
-    }
-  }
-
-  // Online mode - update via API
   const fboId = getCurrentUserFboId();
-  
-  // Transform frontend field names to backend field names
-  const backendPayload: any = {}
-  
-  if (updateData.customerId !== undefined) {
-    backendPayload.customer_id = updateData.customerId
-  }
-  
-  if (updateData.aircraftType !== undefined) {
-    backendPayload.aircraft_type = updateData.aircraftType
-  }
-  
-  if (updateData.notes !== undefined) {
-    backendPayload.notes = updateData.notes
-  }
-  
-  // Copy any additional fields
-  Object.keys(updateData).forEach(key => {
-    if (!['customerId', 'aircraftType', 'notes'].includes(key)) {
-      backendPayload[key] = updateData[key]
-    }
-  })
 
   const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receiptId}/draft`, {
     method: "PUT",
     headers: getAuthHeaders(),
-    body: JSON.stringify(backendPayload),
+    body: JSON.stringify(updateData),
   })
 
   const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response)
@@ -841,209 +658,47 @@ export async function updateDraftReceipt(receiptId: number, updateData: DraftUpd
 }
 
 // Calculate fees for receipt
-export async function calculateFeesForReceipt(receiptId: number): Promise<ExtendedReceipt> {
-  if (isOfflineMode()) {
-    // Mock implementation with calculated fees
-    const receipt = await getReceipt(receiptId)
-    
-    const calculatedReceipt: Receipt = {
-      ...receipt,
-      totalFeesAmount: 150.00,
-      totalWaiversAmount: -50.00,
-      taxAmount: 60.00,
-      grandTotalAmount: 660.00,
-      updatedAt: new Date().toISOString()
-    }
+export async function calculateFeesForReceipt(receiptId: number, additionalServices?: Array<{ fee_code: string, quantity: number }>): Promise<ExtendedReceipt> {
+  const fboId = getCurrentUserFboId();
 
-    const calculatedLineItems: ReceiptLineItem[] = [
-      {
-        id: 1,
-        receiptId,
-        lineItemType: 'FUEL',
-        description: 'Jet A Fuel',
-        quantity: 100,
-        unitPrice: 5.00,
-        amount: 500.00
-      },
-      {
-        id: 2,
-        receiptId,
-        lineItemType: 'FEE',
-        description: 'Ramp Fee',
-        feeCodeApplied: 'RAMP_FEE',
-        quantity: 1,
-        unitPrice: 100.00,
-        amount: 100.00
-      },
-      {
-        id: 3,
-        receiptId,
-        lineItemType: 'FEE',
-        description: 'GPU Service',
-        feeCodeApplied: 'GPU_SERVICE',
-        quantity: 1,
-        unitPrice: 50.00,
-        amount: 50.00
-      },
-      {
-        id: 4,
-        receiptId,
-        lineItemType: 'WAIVER',
-        description: 'Fuel Uplift Waiver (Ramp Fee)',
-        feeCodeApplied: 'RAMP_FEE_WAIVER',
-        quantity: 1,
-        unitPrice: -50.00,
-        amount: -50.00
-      },
-      {
-        id: 5,
-        receiptId,
-        lineItemType: 'TAX',
-        description: 'Tax',
-        quantity: 1,
-        unitPrice: 60.00,
-        amount: 60.00
-      }
-    ]
-
-    // Update stored receipt
-    const storedReceipts = localStorage.getItem("fboReceipts")
-    if (storedReceipts) {
-      const receipts = JSON.parse(storedReceipts) as Receipt[]
-      const index = receipts.findIndex((r) => r.id === receiptId)
-      if (index !== -1) {
-        receipts[index] = calculatedReceipt
-        localStorage.setItem("fboReceipts", JSON.stringify(receipts))
-      }
-    }
-
-    return {
-      ...calculatedReceipt,
-      lineItems: calculatedLineItems
-    }
-  }
-
-  // Online mode - calculate via API
-  const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}/calculate-fees`, {
+  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receiptId}/calculate-fees`, {
     method: "POST",
     headers: getAuthHeaders(),
+    body: JSON.stringify({ additional_services: additionalServices || [] }),
   })
 
-  return handleApiResponse<ExtendedReceipt>(response)
+  const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response)
+  return data.receipt
 }
 
 // Generate final receipt
 export async function generateFinalReceipt(receiptId: number): Promise<ExtendedReceipt> {
-  if (isOfflineMode()) {
-    // Mock implementation
-    const receipt = await getReceipt(receiptId)
-    
-    const generatedReceipt: Receipt = {
-      ...receipt,
-      receiptNumber: `RCP-${new Date().getFullYear()}-${String(receiptId).padStart(4, '0')}`,
-      status: 'GENERATED',
-      generatedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
+  const fboId = getCurrentUserFboId();
 
-    // Update stored receipt
-    const storedReceipts = localStorage.getItem("fboReceipts")
-    if (storedReceipts) {
-      const receipts = JSON.parse(storedReceipts) as Receipt[]
-      const index = receipts.findIndex((r) => r.id === receiptId)
-      if (index !== -1) {
-        receipts[index] = generatedReceipt
-        localStorage.setItem("fboReceipts", JSON.stringify(receipts))
-      }
-    }
-
-    return {
-      ...generatedReceipt,
-      lineItems: mockLineItems.filter(item => item.receiptId === receiptId)
-    }
-  }
-
-  // Online mode - generate via API
-  const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}/generate`, {
+  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receiptId}/generate`, {
     method: "POST",
     headers: getAuthHeaders(),
   })
 
-  return handleApiResponse<ExtendedReceipt>(response)
+  const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response)
+  return data.receipt
 }
 
 // Mark receipt as paid
 export async function markReceiptAsPaid(receiptId: number): Promise<ExtendedReceipt> {
-  if (isOfflineMode()) {
-    // Mock implementation
-    const receipt = await getReceipt(receiptId)
-    
-    const paidReceipt: Receipt = {
-      ...receipt,
-      status: 'PAID',
-      paidAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
+  const fboId = getCurrentUserFboId();
 
-    // Update stored receipt
-    const storedReceipts = localStorage.getItem("fboReceipts")
-    if (storedReceipts) {
-      const receipts = JSON.parse(storedReceipts) as Receipt[]
-      const index = receipts.findIndex((r) => r.id === receiptId)
-      if (index !== -1) {
-        receipts[index] = paidReceipt
-        localStorage.setItem("fboReceipts", JSON.stringify(receipts))
-      }
-    }
-
-    return {
-      ...paidReceipt,
-      lineItems: mockLineItems.filter(item => item.receiptId === receiptId)
-    }
-  }
-
-  // Online mode - mark as paid via API
-  const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}/mark-paid`, {
+  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receiptId}/mark-paid`, {
     method: "POST",
     headers: getAuthHeaders(),
   })
 
-  return handleApiResponse<ExtendedReceipt>(response)
+  const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response)
+  return data.receipt
 }
 
-/**
- * Void a receipt - Plan 8 implementation
- */
+// Void receipt
 export async function voidReceipt(receiptId: number, reason?: string): Promise<Receipt> {
-  if (isOfflineMode()) {
-    // Mock implementation for offline mode
-    const receipt = await getReceipt(receiptId)
-    
-    if (receipt.status !== 'GENERATED' && receipt.status !== 'PAID') {
-      throw new Error(`Cannot void receipt with status ${receipt.status}`)
-    }
-    
-    const voidedReceipt: Receipt = {
-      ...receipt,
-      status: 'VOID',
-      updatedAt: new Date().toISOString(),
-      notes: reason ? `${receipt.notes || ''}\nVOIDED: ${reason}` : `${receipt.notes || ''}\nVOIDED`
-    }
-
-    // Update stored receipt
-    const storedReceipts = localStorage.getItem("fboReceipts")
-    if (storedReceipts) {
-      const receipts = JSON.parse(storedReceipts) as Receipt[]
-      const index = receipts.findIndex((r) => r.id === receiptId)
-      if (index !== -1) {
-        receipts[index] = voidedReceipt
-        localStorage.setItem("fboReceipts", JSON.stringify(receipts))
-      }
-    }
-    
-    return voidedReceipt
-  }
-
   const fboId = getCurrentUserFboId();
   const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receiptId}/void`, {
     method: 'POST',

@@ -10,7 +10,7 @@ interface ReceiptTotalsProps {
 }
 
 export default function ReceiptTotals({ receipt }: ReceiptTotalsProps) {
-  const hasCalculatedTotals = receipt.grandTotalAmount !== undefined && receipt.grandTotalAmount > 0
+  const hasCalculatedTotals = receipt.grand_total_amount !== undefined && parseFloat(receipt.grand_total_amount) > 0
 
   return (
     <Card>
@@ -28,7 +28,7 @@ export default function ReceiptTotals({ receipt }: ReceiptTotalsProps) {
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Fuel Subtotal:</span>
               <span className="text-sm">
-                {formatCurrency(receipt.fuelSubtotal || 0)}
+                {formatCurrency(parseFloat(receipt.fuel_subtotal || '0'))}
               </span>
             </div>
 
@@ -36,16 +36,16 @@ export default function ReceiptTotals({ receipt }: ReceiptTotalsProps) {
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Total Fees:</span>
               <span className="text-sm">
-                {formatCurrency(receipt.totalFeesAmount || 0)}
+                {formatCurrency(parseFloat(receipt.total_fees_amount || '0'))}
               </span>
             </div>
 
             {/* Total Waivers */}
-            {receipt.totalWaiversAmount !== undefined && receipt.totalWaiversAmount !== 0 && (
+            {receipt.total_waivers_amount !== undefined && parseFloat(receipt.total_waivers_amount) !== 0 && (
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-green-700">Total Waivers:</span>
                 <span className="text-sm text-green-600 font-medium">
-                  {formatCurrency(receipt.totalWaiversAmount)}
+                  {formatCurrency(parseFloat(receipt.total_waivers_amount))}
                 </span>
               </div>
             )}
@@ -54,7 +54,7 @@ export default function ReceiptTotals({ receipt }: ReceiptTotalsProps) {
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium">Tax:</span>
               <span className="text-sm">
-                {formatCurrency(receipt.taxAmount || 0)}
+                {formatCurrency(parseFloat(receipt.tax_amount || '0'))}
               </span>
             </div>
 
@@ -67,12 +67,12 @@ export default function ReceiptTotals({ receipt }: ReceiptTotalsProps) {
                 className="text-lg font-bold text-primary"
                 data-cy="grand-total"
               >
-                {formatCurrency(receipt.grandTotalAmount || 0)}
+                {formatCurrency(parseFloat(receipt.grand_total_amount || '0'))}
               </span>
             </div>
 
             {/* CAA Applied Indicator */}
-            {receipt.isCaaApplied && (
+            {receipt.is_caa_applied && (
               <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-blue-500 rounded-full"></div>

@@ -66,6 +66,7 @@ class Receipt(db.Model):
             'fbo_location_id': self.fbo_location_id,
             'fuel_order_id': self.fuel_order_id,
             'customer_id': self.customer_id,
+            'fuel_order_tail_number': self.fuel_order.tail_number if self.fuel_order else None,
             'aircraft_type_at_receipt_time': self.aircraft_type_at_receipt_time,
             'fuel_type_at_receipt_time': self.fuel_type_at_receipt_time,
             'fuel_quantity_gallons_at_receipt_time': str(self.fuel_quantity_gallons_at_receipt_time) if self.fuel_quantity_gallons_at_receipt_time else None,

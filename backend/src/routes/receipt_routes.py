@@ -83,15 +83,20 @@ def create_draft_receipt(fbo_id):
     """
     print(f"--- ROUTE: Entered create_draft_receipt. g.current_user is: {getattr(g, 'current_user', 'NOT SET')}", flush=True)
     try:
-        data = create_draft_receipt_schema.load(request.get_json() or {})
-        user_id = g.current_user.id
-        
+        json_data = request.get_json()
+        if not isinstance(json_data, dict):
+            raise ValidationError({'_schema': ['Invalid input type. Expected a JSON object.']})
+        data = create_draft_receipt_schema.load(json_data)
+        user_id = getattr(g.current_user, 'id', None)
+        fuel_order_id = data['fuel_order_id'] if isinstance(data, dict) and 'fuel_order_id' in data else None
+        if fuel_order_id is None:
+            raise ValidationError({'fuel_order_id': ['Missing data for required field.']})
+
         receipt = receipt_service.create_draft_from_fuel_order(
-            fuel_order_id=data['fuel_order_id'],
+            fuel_order_id=fuel_order_id,
             fbo_location_id=fbo_id,
-            user_id=user_id
+            user_id=user_id if user_id is not None else 0  # Ensure user_id is int, fallback to 0 if None
         )
-        
         response_data = {
             "message": "Draft receipt created successfully.",
             "receipt": receipt.to_dict()
@@ -111,16 +116,11 @@ def create_draft_receipt(fbo_id):
         else:
             return jsonify({'error': error_msg}), 400
     except Exception as e:
-        # --- THIS IS THE TEMPORARY DEBUGGING BLOCK ---
-        # Log the full exception details to the console
-        import traceback
-        traceback.print_exc() 
-        
+        current_app.logger.error(f"Unexpected error creating draft receipt: {str(e)}")
         return jsonify({
             "error": "An unexpected server error occurred during draft creation.",
-            "details": f"Error Type: {type(e).__name__}, Message: {str(e)}"
+            "timestamp": datetime.utcnow().isoformat()
         }), 500
-        # --- END DEBUGGING BLOCK ---
 
 @receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/<int:receipt_id>/draft', methods=['PUT'])
 @require_permission_v2('update_receipt')
@@ -149,11 +149,9 @@ def update_draft_receipt(fbo_id, receipt_id):
         receipt = receipt_service.update_draft(
             receipt_id=receipt_id,
             fbo_location_id=fbo_id,
-            update_data=data,
+            update_data=dict(data) if isinstance(data, dict) else {},
             user_id=user_id
         )
-        
-        # Serialize response
         response_data = {
             'receipt': receipt.to_dict(),
             'message': 'Draft receipt updated successfully'
@@ -197,9 +195,14 @@ def calculate_receipt_fees(fbo_id, receipt_id):
         
         # Fetch receipt with line items for response
         receipt_with_line_items = receipt_service.get_receipt_by_id(receipt_id, fbo_id)
+        if not receipt_with_line_items:
+            return jsonify({'error': 'Receipt not found'}), 404
+
         receipt_dict = receipt_with_line_items.to_dict()
-        receipt_dict['line_items'] = [item.to_dict() for item in receipt_with_line_items.line_items]
-        
+        # Ensure line_items is iterable and not None
+        line_items = getattr(receipt_with_line_items, 'line_items', []) or []
+        receipt_dict['line_items'] = [item.to_dict() for item in line_items]
+
         # Serialize response
         response_data = {
             'receipt': receipt_dict,
@@ -352,13 +355,13 @@ def list_receipts(fbo_id):
     try:
         # Validate query parameters
         query_params = receipt_list_query_schema.load(request.args.to_dict())
-        
+
         # Extract filters and pagination
+        if not isinstance(query_params, dict):
+            raise ValidationError('Invalid query parameters format')
         filters = {k: v for k, v in query_params.items() if k not in ['page', 'per_page']}
         page = query_params.get('page', 1)
         per_page = query_params.get('per_page', 50)
-        
-        # Get receipts from service
         result = receipt_service.get_receipts(
             fbo_location_id=fbo_id,
             filters=filters,
@@ -393,10 +396,12 @@ def get_receipt_by_id(fbo_id, receipt_id):
         
         # Serialize receipt with line items
         receipt_dict = receipt.to_dict()
-        receipt_dict['line_items'] = [item.to_dict() for item in receipt.line_items]
+        # Ensure line_items is present and iterable
+        line_items = getattr(receipt, 'line_items', []) or []
+        receipt_dict['line_items'] = [item.to_dict() for item in line_items]
         
         return jsonify({'receipt': receipt_dict}), 200
-        
+
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
 
@@ -428,8 +433,12 @@ def toggle_line_item_waiver(fbo_id, receipt_id, line_item_id):
         
         # Fetch updated receipt with line items for response
         updated_receipt = receipt_service.get_receipt_by_id(receipt_id, fbo_id)
+        if not updated_receipt:
+            return jsonify({'error': f'Receipt {receipt_id} not found for FBO {fbo_id}'}), 404
         receipt_dict = updated_receipt.to_dict()
-        receipt_dict['line_items'] = [item.to_dict() for item in updated_receipt.line_items]
+        # Ensure line_items is present and iterable
+        line_items = getattr(updated_receipt, 'line_items', []) or []
+        receipt_dict['line_items'] = [item.to_dict() for item in line_items]
         
         # Serialize response
         response_data = {
