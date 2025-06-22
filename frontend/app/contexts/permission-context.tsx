@@ -103,20 +103,16 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Simple permission fetching - single API call as source of truth
   const loadUserPermissions = useCallback(async () => {
-    console.log("%c[PermissionProvider] Starting permission load...", "color: blue; font-weight: bold;")
     setState('LOADING_SESSION')
 
     // Check if user has token
     const currentUser = getCurrentUser()
     if (!currentUser || !currentUser.access_token) {
-      console.log("[PermissionProvider] No token found - user unauthenticated")
       setState('UNAUTHENTICATED')
       return
     }
 
     try {
-      console.log("%c[PermissionProvider] Fetching permissions from API...", "color: blue;")
-      
       // Single API call - source of truth
       const response = await fetch(`${API_BASE_URL}/auth/me/permissions`, {
         method: "GET",
@@ -125,7 +121,6 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
-          console.error("[PermissionProvider] Authentication failed - logging out")
           logout()
           setState('UNAUTHENTICATED')
           return
@@ -134,7 +129,6 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
 
              const data = await handleApiResponse(response) as any // API returns {message: string, permissions: string[]}
-       console.log("%c[PermissionProvider] Permissions loaded successfully", "color: green;", data)
 
        // Update state with API response
        setUser(currentUser)
@@ -156,10 +150,7 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setState('AUTHENTICATED')
 
     } catch (error: any) {
-      console.error("%c[PermissionProvider] Failed to load permissions", "color: red; font-weight: bold;", error)
-      
       if (error.message.includes("401") || error.message.includes("403")) {
-        console.error("[PermissionProvider] Authentication error - logging out")
         logout()
         setState('UNAUTHENTICATED')
       } else {
@@ -236,7 +227,6 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       await loadUserPermissions()
       return state === 'AUTHENTICATED'
     } catch (error) {
-      console.error("Failed to refresh permissions:", error)
       return false
     }
   }, [loadUserPermissions, state])
@@ -286,9 +276,8 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [hasAnyPermissionMethod])
 
   // Authentication check
-  const isAuthenticated = useCallback(() => {
+  const isAuthenticated = useCallback((): boolean => {
     const result = state === 'AUTHENTICATED'
-    console.log(`[PermissionProvider] isAuthenticated() called. State: ${state}, Result: ${result}`)
     return result
   }, [state])
 

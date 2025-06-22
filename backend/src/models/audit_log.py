@@ -21,6 +21,13 @@ class AuditLog(db.Model):
     # Relationships
     user = db.relationship('User', backref=db.backref('audit_logs', lazy='dynamic'))
 
+    def __init__(self, user_id, entity_type, entity_id, action, details=None):
+        self.user_id = user_id
+        self.entity_type = entity_type
+        self.entity_id = entity_id
+        self.action = action
+        self.details = details
+
     def to_dict(self):
         """Convert audit log object to dictionary for JSON serialization."""
         return {

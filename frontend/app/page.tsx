@@ -63,36 +63,36 @@ export default function Home() {
 
   const testimonials = [
     {
-      name: "Sarah Johnson",
-      title: "Operations Manager",
-      company: "Skyline Aviation",
+      name: "Marcus Thompson",
+      title: "General Manager",
+      company: "City Executive Airport",
       content:
-        "FBO LaunchPad has revolutionized how we track aircraft ownership. We've reduced billing errors by 95% and improved our customer relationships significantly.",
+        "FBO LaunchPad has transformed our fueling operations. We've eliminated radio miscommunications and our line technicians love the mobile interface. Customer satisfaction is at an all-time high.",
       rating: 5,
     },
     {
-      name: "Mike Rodriguez",
-      title: "FBO Director",
-      company: "Atlantic Air Services",
+      name: "Sarah Rodriguez",
+      title: "Operations Director",
+      company: "Atlantic Aviation Services",
       content:
-        "The AI-powered monitoring system caught ownership changes we would have missed for weeks. It's like having a dedicated researcher working 24/7.",
+        "The real-time visibility into our fueling operations has been a game-changer. Management can now see exactly what's happening on the line and address issues before they become problems.",
       rating: 5,
     },
     {
       name: "Jennifer Chen",
-      title: "Customer Service Lead",
+      title: "Customer Service Manager",
       company: "Mountain View FBO",
       content:
-        "Our team loves the instant notifications. We can welcome new owners immediately and maintain accurate records effortlessly.",
+        "Our CSRs can now create detailed fuel orders with confidence, knowing that all information reaches the line technicians accurately. No more lost paper tickets or miscommunications.",
       rating: 5,
     },
   ]
 
   const stats = [
-    { label: "FBOs Trust Us", value: "500+", icon: Users },
-    { label: "Aircraft Monitored", value: "10K+", icon: Plane },
-    { label: "Ownership Changes Detected", value: "2.5K+", icon: TrendingUp },
-    { label: "Customer Satisfaction", value: "99%", icon: Award },
+    { label: "FBOs Trust Us", value: "150+", icon: Users },
+    { label: "Fuel Orders Processed", value: "25K+", icon: Plane },
+    { label: "Time Saved Daily", value: "4hrs", icon: TrendingUp },
+    { label: "Error Reduction", value: "95%", icon: Award },
   ]
 
   return (
@@ -109,11 +109,10 @@ export default function Home() {
                 className={`space-y-6 transition-all duration-1000 ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"}`}
               >
                 <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-foreground leading-tight">
-                  Real-Time Aircraft <span className="text-primary">Ownership Intelligence</span>
+                  From Fuel Request to <span className="text-primary">Fulfillment, Seamlessly</span>
                 </h1>
                 <p className="text-muted-foreground text-lg md:text-xl leading-relaxed max-w-2xl">
-                  Our AI-powered monitoring system provides instant alerts when aircraft change hands, keeping your FBO
-                  operations streamlined and error-free.
+                  The all-in-one platform connecting CSRs, Line Technicians, and management for faster, safer, and more accurate fueling operations.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 pt-4">
                   <Button
@@ -123,7 +122,7 @@ export default function Home() {
                     onClick={handleDemoClick}
                   >
                     <Plane className="h-5 w-5 mr-2 rotate-45" />
-                    Request a Demo
+                    Request a Live Demo
                     <ArrowRight className="h-4 w-4 ml-2" />
                   </Button>
                   <Button
@@ -135,7 +134,7 @@ export default function Home() {
                     }}
                   >
                     <BarChart2 className="h-4 w-4 mr-2" />
-                    Explore Features
+                    See How It Works
                   </Button>
                 </div>
 
@@ -158,9 +157,9 @@ export default function Home() {
                 <div className="absolute inset-0 bg-primary/10 rounded-2xl blur-3xl"></div>
                 <div className="relative bg-card border rounded-2xl p-6 shadow-2xl">
                   <img
-                    alt="FBO LaunchPad Aircraft Monitoring Dashboard"
+                    alt="FBO LaunchPad Fueling Operations Dashboard"
                     className="relative z-10 w-full rounded-xl object-cover"
-                    src="/images/aircraft-monitoring.png"
+                    src="/images/tablet-interface.png"
                   />
                   <div className="absolute -bottom-4 -right-4 w-20 h-20 bg-accent/20 rounded-full blur-xl"></div>
                 </div>
@@ -175,10 +174,10 @@ export default function Home() {
             <div className="flex flex-col items-center justify-center space-y-4 text-center">
               <div className="space-y-4 max-w-3xl">
                 <h2 className="text-3xl font-bold tracking-tight md:text-5xl text-foreground">
-                  The Hidden Turbulence of Outdated Aircraft Records
+                  Tired of Radio Chatter and Paper Tickets?
                 </h2>
                 <p className="text-muted-foreground text-lg md:text-xl leading-relaxed">
-                  FBOs face significant operational headwinds when aircraft ownership changes fly under the radar.
+                  Manual coordination creates chaos, delays, and costly errors in your fueling operations.
                 </p>
               </div>
             </div>
@@ -188,9 +187,9 @@ export default function Home() {
                   <div className="rounded-full bg-destructive/10 p-4 w-fit mx-auto group-hover:bg-destructive/20 transition-colors">
                     <AlertCircle className="h-8 w-8 text-destructive" />
                   </div>
-                  <h3 className="text-xl font-bold text-foreground">Billing Turbulence</h3>
+                  <h3 className="text-xl font-bold text-foreground">Lost in Translation</h3>
                   <p className="text-muted-foreground leading-relaxed">
-                    Sending invoices to previous owners creates payment delays and collection crosswinds.
+                    Radio miscommunications and handwritten notes lead to fuel type errors and incomplete services.
                   </p>
                 </CardContent>
               </Card>
@@ -199,9 +198,9 @@ export default function Home() {
                   <div className="rounded-full bg-amber-100 dark:bg-amber-900/30 p-4 w-fit mx-auto group-hover:bg-amber-200 dark:group-hover:bg-amber-900/50 transition-colors">
                     <Clock className="h-8 w-8 text-amber-600 dark:text-amber-400" />
                   </div>
-                  <h3 className="text-xl font-bold text-foreground">Time in Holding Pattern</h3>
+                  <h3 className="text-xl font-bold text-foreground">No Real-Time Visibility</h3>
                   <p className="text-muted-foreground leading-relaxed">
-                    Hours spent manually verifying ownership details that could be on autopilot.
+                    Management can't see what's happening on the line until it's too late to prevent problems.
                   </p>
                 </CardContent>
               </Card>
@@ -210,12 +209,23 @@ export default function Home() {
                   <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-4 w-fit mx-auto group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors">
                     <Shield className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                   </div>
-                  <h3 className="text-xl font-bold text-foreground">Security Vulnerabilities</h3>
+                  <h3 className="text-xl font-bold text-foreground">Audit Trail Gaps</h3>
                   <p className="text-muted-foreground leading-relaxed">
-                    Not knowing the current responsible party creates potential security breaches in your airspace.
+                    Paper tickets get lost, damaged, or incomplete, leaving you vulnerable during audits and disputes.
                   </p>
                 </CardContent>
               </Card>
+            </div>
+            
+            {/* Animated Diagram */}
+            <div className="flex justify-center mt-16">
+              <div className="relative">
+                <img
+                  src="/images/workflow-diagram.png"
+                  alt="Chaotic radio and paper workflow transforming into streamlined digital process"
+                  className="max-w-2xl w-full"
+                />
+              </div>
             </div>
           </div>
         </section>
@@ -229,26 +239,25 @@ export default function Home() {
                   Introducing FBO LaunchPad
                 </h2>
                 <p className="text-muted-foreground text-lg leading-relaxed">
-                  Your AI-powered ownership radar that continuously monitors official aircraft registration data with
-                  machine learning precision.
+                  The digital command center that connects your entire fueling operation from request to completion, eliminating miscommunication and manual errors.
                 </p>
                 <ul className="space-y-4">
                   <li className="flex items-start gap-3">
                     <CheckCircle2 className="h-6 w-6 text-primary mt-0.5 flex-shrink-0" />
                     <span className="text-foreground leading-relaxed">
-                      Receive instant alerts when ownership changes are detected by our neural network
+                      CSRs create detailed fuel orders with aircraft info, fuel type, and special instructions
                     </span>
                   </li>
                   <li className="flex items-start gap-3">
                     <CheckCircle2 className="h-6 w-6 text-primary mt-0.5 flex-shrink-0" />
                     <span className="text-foreground leading-relaxed">
-                      Get accurate, up-to-date information delivered directly to your dashboard
+                      Line Technicians receive orders on mobile devices with real-time updates and photo capture
                     </span>
                   </li>
                   <li className="flex items-start gap-3">
                     <CheckCircle2 className="h-6 w-6 text-primary mt-0.5 flex-shrink-0" />
                     <span className="text-foreground leading-relaxed">
-                      Track all aircraft in your airspace with automated monitoring
+                      Management gets complete visibility with digital audit trails and performance analytics
                     </span>
                   </li>
                 </ul>
@@ -257,16 +266,16 @@ export default function Home() {
                 <div className="grid grid-cols-3 gap-6 items-center">
                   <div className="flex flex-col items-center space-y-4">
                     <div className="rounded-full bg-primary/10 p-6 border-2 border-primary/20 hover:border-primary/40 transition-colors">
-                      <Database className="h-8 w-8 text-primary" />
+                      <ClipboardList className="h-8 w-8 text-primary" />
                     </div>
-                    <p className="text-sm font-medium text-center text-foreground">AI Monitoring</p>
+                    <p className="text-sm font-medium text-center text-foreground">Create Order</p>
                   </div>
                   <ArrowRight className="h-6 w-6 text-muted-foreground justify-self-center" />
                   <div className="flex flex-col items-center space-y-4">
                     <div className="rounded-full bg-primary/10 p-6 border-2 border-primary/20 hover:border-primary/40 transition-colors">
-                      <Cpu className="h-8 w-8 text-primary" />
+                      <Zap className="h-8 w-8 text-primary" />
                     </div>
-                    <p className="text-sm font-medium text-center text-foreground">ML Processing</p>
+                    <p className="text-sm font-medium text-center text-foreground">Execute Service</p>
                   </div>
                   <div className="col-span-3 flex justify-center">
                     <ArrowRight className="h-6 w-6 text-muted-foreground rotate-90" />
@@ -274,9 +283,9 @@ export default function Home() {
                   <div className="col-span-3 flex justify-center">
                     <div className="flex flex-col items-center space-y-4">
                       <div className="rounded-full bg-primary/10 p-6 border-2 border-primary/20 hover:border-primary/40 transition-colors">
-                        <Bell className="h-8 w-8 text-primary" />
+                        <CheckCircle2 className="h-8 w-8 text-primary" />
                       </div>
-                      <p className="text-sm font-medium text-center text-foreground">Smart Alerts</p>
+                      <p className="text-sm font-medium text-center text-foreground">Complete & Verify</p>
                     </div>
                   </div>
                 </div>
@@ -445,10 +454,10 @@ export default function Home() {
             <div className="flex flex-col items-center justify-center space-y-4 text-center mb-16">
               <div className="space-y-4">
                 <h2 className="text-3xl font-bold tracking-tight md:text-5xl text-foreground">
-                  Simple Setup, Powerful Results
+                  How It Works: Three Simple Steps
                 </h2>
                 <p className="max-w-3xl text-muted-foreground text-lg md:text-xl leading-relaxed">
-                  Get started in minutes and let FBO LaunchPad's AI do the heavy lifting.
+                  From fuel request to completion, FBO LaunchPad streamlines your entire workflow.
                 </p>
               </div>
             </div>
@@ -457,27 +466,27 @@ export default function Home() {
               {[
                 {
                   step: "1",
-                  title: "Aircraft Registration",
+                  title: "Create & Dispatch",
                   description:
-                    "Simply enter the tail numbers of aircraft you want to monitor. Our AI system will track these aircraft and alert you to any ownership changes in real-time.",
-                  image: "/images/aircraft-verification.png",
-                  alt: "FBO staff verifying aircraft information",
+                    "CSRs create detailed fuel orders with aircraft information, fuel type, quantity, and special instructions. Orders are instantly dispatched to available Line Service Technicians with all necessary details.",
+                  image: "/images/tablet-interface.png",
+                  alt: "CSR creating fuel order on tablet interface",
                 },
                 {
                   step: "2",
-                  title: "Neural Network Monitoring",
+                  title: "Execute & Update",
                   description:
-                    "Our AI system securely monitors relevant ownership databases 24/7, using machine learning to detect any changes to the registration or ownership status of your tracked aircraft.",
-                  image: "/images/automated-monitoring.png",
-                  alt: "Automated aircraft monitoring system",
+                    "Line Technicians receive orders on their mobile devices, update status in real-time, capture photos for verification, and communicate any issues instantly back to the CSR team.",
+                  image: "/images/tablet-interface.png",
+                  alt: "Line technician using mobile device during fueling",
                 },
                 {
                   step: "3",
-                  title: "Real-Time Notifications",
+                  title: "Review & Complete",
                   description:
-                    "Receive automatic alerts upon detected changes via email and dashboard. Our cloud-based system keeps you informed about ownership changes as they happen, allowing you to update your records immediately.",
-                  image: "/images/instant-notifications.png",
-                  alt: "Verification notifications on tablet",
+                    "Management reviews completed orders with full digital audit trails, photos, timestamps, and performance metrics. All data is automatically stored for billing, compliance, and analysis.",
+                  image: "/images/tablet-interface.png",
+                  alt: "Management reviewing completed fuel orders and analytics",
                 },
               ].map((item, index) => (
                 <div

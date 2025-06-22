@@ -21,6 +21,7 @@ from .waiver_tier import WaiverTier
 from .receipt import Receipt, ReceiptStatus
 from .receipt_line_item import ReceiptLineItem, LineItemType
 from .audit_log import AuditLog
+from .fee_rule_override import FeeRuleOverride
 
 __all__ = [
     'Base',
@@ -52,5 +53,6 @@ __all__ = [
     'ReceiptStatus',
     'ReceiptLineItem',
     'LineItemType',
-    'AuditLog'
+    'AuditLog',
+    'FeeRuleOverride'
 ]

@@ -1,0 +1,3 @@
+PLACEHOLDER: tablet-interface.png
+This file represents a tablet displaying the FBO LaunchPad interface.
+Replace with actual design assets showing a clean, modern tablet interface with the FBO LaunchPad dashboard. 

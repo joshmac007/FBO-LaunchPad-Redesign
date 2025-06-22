@@ -151,8 +151,8 @@ def delete_aircraft(tail_number):
             type: string
           required: true
       responses:
-        204:
-          description: Aircraft deleted
+        200:
+          description: Aircraft deleted successfully
         404:
           description: Not found
         409:
@@ -161,4 +161,4 @@ def delete_aircraft(tail_number):
     deleted, msg, status = AircraftService.delete_aircraft(tail_number)
     if not deleted:
         return jsonify({"error": msg}), status
-    return '', 204
+    return jsonify({"message": msg}), status

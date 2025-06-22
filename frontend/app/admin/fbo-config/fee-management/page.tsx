@@ -1,63 +1,55 @@
-"use client";
+"use client"
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileSliders, Trophy } from "lucide-react";
-import { FeeStructureTab } from "./components/FeeStructureTab";
-import { WaiverTiersTab } from "./components/WaiverTiersTab";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { Toaster } from "sonner"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { FeeScheduleTab } from "./components/FeeScheduleTab"
 
-export default function UnifiedFeeManagementPage() {
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      retry: 2,
+    },
+    mutations: {
+      retry: 1,
+    },
+  },
+})
+
+export default function FeeManagementPage() {
   return (
-      <div className="space-y-6 p-4 md:p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Fee Management</h1>
-          <p className="text-muted-foreground">
-            Comprehensive fee configuration and waiver management
-          </p>
+    <QueryClientProvider client={queryClient}>
+      <div className="container mx-auto py-8 space-y-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">FBO Configuration</h1>
+            <p className="text-muted-foreground">Manage fees, waivers, and aircraft configurations</p>
+          </div>
         </div>
+
+        <Tabs defaultValue="fee-schedule" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="fee-schedule">Fee Schedule</TabsTrigger>
+            <TabsTrigger value="waiver-tiers">Waiver Tiers</TabsTrigger>
+            <TabsTrigger value="other-fees">Other Fees</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="fee-schedule" className="space-y-6">
+            <FeeScheduleTab />
+          </TabsContent>
+
+          <TabsContent value="waiver-tiers" className="space-y-6">
+            <div className="text-center py-12 text-muted-foreground">Waiver Tiers configuration coming soon...</div>
+          </TabsContent>
+
+          <TabsContent value="other-fees" className="space-y-6">
+            <div className="text-center py-12 text-muted-foreground">Other Fees configuration coming soon...</div>
+          </TabsContent>
+        </Tabs>
       </div>
 
-      <Tabs defaultValue="structure" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="structure" className="flex items-center gap-2">
-            <FileSliders className="h-4 w-4" />
-            Fee Structure
-          </TabsTrigger>
-          <TabsTrigger value="waivers" className="flex items-center gap-2">
-            <Trophy className="h-4 w-4" />
-            Waiver Tiers
-          </TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="structure" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Fee Structure Management</CardTitle>
-              <CardDescription>
-                Manage fee categories, rules, and aircraft mappings in a unified workspace
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <FeeStructureTab />
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="waivers" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Waiver Tiers Management</CardTitle>
-              <CardDescription>
-                Configure waiver tiers and fuel uplift requirements
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <WaiverTiersTab />
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-} 
+      <Toaster position="top-right" />
+    </QueryClientProvider>
+  )
+}

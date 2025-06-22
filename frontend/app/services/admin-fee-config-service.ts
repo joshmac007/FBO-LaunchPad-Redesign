@@ -54,6 +54,47 @@ export interface WaiverTier {
   updated_at: string;
 }
 
+// New interfaces for Phase 2 - Consolidated Fee Schedule
+export interface FeeRuleOverride {
+  id: number;
+  fbo_location_id: number;
+  aircraft_type_id: number;
+  fee_rule_id: number;
+  override_amount?: number;
+  override_caa_amount?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FBOAircraftTypeConfig {
+  id: number;
+  fbo_location_id: number;
+  aircraft_type_id: number;
+  base_min_fuel_gallons_for_waiver: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConsolidatedFeeSchedule {
+  categories: FeeCategory[];
+  rules: FeeRule[];
+  mappings: AircraftMapping[];
+  overrides: FeeRuleOverride[];
+  fbo_aircraft_configs: FBOAircraftTypeConfig[];
+}
+
+export interface UpsertFeeRuleOverrideRequest {
+  aircraft_type_id: number;
+  fee_rule_id: number;
+  override_amount?: number;
+  override_caa_amount?: number;
+}
+
+export interface DeleteFeeRuleOverrideRequest {
+  aircraft_type_id: number;
+  fee_rule_id: number;
+}
+
 export interface CreateFeeCategoryRequest {
   name: string;
 }
@@ -288,6 +329,36 @@ export const deleteWaiverTier = async (fboId: number, tierId: number): Promise<v
   return handleApiResponse<void>(response);
 };
 
+// New API functions for Phase 2
+export const getConsolidatedFeeSchedule = async (fboId: number): Promise<ConsolidatedFeeSchedule> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-schedule/consolidated`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+  
+  return handleApiResponse<ConsolidatedFeeSchedule>(response);
+};
+
+export const upsertFeeRuleOverride = async (fboId: number, data: UpsertFeeRuleOverrideRequest): Promise<FeeRuleOverride> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-rule-overrides`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  
+  return handleApiResponse<FeeRuleOverride>(response);
+};
+
+export const deleteFeeRuleOverride = async (fboId: number, data: DeleteFeeRuleOverrideRequest): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-rule-overrides`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  
+  return handleApiResponse<void>(response);
+};
+
 // Export all functions for easy importing
 export const AdminFeeConfigService = {
   // Fee Categories
@@ -311,6 +382,11 @@ export const AdminFeeConfigService = {
   createWaiverTier,
   updateWaiverTier,
   deleteWaiverTier,
+  
+  // Consolidated Fee Schedule
+  getConsolidatedFeeSchedule,
+  upsertFeeRuleOverride,
+  deleteFeeRuleOverride,
 };
 
 export default AdminFeeConfigService; 

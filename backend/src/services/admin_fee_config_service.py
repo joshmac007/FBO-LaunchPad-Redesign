@@ -21,7 +21,8 @@ from sqlalchemy.orm import joinedload
 from ..extensions import db
 from ..models import (
     AircraftType, FeeCategory, AircraftTypeToFeeCategoryMapping,
-    FeeRule, WaiverTier, CalculationBasis, WaiverStrategy
+    FeeRule, WaiverTier, CalculationBasis, WaiverStrategy,
+    FBOAircraftTypeConfig, FeeRuleOverride
 )
 
 
@@ -54,8 +55,6 @@ class AdminFeeConfigService:
     def update_aircraft_type_fuel_waiver(fbo_location_id: int, aircraft_type_id: int, base_min_fuel_gallons: float) -> Dict[str, Any]:
         """Update base min fuel for waiver for a specific aircraft type and FBO."""
         try:
-            from ..models.fbo_aircraft_type_config import FBOAircraftTypeConfig
-            
             # Verify aircraft type exists
             aircraft_type = AircraftType.query.get(aircraft_type_id)
             if not aircraft_type:
@@ -96,15 +95,13 @@ class AdminFeeConfigService:
     def get_fbo_aircraft_type_configs(fbo_location_id: int) -> List[Dict[str, Any]]:
         """Get all FBO-specific aircraft type configurations."""
         try:
-            from ..models.fbo_aircraft_type_config import FBOAircraftTypeConfig
-            
             configs = FBOAircraftTypeConfig.query.filter_by(
                 fbo_location_id=fbo_location_id
             ).options(
                 joinedload(FBOAircraftTypeConfig.aircraft_type)
             ).all()
             
-            return [config.to_dict() for config in configs]
+            return [dict(config.to_dict()) for config in configs]
         except SQLAlchemyError as e:
             current_app.logger.error(f"Error fetching FBO aircraft type configs: {str(e)}")
             raise
@@ -577,7 +574,10 @@ class AdminFeeConfigService:
             db.session.add(rule)
             db.session.commit()
             
-            return AdminFeeConfigService.get_fee_rule(fbo_location_id, rule.id)
+            result = AdminFeeConfigService.get_fee_rule(fbo_location_id, rule.id)
+            if result is None:
+                raise ValueError("Failed to retrieve created fee rule")
+            return result
         except IntegrityError as e:
             db.session.rollback()
             if 'uq_fee_rule_fbo_code' in str(e):
@@ -725,7 +725,10 @@ class AdminFeeConfigService:
             db.session.add(tier)
             db.session.commit()
             
-            return AdminFeeConfigService.get_waiver_tier(fbo_location_id, tier.id)
+            result = AdminFeeConfigService.get_waiver_tier(fbo_location_id, tier.id)
+            if result is None:
+                raise ValueError("Failed to retrieve created waiver tier")
+            return result
         except SQLAlchemyError as e:
             db.session.rollback()
             current_app.logger.error(f"Error creating waiver tier: {str(e)}")
@@ -761,17 +764,102 @@ class AdminFeeConfigService:
         """Delete a waiver tier for a specific FBO."""
         try:
             tier = WaiverTier.query.filter_by(
-                id=tier_id, 
+                id=tier_id,
                 fbo_location_id=fbo_location_id
             ).first()
-            
+
             if not tier:
                 return False
-            
+
             db.session.delete(tier)
             db.session.commit()
             return True
         except SQLAlchemyError as e:
             db.session.rollback()
             current_app.logger.error(f"Error deleting waiver tier: {str(e)}")
+            raise
+
+    @staticmethod
+    def get_consolidated_fee_schedule(fbo_id: int) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Get a consolidated fee schedule for a given FBO, including all related entities.
+        """
+        try:
+            categories = FeeCategory.query.filter_by(fbo_location_id=fbo_id).all()
+            rules = FeeRule.query.filter_by(fbo_location_id=fbo_id).all()
+            mappings = AircraftTypeToFeeCategoryMapping.query.filter_by(fbo_location_id=fbo_id).all()
+            overrides = FeeRuleOverride.query.filter_by(fbo_location_id=fbo_id).all()
+            fbo_aircraft_configs = FBOAircraftTypeConfig.query.filter_by(fbo_location_id=fbo_id).all()
+
+            return {
+                "categories": [c.to_dict() for c in categories],
+                "rules": [r.to_dict() for r in rules],
+                "mappings": [m.to_dict() for m in mappings],
+                "overrides": [o.to_dict() for o in overrides],
+                "fbo_aircraft_configs": [ac.to_dict() for ac in fbo_aircraft_configs]
+            }
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Error fetching consolidated fee schedule: {str(e)}")
+            raise
+
+    @staticmethod
+    def upsert_fee_rule_override(data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create or update a fee rule override.
+        """
+        required_fields = ["fbo_location_id", "aircraft_type_id", "fee_rule_id"]
+        if not all(field in data for field in required_fields):
+            raise ValueError("Missing required fields for fee rule override upsert")
+
+        try:
+            override = FeeRuleOverride.query.filter_by(
+                fbo_location_id=data["fbo_location_id"],
+                aircraft_type_id=data["aircraft_type_id"],
+                fee_rule_id=data["fee_rule_id"]
+            ).first()
+
+            if override:
+                # Update existing override
+                override.override_amount = data.get("override_amount")
+                override.override_caa_amount = data.get("override_caa_amount")
+            else:
+                # Create new override
+                override = FeeRuleOverride(**data)
+                db.session.add(override)
+
+            db.session.commit()
+            return override.to_dict()
+        except IntegrityError:
+            db.session.rollback()
+            raise ValueError("Integrity error, possibly due to invalid foreign keys.")
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error upserting fee rule override: {str(e)}")
+            raise
+
+    @staticmethod
+    def delete_fee_rule_override(data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Delete a fee rule override.
+        """
+        required_fields = ["fbo_location_id", "aircraft_type_id", "fee_rule_id"]
+        if not all(field in data for field in required_fields):
+            raise ValueError("Missing required fields for fee rule override deletion")
+
+        try:
+            override = FeeRuleOverride.query.filter_by(
+                fbo_location_id=data["fbo_location_id"],
+                aircraft_type_id=data["aircraft_type_id"],
+                fee_rule_id=data["fee_rule_id"]
+            ).first()
+
+            if override:
+                db.session.delete(override)
+                db.session.commit()
+                return {"success": True}
+            
+            return {"success": False}
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error deleting fee rule override: {str(e)}")
             raise 

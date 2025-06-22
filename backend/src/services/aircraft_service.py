@@ -150,6 +150,11 @@ class AircraftService:
             aircraft = Aircraft.query.get(tail_number)
             if not aircraft:
                 return False, f"Aircraft with tail number {tail_number} not found", 404
+            
+            # Check for associated fuel orders
+            if aircraft.fuel_orders.first():
+                return False, "Cannot delete aircraft with existing fuel orders. Please reassign or delete them first.", 409
+
             db.session.delete(aircraft)
             db.session.commit()
             return True, "Aircraft deleted successfully", 200

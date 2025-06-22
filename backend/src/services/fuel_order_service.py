@@ -3,7 +3,7 @@ from decimal import Decimal
 import csv
 import io
 from typing import List, Dict, Any, Optional, Tuple
-from sqlalchemy import and_, or_, desc, asc
+from sqlalchemy import and_, or_, desc, asc, func
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from src.models import (
@@ -16,7 +16,8 @@ from src.models import (
     Permission,
     PermissionGroup,
     UserPermission,
-    AuditLog
+    AuditLog,
+    Role
 )
 from src.models.user_permission_group import UserPermissionGroup
 from src.extensions import db
@@ -199,41 +200,58 @@ class FuelOrderService:
                         aircraft = updated_aircraft
 
             # --- LST Assignment Logic ---
-            assigned_lst_user_id = order_data['assigned_lst_user_id']
+            assigned_lst_user_id = order_data.get('assigned_lst_user_id')
             if assigned_lst_user_id == AUTO_ASSIGN_LST_ID:
-                active_lsts = cls.get_active_lsts()
-                if not active_lsts:
-                    return None, "No active LST users available for auto-assignment", 400
-                
-                # Find the LST with the fewest active/in-progress orders
-                least_busy = None
-                min_orders = None
+                # Find the LST with the fewest active orders in a single, efficient query.
                 active_statuses = [
                     FuelOrderStatus.DISPATCHED,
                     FuelOrderStatus.ACKNOWLEDGED,
                     FuelOrderStatus.EN_ROUTE,
-                    FuelOrderStatus.FUELING
+                    FuelOrderStatus.FUELING,
                 ]
-                
-                for lst in active_lsts:
-                    count = FuelOrder.query.filter(
-                        FuelOrder.assigned_lst_user_id == lst.id,
-                        FuelOrder.status.in_(active_statuses)
-                    ).count()
-                    if min_orders is None or count < min_orders:
-                        min_orders = count
-                        least_busy = lst
-                
-                if not least_busy:
-                    return None, "Auto-assign failed to select an LST", 400
-                
-                assigned_lst_user_id = least_busy.id
-                logger.info(f"Auto-assigned LST user_id {least_busy.id} (username={least_busy.username}) with {min_orders} active orders.")
+
+                # Subquery to get active order counts per LST.
+                subquery = db.session.query(
+                    FuelOrder.assigned_lst_user_id,
+                    func.count(FuelOrder.id).label('active_orders_count')
+                ).filter(
+                    FuelOrder.status.in_(active_statuses)
+                ).group_by(
+                    FuelOrder.assigned_lst_user_id
+                ).subquery()
+
+                # Get the LST role.
+                lst_role = Role.query.filter_by(name='Line Service Technician').first()
+                if not lst_role:
+                    return None, "Configuration error: 'Line Service Technician' role not found.", 500
+
+                # LEFT JOIN active LSTs with their order counts.
+                # COALESCE is used to treat NULL counts (for LSTs with no orders) as 0.
+                least_busy_lst_query_result = db.session.query(
+                    User,
+                    func.coalesce(subquery.c.active_orders_count, 0).label('order_count')
+                ).join(
+                    User.roles  # type: ignore
+                ).filter(
+                    Role.id == lst_role.id,
+                    User.is_active == True
+                ).outerjoin(
+                    subquery, User.id == subquery.c.assigned_lst_user_id
+                ).order_by(
+                    func.coalesce(subquery.c.active_orders_count, 0).asc()
+                ).first()
+
+                if not least_busy_lst_query_result:
+                    return None, "No active Line Service Technicians are available for auto-assignment.", 400
+
+                assigned_lst_user_id = least_busy_lst_query_result.User.id
             else:
-                # Validate the specified LST
-                lst_user, error = cls.validate_lst_assignment(assigned_lst_user_id)
-                if not lst_user:
-                    return None, error, 400
+                if assigned_lst_user_id is None:
+                    return None, "assigned_lst_user_id cannot be null when not auto-assigning", 400
+                # Validate the specified LST if not auto-assigning.
+                lst_user, error_msg = cls.validate_lst_assignment(assigned_lst_user_id)
+                if error_msg:
+                    return None, error_msg, 400
 
             # --- Truck Assignment Logic ---
             assigned_truck_id = order_data['assigned_truck_id']
@@ -283,30 +301,24 @@ class FuelOrderService:
                 if not customer:
                     return None, f"Customer with ID {customer_id} not found.", 400
 
-            # --- Create the fuel order ---
-            fuel_order = FuelOrder(
-                tail_number=aircraft.tail_number,
-                customer_id=customer_id,
-                fuel_type=order_data['fuel_type'],
-                additive_requested=order_data.get('additive_requested', False),
-                requested_amount=order_data['requested_amount'],
-                assigned_lst_user_id=assigned_lst_user_id,
-                assigned_truck_id=assigned_truck_id,
-                location_on_ramp=order_data.get('location_on_ramp'),
-                csr_notes=order_data.get('csr_notes'),
-                status=FuelOrderStatus.DISPATCHED,
-                dispatch_timestamp=datetime.utcnow()
-            )
-            
-            db.session.add(fuel_order)
+            # --- Create and commit the FuelOrder ---
+            new_fuel_order = FuelOrder()
+            new_fuel_order.tail_number = tail_number
+            new_fuel_order.customer_id = order_data.get('customer_id')
+            new_fuel_order.fuel_type = order_data['fuel_type']
+            new_fuel_order.additive_requested = order_data.get('additive_requested', False)
+            new_fuel_order.requested_amount = Decimal(order_data['requested_amount'])
+            new_fuel_order.assigned_lst_user_id = assigned_lst_user_id
+            new_fuel_order.assigned_truck_id = assigned_truck_id
+            new_fuel_order.location_on_ramp = order_data.get('location_on_ramp')
+            new_fuel_order.csr_notes = order_data.get('csr_notes')
+            new_fuel_order.priority = order_data.get('priority', 'NORMAL').upper()
+
+            db.session.add(new_fuel_order)
             db.session.commit()
-            
-            message = "Fuel order created successfully"
-            if aircraft_created:
-                message += f". New aircraft {aircraft.tail_number} was auto-created with placeholder details."
-            
-            logger.info(f"Successfully created fuel order {fuel_order.id}")
-            return fuel_order, message, 201
+
+            logger.info(f"Successfully created fuel order {new_fuel_order.id}")
+            return new_fuel_order, "Fuel order created successfully", 201
             
         except Exception as e:
             db.session.rollback()
@@ -330,8 +342,10 @@ class FuelOrderService:
             
             # Use eager loading for optimization of denormalized fields
             query = FuelOrder.query.options(
-                joinedload(FuelOrder.assigned_lst),
-                joinedload(FuelOrder.assigned_truck)
+                joinedload(FuelOrder.assigned_lst),  # type: ignore
+                joinedload(FuelOrder.assigned_truck),  # type: ignore
+                joinedload(FuelOrder.customer),  # type: ignore
+                joinedload(FuelOrder.aircraft)  # type: ignore
             )
 
             # PBAC: Only show all orders if user has permission
@@ -368,9 +382,11 @@ class FuelOrderService:
                 
                 priority = filters.get('priority')
                 if priority:
-                    # Note: Priority field would need to be added to FuelOrder model
-                    # For now, skip this filter
-                    pass
+                    query = query.filter(FuelOrder.priority == priority.upper())
+                
+                fuel_type = filters.get('fuel_type')
+                if fuel_type:
+                    query = query.filter(FuelOrder.fuel_type == fuel_type)
                 
                 start_date = filters.get('start_date')
                 if start_date:
@@ -451,8 +467,8 @@ class FuelOrderService:
         """
         # Use eager loading for optimization of denormalized fields
         order = FuelOrder.query.options(
-            joinedload(FuelOrder.assigned_lst),
-            joinedload(FuelOrder.assigned_truck)
+            joinedload(FuelOrder.assigned_lst),  # type: ignore
+            joinedload(FuelOrder.assigned_truck)  # type: ignore
         ).get(order_id)
         
         if not order:
@@ -691,7 +707,7 @@ class FuelOrderService:
             orders_to_export = query.order_by(FuelOrder.reviewed_timestamp.desc()).all()
 
             if not orders_to_export:
-                return [], "No orders found matching the criteria for export.", 200
+                return None, "No orders found matching the criteria for export.", 200
 
             # Create in-memory text stream for CSV writing
             output = io.StringIO()
@@ -764,41 +780,22 @@ class FuelOrderService:
             return None, f"Error generating CSV export: {str(e)}", 500 
 
     @staticmethod
-    def get_active_lsts():
-        """Get active Line Service Technicians based on their role."""
-        try:
-            # Import Role model locally to avoid circular imports
-            from src.models.role import Role
-            
-            # The single source of truth for who is an LST should be their assigned role.
-            lst_role = Role.query.filter_by(name='Line Service Technician').first()
-            if not lst_role:
-                logger.warning("'Line Service Technician' role not found in the database.")
-                return []
-
-            # Find all active users with the 'Line Service Technician' role.
-            active_lsts = User.query.join(User.roles).filter(
-                User.is_active == True,
-                Role.id == lst_role.id
-            ).all()
-            
-            return active_lsts
-        except Exception as e:
-            logger.error(f"Error fetching LSTs by role: {e}")
-            return []
-
-    @staticmethod
     def validate_lst_assignment(assigned_lst_user_id: int) -> Tuple[Optional[User], Optional[str]]:
-        """Validate LST assignment based on permissions."""
-        lst_user = User.query.filter_by(id=assigned_lst_user_id, is_active=True).first()
-        if not lst_user:
-            return None, f"LST user with ID {assigned_lst_user_id} not found or inactive."
+        """Validates that the provided user ID corresponds to an active LST."""
+        from src.models import User, Role
         
-        # Check if user has LST permissions
-        active_lsts = FuelOrderService.get_active_lsts()
-        if lst_user not in active_lsts:
-            return None, f"User {lst_user.username} does not have LST permissions."
+        if not assigned_lst_user_id or assigned_lst_user_id <= 0:
+            return None, "A valid LST user ID must be provided."
+
+        lst_user = User.query.options(joinedload(User.roles)).filter(User.id == assigned_lst_user_id).first()  # type: ignore
+
+        if not lst_user or not lst_user.is_active:
+            return None, f"LST user with ID {assigned_lst_user_id} not found or is inactive."
         
+        is_lst = any(role.name == 'Line Service Technician' for role in lst_user.roles)
+        if not is_lst:
+            return None, f"User with ID {assigned_lst_user_id} is not a Line Service Technician."
+
         return lst_user, None
 
     @staticmethod
@@ -864,14 +861,14 @@ class FuelOrderService:
         if not order:
             raise ValueError(f"Fuel order with ID {order_id} not found")
         
+        # Take a snapshot of the order's state before any changes for auditing.
+        old_order_state = {c.name: getattr(order, c.name) for c in order.__table__.columns}
+
         # Check if order is locked due to active receipt
         from ..models.receipt import ReceiptStatus
         active_receipt_exists = any(r.status != ReceiptStatus.VOID for r in order.receipts)
         if active_receipt_exists:
             raise ValueError("Cannot modify a Fuel Order that has an active receipt.")
-        
-        # Store previous status for auditing
-        previous_status = order.status.value
         
         # Get and validate new status
         new_status_str = update_data.get('status')
@@ -937,25 +934,27 @@ class FuelOrderService:
             order.fueling_start_timestamp = datetime.utcnow()
         
         # Create audit log entry
-        audit_details = {
-            "previous_status": previous_status,
-            "new_status": new_status.value,
-            "reason": update_data.get("reason")
+        new_order_state = {c.name: getattr(order, c.name) for c in order.__table__.columns}
+        
+        # Create a non-recursive dictionary for the audit log details
+        details_for_log = {
+            'reason': update_data.get("reason", "No reason provided."),
+            'previous_status': old_order_state.get('status'),
+            'new_status': new_order_state.get('status'),
+            'changed_fields': {
+                'old': {k: v for k, v in old_order_state.items() if v != new_order_state.get(k)},
+                'new': {k: v for k, v in new_order_state.items() if v != old_order_state.get(k)}
+            }
         }
         
-        # Add meter readings to audit details if provided
-        if new_status == FuelOrderStatus.COMPLETED:
-            audit_details["start_meter_reading"] = float(order.start_meter_reading)
-            audit_details["end_meter_reading"] = float(order.end_meter_reading)
-        
-        audit_log = AuditLog(
+        audit_log_entry = AuditLog(
             user_id=user_id,
             entity_type='FuelOrder',
             entity_id=order_id,
-            action='MANUAL_STATUS_UPDATE',
-            details=audit_details
+            action='manual_update',
+            details=details_for_log
         )
-        db.session.add(audit_log)
+        db.session.add(audit_log_entry)
         
         # Commit the changes
         db.session.commit()

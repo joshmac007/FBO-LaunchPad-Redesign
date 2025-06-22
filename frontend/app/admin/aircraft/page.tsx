@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -61,6 +62,7 @@ import {
   AlertCircle,
   Search,
   Plus,
+  ArrowRight,
 } from "lucide-react"
 import {
   getAllAdminAircraft,
@@ -83,6 +85,7 @@ export default function AdminAircraftPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [selectedAircraft, setSelectedAircraft] = useState<Aircraft | null>(null)
+  const [dialogView, setDialogView] = useState<'confirm' | 'error'>('confirm')
 
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState("")
@@ -101,6 +104,8 @@ export default function AdminAircraftPage() {
   const [editFormError, setEditFormError] = useState<string | null>(null)
   const [isDeletingAircraft, setIsDeletingAircraft] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const router = useRouter()
 
   // Define fetchAircraft here to be accessible by other functions
   const fetchAircraft = async () => {
@@ -154,6 +159,7 @@ export default function AdminAircraftPage() {
 
   const handleDeleteClick = (aircraft: Aircraft) => {
     setSelectedAircraft(aircraft)
+    setDialogView('confirm')
     setDeleteError(null)
     setIsDeleteDialogOpen(true)
   }
@@ -244,20 +250,21 @@ export default function AdminAircraftPage() {
     if (!selectedAircraft) {
       console.error("No aircraft selected for deletion.")
       setDeleteError("No aircraft selected for deletion.")
+      setDialogView('error')
       return
     }
     setDeleteError(null)
     setIsDeletingAircraft(true)
 
     try {
-      await deleteAdminAircraft(selectedAircraft.id)
+      await deleteAdminAircraft(selectedAircraft.tailNumber)
       toast.success("Aircraft deleted successfully!")
       await fetchAircraft()
       setIsDeleteDialogOpen(false)
     } catch (error: any) {
       console.error("Failed to delete aircraft:", error)
       setDeleteError(error.message || "An unknown error occurred. Please try again.")
-      toast.error(error.message || "Failed to delete aircraft.")
+      setDialogView('error')
     } finally {
       setIsDeletingAircraft(false)
     }
@@ -282,6 +289,14 @@ export default function AdminAircraftPage() {
   const resetDeleteState = () => {
     setDeleteError(null)
     setSelectedAircraft(null)
+    setDialogView('confirm')
+  }
+
+  const navigateToFuelOrders = () => {
+    if (selectedAircraft) {
+      setIsDeleteDialogOpen(false)
+      router.push(`/csr/fuel-orders?tailNumber=${selectedAircraft.tailNumber}`)
+    }
   }
 
   // Get unique fuel types for filter
@@ -625,36 +640,59 @@ export default function AdminAircraftPage() {
         if (!open) resetDeleteState()
       }}>
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Aircraft</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete aircraft {selectedAircraft?.tailNumber}? This action
-              cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {deleteError && (
-            <div className="flex items-center gap-2 text-red-600 text-sm">
-              <AlertCircle className="h-4 w-4" />
-              {deleteError}
-            </div>
+          {dialogView === 'confirm' && (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete the
+                  aircraft with tail number <strong>{selectedAircraft?.tailNumber}</strong>.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setIsDeleteDialogOpen(false)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction asChild>
+                  <Button
+                    onClick={async (e) => {
+                      e.preventDefault(); // Prevents the dialog from closing on click
+                      await handleConfirmDelete();
+                    }}
+                    disabled={isDeletingAircraft}
+                  >
+                    {isDeletingAircraft ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Deleting...</>
+                    ) : 'Delete'}
+                  </Button>
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
           )}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeletingAircraft}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmDelete}
-              disabled={isDeletingAircraft}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              {isDeletingAircraft ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                "Delete"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
+
+          {dialogView === 'error' && (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Cannot Delete Aircraft</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This aircraft cannot be deleted because it is associated with one or more fuel orders.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 my-4 rounded" role="alert">
+                <div className="flex">
+                  <div className="py-1"><AlertCircle className="h-5 w-5 text-red-500 mr-3"/></div>
+                  <div>
+                    <p className="font-bold">Conflict Error</p>
+                    <p className="text-sm">{deleteError}</p>
+                  </div>
+                </div>
+              </div>
+              <AlertDialogFooter>
+                <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Close</Button>
+                <Button onClick={navigateToFuelOrders}>
+                  View Fuel Orders <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </AlertDialogFooter>
+            </>
+          )}
         </AlertDialogContent>
       </AlertDialog>
     </div>
