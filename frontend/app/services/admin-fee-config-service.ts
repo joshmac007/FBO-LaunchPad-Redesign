@@ -90,6 +90,12 @@ export interface UpsertFeeRuleOverrideRequest {
   override_caa_amount?: number;
 }
 
+export interface AddAircraftToFeeScheduleRequest {
+  aircraft_type_name: string;
+  fee_category_id: number;
+  min_fuel_gallons: number;
+}
+
 export interface DeleteFeeRuleOverrideRequest {
   aircraft_type_id: number;
   fee_rule_id: number;
@@ -150,6 +156,10 @@ export interface UpdateWaiverTierRequest extends CreateWaiverTierRequest {}
 export interface ApiError {
   error: string;
   details?: any;
+}
+
+export interface UpdateMinFuelRequest {
+  base_min_fuel_gallons_for_waiver: number;
 }
 
 // Using shared API configuration from api-config.ts
@@ -359,6 +369,58 @@ export const deleteFeeRuleOverride = async (fboId: number, data: DeleteFeeRuleOv
   return handleApiResponse<void>(response);
 };
 
+export const updateMinFuelForAircraft = async (
+  fboId: number,
+  aircraftTypeId: number,
+  data: UpdateMinFuelRequest
+): Promise<any> => { // The response might be minimal, so `any` is fine for now.
+  const response = await fetch(
+    `${API_BASE_URL}/admin/fbo/${fboId}/aircraft-types/${aircraftTypeId}`,
+    {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }
+  );
+  return handleApiResponse(response);
+};
+
+export const uploadFeeOverridesCSV = async (fboId: number, file: File): Promise<any> => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const authHeaders = getAuthHeaders();
+  // When using FormData, the browser automatically sets the Content-Type with the correct boundary.
+  // We need to remove it from our headers if it's present.
+  if (authHeaders instanceof Headers) {
+    authHeaders.delete('Content-Type');
+  } else if (authHeaders) {
+    delete authHeaders['Content-Type'];
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/fbo/${fboId}/fee-rule-overrides/upload-csv`,
+    {
+      method: "POST",
+      headers: authHeaders,
+      body: formData,
+    }
+  );
+  return handleApiResponse(response);
+};
+
+export const addAircraftToFeeSchedule = async (fboId: number, data: AddAircraftToFeeScheduleRequest): Promise<any> => {
+  const response = await fetch(
+    `${API_BASE_URL}/admin/fbo/${fboId}/aircraft-fee-setup`,
+    {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    }
+  );
+  return handleApiResponse(response);
+}
+
 // Export all functions for easy importing
 export const AdminFeeConfigService = {
   // Fee Categories
@@ -387,6 +449,15 @@ export const AdminFeeConfigService = {
   getConsolidatedFeeSchedule,
   upsertFeeRuleOverride,
   deleteFeeRuleOverride,
+  
+  // Min Fuel
+  updateMinFuelForAircraft,
+  
+  // Fee Overrides CSV
+  uploadFeeOverridesCSV,
+  
+  // New API functions for Phase 2
+  addAircraftToFeeSchedule,
 };
 
 export default AdminFeeConfigService; 

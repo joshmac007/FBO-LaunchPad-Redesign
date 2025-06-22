@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useReducer } from "react"
+import { useEffect, useReducer, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -11,6 +11,7 @@ import ReceiptHeader from "./ReceiptHeader"
 import ReceiptLineItemsList from "./ReceiptLineItemsList"
 import ReceiptTotals from "./ReceiptTotals"
 import AdditionalServicesForm from "./AdditionalServicesForm"
+import { useDebounce } from "@/hooks/useDebounce"
 import { 
   ExtendedReceipt, 
   getReceiptById, 
@@ -31,6 +32,7 @@ interface ReceiptState {
   status: 'idle' | 'loading_initial' | 'calculating_fees' | 'generating' | 'marking_paid' | 'error'
   error: string | null
   autoSaveStatus: 'idle' | 'saving' | 'saved' | 'error'
+  pendingUpdates: Record<string, any>
 }
 
 // Action types for useReducer
@@ -48,6 +50,8 @@ type ReceiptAction =
   | { type: 'MARK_PAID_SUCCESS'; payload: ExtendedReceipt }
   | { type: 'MARK_PAID_ERROR'; payload: string }
   | { type: 'UPDATE_RECEIPT'; payload: Partial<ExtendedReceipt> }
+  | { type: 'SET_PENDING_UPDATES'; payload: Record<string, any> }
+  | { type: 'CLEAR_PENDING_UPDATES' }
   | { type: 'AUTO_SAVE_START' }
   | { type: 'AUTO_SAVE_SUCCESS' }
   | { type: 'AUTO_SAVE_ERROR' }
@@ -97,11 +101,20 @@ function receiptReducer(state: ReceiptState, action: ReceiptAction): ReceiptStat
         receipt: state.receipt ? { ...state.receipt, ...action.payload } : null 
       }
     
+    case 'SET_PENDING_UPDATES':
+      return { 
+        ...state, 
+        pendingUpdates: { ...state.pendingUpdates, ...action.payload }
+      }
+    
+    case 'CLEAR_PENDING_UPDATES':
+      return { ...state, pendingUpdates: {} }
+    
     case 'AUTO_SAVE_START':
       return { ...state, autoSaveStatus: 'saving' }
     
     case 'AUTO_SAVE_SUCCESS':
-      return { ...state, autoSaveStatus: 'saved' }
+      return { ...state, autoSaveStatus: 'saved', pendingUpdates: {} }
     
     case 'AUTO_SAVE_ERROR':
       return { ...state, autoSaveStatus: 'error' }
@@ -116,11 +129,16 @@ const initialState: ReceiptState = {
   receipt: null,
   status: 'idle',
   error: null,
-  autoSaveStatus: 'idle'
+  autoSaveStatus: 'idle',
+  pendingUpdates: {}
 }
 
 export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
   const [state, dispatch] = useReducer(receiptReducer, initialState)
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Debounce pending updates with 1 second delay
+  const debouncedPendingUpdates = useDebounce(state.pendingUpdates, 1000)
 
   // Load initial receipt data
   useEffect(() => {
@@ -137,48 +155,67 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
     loadReceipt()
   }, [receiptId])
 
-  // Auto-save function with debouncing
-  const autoSave = async (updates: any) => {
-    if (!state.receipt || state.receipt.status !== 'DRAFT') return
+  // Auto-save when debounced pending updates change
+  useEffect(() => {
+    const performAutoSave = async () => {
+      // Only save if there are pending updates and receipt is a draft
+      if (Object.keys(debouncedPendingUpdates).length === 0 || 
+          !state.receipt || 
+          state.receipt.status !== 'DRAFT') {
+        return
+      }
 
-    dispatch({ type: 'AUTO_SAVE_START' })
-    try {
-      await updateDraftReceipt(receiptId, updates)
-      dispatch({ type: 'AUTO_SAVE_SUCCESS' })
-      
-      // Clear saved status after 2 seconds
-      setTimeout(() => {
+      dispatch({ type: 'AUTO_SAVE_START' })
+      try {
+        await updateDraftReceipt(receiptId, debouncedPendingUpdates)
         dispatch({ type: 'AUTO_SAVE_SUCCESS' })
-      }, 2000)
-    } catch (error) {
-      dispatch({ type: 'AUTO_SAVE_ERROR' })
+        
+        // Clear saved status after 2 seconds
+        if (autoSaveTimeoutRef.current) {
+          clearTimeout(autoSaveTimeoutRef.current)
+        }
+        autoSaveTimeoutRef.current = setTimeout(() => {
+          dispatch({ type: 'AUTO_SAVE_SUCCESS' })
+        }, 2000)
+      } catch (error) {
+        console.error('Auto-save failed:', error)
+        dispatch({ type: 'AUTO_SAVE_ERROR' })
+      }
     }
-  }
+
+    performAutoSave()
+  }, [debouncedPendingUpdates, receiptId, state.receipt])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  // Helper function to queue updates for debounced auto-save
+  const queueAutoSave = useCallback((updates: Record<string, any>) => {
+    if (state.receipt?.status === 'DRAFT') {
+      dispatch({ type: 'SET_PENDING_UPDATES', payload: updates })
+    }
+  }, [state.receipt?.status])
 
   // Event handlers
   const handleCustomerSelected = (customer: Customer) => {
     dispatch({ type: 'UPDATE_RECEIPT', payload: { customerId: customer.id, customer: customer.name } })
-    autoSave({ customerId: customer.id })
+    queueAutoSave({ customerId: customer.id })
   }
 
   const handleAircraftTypeChange = (aircraftType: string) => {
     dispatch({ type: 'UPDATE_RECEIPT', payload: { aircraftTypeAtReceiptTime: aircraftType } })
-  }
-
-  const handleAircraftTypeBlur = () => {
-    if (state.receipt?.aircraftTypeAtReceiptTime) {
-      autoSave({ aircraftType: state.receipt.aircraftTypeAtReceiptTime })
-    }
+    queueAutoSave({ aircraftType: aircraftType })
   }
 
   const handleNotesChange = (notes: string) => {
     dispatch({ type: 'UPDATE_RECEIPT', payload: { notes } })
-  }
-
-  const handleNotesBlur = () => {
-    if (state.receipt?.notes !== undefined) {
-      autoSave({ notes: state.receipt.notes })
-    }
+    queueAutoSave({ notes: notes })
   }
 
   const handleAddService = async (serviceCode: string, description: string) => {
@@ -384,7 +421,6 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
               data-cy="receipt-notes"
               value={state.receipt.notes || ''}
               onChange={(e) => handleNotesChange(e.target.value)}
-              onBlur={handleNotesBlur}
               disabled={isReadOnly}
               placeholder="Add any additional notes about this receipt..."
               rows={3}

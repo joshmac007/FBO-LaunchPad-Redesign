@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge"
 import { Trash2, Edit } from "lucide-react"
 import { EditableFeeCell } from "./EditableFeeCell"
 import { EditableMinFuelCell } from "./EditableMinFuelCell"
+import { EditCategoryDefaultsDialog } from "./EditCategoryDefaultsDialog"
 import {
   ConsolidatedFeeSchedule,
   FeeRule,
@@ -27,7 +28,9 @@ import {
   FBOAircraftTypeConfig,
   upsertFeeRuleOverride,
   deleteFeeRuleOverride,
+  updateMinFuelForAircraft,
 } from "@/app/services/admin-fee-config-service"
+import React from "react"
 
 interface AircraftRowData {
   aircraft_type_id: number
@@ -65,8 +68,8 @@ export function FeeScheduleTable({
 }: FeeScheduleTableProps) {
   const queryClient = useQueryClient()
 
-  // Transform data for table consumption
-  const tableData = useMemo(() => {
+  // Transform and group data for table consumption
+  const groupedData = useMemo(() => {
     const aircraftData: AircraftRowData[] = []
 
     data.mappings.forEach((mapping) => {
@@ -76,7 +79,6 @@ export function FeeScheduleTable({
 
       const fees: Record<string, any> = {}
       
-      // Get all fee rules for this aircraft's category
       const categoryRules = data.rules.filter(
         rule => rule.applies_to_fee_category_id === mapping.fee_category_id
       )
@@ -106,14 +108,32 @@ export function FeeScheduleTable({
         fees
       })
     })
+    
+    // Now, group the data if groupBy is 'classification'
+    if (groupBy === 'classification') {
+      const groups: { [key: string]: AircraftRowData[] } = {}
+      aircraftData.forEach(row => {
+        const key = row.fee_category_name
+        if (!groups[key]) {
+          groups[key] = []
+        }
+        groups[key].push(row)
+      })
+      return groups
+    }
 
-    return aircraftData
-  }, [data])
+    return aircraftData // Return flat list if not grouping
+  }, [data, groupBy])
 
   // Mutations for optimistic updates
   const upsertOverrideMutation = useMutation({
-    mutationFn: (params: { aircraft_type_id: number; fee_rule_id: number; override_amount?: number; override_caa_amount?: number }) =>
-      upsertFeeRuleOverride(fboId, params),
+    mutationFn: ({ aircraftTypeId, feeRuleId, amount }: { aircraftTypeId: number; feeRuleId: number; amount: number }) => {
+      const payload =
+        viewMode === 'caa'
+          ? { aircraft_type_id: aircraftTypeId, fee_rule_id: feeRuleId, override_caa_amount: amount }
+          : { aircraft_type_id: aircraftTypeId, fee_rule_id: feeRuleId, override_amount: amount };
+      return upsertFeeRuleOverride(fboId, payload);
+    },
     onMutate: async (variables) => {
       // Optimistic update logic would go here
       await queryClient.cancelQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
@@ -148,6 +168,34 @@ export function FeeScheduleTable({
     }
   })
 
+  const updateMinFuelMutation = useMutation({
+    mutationFn: ({ aircraftTypeId, minFuel }: { aircraftTypeId: number; minFuel: number }) =>
+      updateMinFuelForAircraft(fboId, aircraftTypeId, { base_min_fuel_gallons_for_waiver: minFuel }),
+    onMutate: async ({ aircraftTypeId, minFuel }) => {
+      // Optimistically update the UI
+      await queryClient.cancelQueries({ queryKey: ["consolidated-fee-schedule", fboId] });
+      const previousData = queryClient.getQueryData<ConsolidatedFeeSchedule>(["consolidated-fee-schedule", fboId]);
+
+      // Logic to update the specific aircraft's min fuel in the cache
+      // This is complex, so for now, we'll rely on the onSuccess invalidation.
+      // A full optimistic update would require finding and updating the specific fbo_aircraft_configs entry.
+
+      return { previousData };
+    },
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousData) {
+        queryClient.setQueryData(["consolidated-fee-schedule", fboId], context.previousData);
+      }
+      toast.error("Failed to update Minimum Fuel. Your change has been reverted.");
+    },
+    onSuccess: () => {
+      // Invalidate the query to refetch fresh data from the server
+      queryClient.invalidateQueries({ queryKey: ["consolidated-fee-schedule", fboId] });
+      toast.success("Minimum Fuel updated successfully.");
+    },
+  });
+
   // Get unique fee codes for columns
   const feeColumns = useMemo(() => {
     const feeCodesSet = new Set<string>()
@@ -170,12 +218,14 @@ export function FeeScheduleTable({
     }),
     columnHelper.accessor('min_fuel_gallons', {
       header: 'Min Fuel',
-      cell: ({ getValue, row }) => (
+      cell: ({ row }) => (
         <EditableMinFuelCell
-          value={getValue()}
+          value={row.original.min_fuel_gallons}
           onSave={(newValue) => {
-            // Handle min fuel update - would need separate mutation
-            console.log('Update min fuel:', row.original.aircraft_type_id, newValue)
+            updateMinFuelMutation.mutate({
+              aircraftTypeId: row.original.aircraft_type_id,
+              minFuel: newValue,
+            });
           }}
         />
       ),
@@ -200,15 +250,11 @@ export function FeeScheduleTable({
               value={currentValue}
               isOverride={isOverride}
               onSave={(newValue) => {
-                const params = {
-                  aircraft_type_id: row.original.aircraft_type_id,
-                  fee_rule_id: feeData.fee_rule_id,
-                  ...(isCAA 
-                    ? { override_caa_amount: newValue }
-                    : { override_amount: newValue }
-                  )
-                }
-                upsertOverrideMutation.mutate(params)
+                upsertOverrideMutation.mutate({
+                  aircraftTypeId: row.original.aircraft_type_id,
+                  feeRuleId: feeData.fee_rule_id,
+                  amount: newValue,
+                })
               }}
               onRevert={() => {
                 deleteOverrideMutation.mutate({
@@ -238,10 +284,10 @@ export function FeeScheduleTable({
         </Button>
       ),
     }),
-  ], [feeColumns, viewMode, upsertOverrideMutation, deleteOverrideMutation])
+  ], [feeColumns, viewMode, upsertOverrideMutation, deleteOverrideMutation, updateMinFuelMutation])
 
   const table = useReactTable({
-    data: tableData,
+    data: Array.isArray(groupedData) ? groupedData : [],
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -249,55 +295,85 @@ export function FeeScheduleTable({
   })
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} className="font-semibold">
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
+    <div className="border rounded-lg">
+      <Table>
+        <TableHeader>
+          {table.getHeaderGroups().map(headerGroup => (
+            <TableRow key={headerGroup.id}>
+              {headerGroup.headers.map(header => (
+                <TableHead key={header.id}>
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(
+                        header.column.columnDef.header,
+                        header.getContext()
+                      )}
+                </TableHead>
+              ))}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {groupBy === 'classification' && !Array.isArray(groupedData) ? (
+            Object.entries(groupedData).map(([categoryName, rows]) => {
+              const category = data.categories.find(c => c.name === categoryName)
+              const categoryRules = category ? data.rules.filter(r => r.applies_to_fee_category_id === category.id) : []
+              
+              const categoryTable = useReactTable({
+                  data: rows,
+                  columns,
+                  getCoreRowModel: getCoreRowModel(),
+              })
+
+              return (
+                <React.Fragment key={categoryName}>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableCell colSpan={columns.length} className="font-semibold">
+                      <div className="flex justify-between items-center py-2">
+                        <span>{categoryName}</span>
+                        {category && (
+                          <EditCategoryDefaultsDialog
+                            fboId={fboId}
+                            categoryId={category.id}
+                            categoryName={category.name}
+                            categoryRules={categoryRules}
+                            viewMode={viewMode}
+                          />
                         )}
-                  </TableHead>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                  {categoryTable.getRowModel().rows.map(row => (
+                    <TableRow key={row.id}>
+                      {row.getVisibleCells().map(cell => (
+                        <TableCell key={cell.id}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </React.Fragment>
+              )
+            })
+          ) : table.getRowModel().rows?.length ? (
+            table.getRowModel().rows.map(row => (
+              <TableRow key={row.id}>
+                {row.getVisibleCells().map(cell => (
+                  <TableCell key={cell.id}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </TableCell>
                 ))}
               </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  No aircraft configured.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={columns.length} className="h-24 text-center">
+                No results.
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
     </div>
   )
 } 

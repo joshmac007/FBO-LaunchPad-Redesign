@@ -3,7 +3,7 @@ import eventlet
 eventlet.monkey_patch()
 
 import os
-from flask import Flask, jsonify, current_app, request
+from flask import Flask, jsonify
 from flask_cors import CORS
 from apispec.ext.marshmallow import MarshmallowPlugin
 from apispec_webframeworks.flask import FlaskPlugin
@@ -77,6 +77,8 @@ def create_app(config_name=None):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+    # Move request and current_app imports inside the factory
+    from flask import request, current_app
     socketio.init_app(app)
     init_cli(app)
 
@@ -106,6 +108,9 @@ def create_app(config_name=None):
     # Re-initialize resolver for marshmallow plugin with updated plugins
     marshmallow_plugin.init_spec(apispec)
     
+    # Explicitly attach the spec to the app instance
+    app.spec = apispec  # type: ignore
+
     # Add security scheme for JWT
     apispec.components.security_scheme(
         "bearerAuth",
@@ -158,7 +163,7 @@ def create_app(config_name=None):
     @app.route('/api/swagger.json')
     def create_swagger_spec():
         """Serve the swagger specification."""
-        return jsonify(app.spec.to_dict())
+        return jsonify(app.spec.to_dict())  # type: ignore
 
     @app.route('/api/cors-test', methods=['OPTIONS', 'POST'])
     def cors_test():

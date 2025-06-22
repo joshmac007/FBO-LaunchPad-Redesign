@@ -17,6 +17,8 @@ class CreateDraftReceiptSchema(Schema):
 class UpdateDraftReceiptSchema(Schema):
     """Schema for updating a draft receipt."""
     customer_id = fields.Integer(validate=validate.Range(min=1), allow_none=True)
+    aircraft_type = fields.String(allow_none=True, validate=validate.Length(max=50))
+    notes = fields.String(allow_none=True, validate=validate.Length(max=1000))
     additional_services = fields.List(
         fields.Dict(keys=fields.Str(), values=fields.Raw()),
         missing=[]

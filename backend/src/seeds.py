@@ -204,6 +204,7 @@ def seed_data():
                         name=user_data['name'],
                         is_active=True
                     )
+                    user.fbo_location_id = 1
                     user.set_password(user_data['password'])
                     user.roles.append(user_role)
                     db.session.add(user)

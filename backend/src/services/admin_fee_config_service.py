@@ -24,6 +24,7 @@ from ..models import (
     FeeRule, WaiverTier, CalculationBasis, WaiverStrategy,
     FBOAircraftTypeConfig, FeeRuleOverride
 )
+from .aircraft_service import AircraftService
 
 
 class AdminFeeConfigService:
@@ -862,4 +863,82 @@ class AdminFeeConfigService:
         except SQLAlchemyError as e:
             db.session.rollback()
             current_app.logger.error(f"Error deleting fee rule override: {str(e)}")
-            raise 
+            raise
+
+    @staticmethod
+    def create_aircraft_fee_setup(fbo_location_id: int, aircraft_type_name: str, fee_category_id: int, min_fuel_gallons: float) -> Dict[str, Any]:
+        """
+        A comprehensive service method to:
+        1. Find or create an AircraftType.
+        2. Create a mapping to a FeeCategory for a specific FBO.
+        3. Create an FBO-specific config for min fuel waiver.
+        """
+        try:
+            # 1. Find or create AircraftType
+            aircraft_type = AircraftType.query.filter_by(name=aircraft_type_name).first()
+            if not aircraft_type:
+                aircraft_type = AircraftType(
+                    name=aircraft_type_name,
+                    base_min_fuel_gallons_for_waiver=min_fuel_gallons # Satisfy NOT NULL constraint
+                )
+                db.session.add(aircraft_type)
+                # We need to flush to get the ID for the subsequent operations
+                db.session.flush()
+
+            # 2. Verify FeeCategory exists for this FBO
+            fee_category = FeeCategory.query.filter_by(id=fee_category_id, fbo_location_id=fbo_location_id).first()
+            if not fee_category:
+                raise ValueError(f"Fee Category with ID {fee_category_id} not found for this FBO.")
+
+            # 3. Create AircraftTypeToFeeCategoryMapping if it doesn't exist for this FBO
+            mapping = AircraftTypeToFeeCategoryMapping.query.filter_by(
+                fbo_location_id=fbo_location_id,
+                aircraft_type_id=aircraft_type.id
+            ).first()
+
+            if mapping:
+                # If mapping exists, just update the category
+                mapping.fee_category_id = fee_category_id
+            else:
+                # If no mapping for this FBO, create one
+                mapping = AircraftTypeToFeeCategoryMapping(
+                    fbo_location_id=fbo_location_id,
+                    aircraft_type_id=aircraft_type.id,
+                    fee_category_id=fee_category_id
+                )
+                db.session.add(mapping)
+
+            # 4. Create or update FBOAircraftTypeConfig
+            config = FBOAircraftTypeConfig.query.filter_by(
+                fbo_location_id=fbo_location_id,
+                aircraft_type_id=aircraft_type.id
+            ).first()
+
+            if config:
+                config.base_min_fuel_gallons_for_waiver = min_fuel_gallons
+            else:
+                config = FBOAircraftTypeConfig(
+                    fbo_location_id=fbo_location_id,
+                    aircraft_type_id=aircraft_type.id,
+                    base_min_fuel_gallons_for_waiver=min_fuel_gallons
+                )
+                db.session.add(config)
+            
+            db.session.commit()
+
+            # We need to get the IDs after the commit
+            return {
+                "message": "Aircraft fee setup completed successfully.",
+                "aircraft_type_id": aircraft_type.id,
+                "mapping_id": mapping.id,
+                "fbo_aircraft_config_id": config.id
+            }
+
+        except IntegrityError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database integrity error during aircraft fee setup: {str(e)}")
+            raise ValueError("A database integrity error occurred. This could be due to a race condition or invalid foreign key.")
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error during aircraft fee setup: {str(e)}")
+            raise ValueError("A database error occurred while setting up the aircraft fee structure.") 

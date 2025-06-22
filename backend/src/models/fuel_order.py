@@ -28,7 +28,7 @@ class FuelOrder(db.Model):
     status = db.Column(db.Enum(FuelOrderStatus), nullable=False, default=FuelOrderStatus.DISPATCHED, index=True)
     priority = db.Column(db.Enum(FuelOrderPriority), nullable=False, default=FuelOrderPriority.NORMAL)
     tail_number = db.Column(db.String(20), db.ForeignKey('aircraft.tail_number'), nullable=False, index=True)
-    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False)
     fuel_type = db.Column(db.String(50), nullable=False)
     service_type = db.Column(db.String(50), nullable=False, default='Full Service')
     additive_requested = db.Column(db.Boolean, default=False)

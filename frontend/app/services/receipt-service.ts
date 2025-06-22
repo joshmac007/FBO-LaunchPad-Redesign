@@ -247,28 +247,120 @@ function initializeMockData() {
   }
 }
 
-// Get all receipts
-export async function getReceipts(): Promise<Receipt[]> {
+// Receipt list filters interface for API
+export interface ReceiptListFilters {
+  status?: string
+  customer_id?: number
+  date_from?: string
+  date_to?: string
+  page?: number
+  per_page?: number
+}
+
+// Receipt list response interface matching backend
+export interface ReceiptListResponse {
+  receipts: Receipt[]
+  total: number
+  page: number
+  per_page: number
+  total_pages: number
+}
+
+// Get receipts with server-side filtering and pagination
+export async function getReceipts(filters?: ReceiptListFilters): Promise<ReceiptListResponse> {
   if (isOfflineMode()) {
     initializeMockData()
     const storedReceipts = localStorage.getItem("fboReceipts")
-    if (storedReceipts) {
-      return JSON.parse(storedReceipts)
+    const allReceipts = storedReceipts ? JSON.parse(storedReceipts) : mockReceipts
+    
+    // Apply client-side filtering for offline mode
+    let filteredReceipts = allReceipts
+    
+    if (filters?.status && filters.status !== 'all') {
+      filteredReceipts = filteredReceipts.filter((r: Receipt) => r.status === filters.status)
     }
-    return mockReceipts
+    
+    if (filters?.date_from) {
+      const fromDate = new Date(filters.date_from)
+      filteredReceipts = filteredReceipts.filter((r: Receipt) => 
+        new Date(r.createdAt) >= fromDate
+      )
+    }
+    
+    if (filters?.date_to) {
+      const toDate = new Date(filters.date_to)
+      filteredReceipts = filteredReceipts.filter((r: Receipt) => 
+        new Date(r.createdAt) <= toDate
+      )
+    }
+    
+    // Apply pagination for offline mode
+    const page = filters?.page || 1
+    const perPage = filters?.per_page || 50
+    const startIndex = (page - 1) * perPage
+    const endIndex = startIndex + perPage
+    const paginatedReceipts = filteredReceipts.slice(startIndex, endIndex)
+    
+    return {
+      receipts: paginatedReceipts,
+      total: filteredReceipts.length,
+      page,
+      per_page: perPage,
+      total_pages: Math.ceil(filteredReceipts.length / perPage)
+    }
   }
 
-  // Online mode - fetch from API with proper FBO ID
+  // Online mode - use server-side filtering and pagination
   const fboId = getCurrentUserFboId();
-  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts`, {
+  
+  // Build query string from filters
+  const queryParams = new URLSearchParams()
+  if (filters?.status && filters.status !== 'all') {
+    queryParams.append('status', filters.status)
+  }
+  if (filters?.customer_id) {
+    queryParams.append('customer_id', filters.customer_id.toString())
+  }
+  if (filters?.date_from) {
+    queryParams.append('date_from', filters.date_from)
+  }
+  if (filters?.date_to) {
+    queryParams.append('date_to', filters.date_to)
+  }
+  if (filters?.page) {
+    queryParams.append('page', filters.page.toString())
+  }
+  if (filters?.per_page) {
+    queryParams.append('per_page', filters.per_page.toString())
+  }
+  
+  const url = `${API_BASE_URL}/fbo/${fboId}/receipts${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+  const response = await fetch(url, {
     method: "GET",
     headers: getAuthHeaders(),
   })
 
-  const data = await handleApiResponse<{ receipts: Receipt[], total: number, page: number, per_page: number }>(response)
+  const data = await handleApiResponse<ReceiptListResponse>(response)
   
-  // Return just the receipts array
-  return data.receipts || []
+  // Handle potential data type mismatches (Decimal as string -> number)
+  if (data.receipts) {
+    data.receipts = data.receipts.map(receipt => ({
+      ...receipt,
+      amount: typeof receipt.amount === 'string' ? parseFloat(receipt.amount) : receipt.amount,
+      grandTotalAmount: typeof receipt.grandTotalAmount === 'string' ? 
+        parseFloat(receipt.grandTotalAmount) : receipt.grandTotalAmount,
+      fuelSubtotal: typeof receipt.fuelSubtotal === 'string' ? 
+        parseFloat(receipt.fuelSubtotal) : receipt.fuelSubtotal,
+      totalFeesAmount: typeof receipt.totalFeesAmount === 'string' ? 
+        parseFloat(receipt.totalFeesAmount) : receipt.totalFeesAmount,
+      totalWaiversAmount: typeof receipt.totalWaiversAmount === 'string' ? 
+        parseFloat(receipt.totalWaiversAmount) : receipt.totalWaiversAmount,
+      taxAmount: typeof receipt.taxAmount === 'string' ? 
+        parseFloat(receipt.taxAmount) : receipt.taxAmount,
+    }))
+  }
+  
+  return data
 }
 
 // Get recent receipts for dashboard display (limited to most recent ones)
@@ -299,6 +391,25 @@ export async function getRecentReceipts(limit: number = 5): Promise<Receipt[]> {
 
 // Get receipt by ID (alias for Plan 5 compatibility)
 export async function getReceiptById(id: number): Promise<ExtendedReceipt> {
+  if (isOfflineMode()) {
+    initializeMockData()
+    const storedReceipts = localStorage.getItem("fboReceipts")
+    const receipts = storedReceipts ? JSON.parse(storedReceipts) : mockReceipts
+    
+    const receipt = receipts.find((r: Receipt) => r.id === id)
+    if (!receipt) {
+      throw new Error("Receipt not found")
+    }
+    
+    // Convert Receipt to ExtendedReceipt by adding mock line items
+    const extendedReceipt: ExtendedReceipt = {
+      ...receipt,
+      lineItems: mockLineItems.filter(item => item.receiptId === id)
+    }
+    
+    return extendedReceipt
+  }
+
   const fboId = getCurrentUserFboId();
 
   const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${id}`, {
@@ -669,8 +780,20 @@ export async function updateDraftReceipt(receiptId: number, updateData: DraftUpd
 
     const updatedReceipt = {
       ...receipts[index],
-      ...updateData,
       updatedAt: new Date().toISOString(),
+    }
+    
+    // Map frontend fields to receipt fields for offline mode
+    if (updateData.customerId !== undefined) {
+      updatedReceipt.customerId = updateData.customerId
+    }
+    
+    if (updateData.aircraftType !== undefined) {
+      updatedReceipt.aircraftTypeAtReceiptTime = updateData.aircraftType
+    }
+    
+    if (updateData.notes !== undefined) {
+      updatedReceipt.notes = updateData.notes
     }
 
     receipts[index] = updatedReceipt
@@ -683,13 +806,38 @@ export async function updateDraftReceipt(receiptId: number, updateData: DraftUpd
   }
 
   // Online mode - update via API
-  const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}/draft`, {
-    method: "PUT",
-    headers: getAuthHeaders(),
-    body: JSON.stringify(updateData),
+  const fboId = getCurrentUserFboId();
+  
+  // Transform frontend field names to backend field names
+  const backendPayload: any = {}
+  
+  if (updateData.customerId !== undefined) {
+    backendPayload.customer_id = updateData.customerId
+  }
+  
+  if (updateData.aircraftType !== undefined) {
+    backendPayload.aircraft_type = updateData.aircraftType
+  }
+  
+  if (updateData.notes !== undefined) {
+    backendPayload.notes = updateData.notes
+  }
+  
+  // Copy any additional fields
+  Object.keys(updateData).forEach(key => {
+    if (!['customerId', 'aircraftType', 'notes'].includes(key)) {
+      backendPayload[key] = updateData[key]
+    }
   })
 
-  return handleApiResponse<ExtendedReceipt>(response)
+  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receiptId}/draft`, {
+    method: "PUT",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(backendPayload),
+  })
+
+  const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response)
+  return data.receipt
 }
 
 // Calculate fees for receipt

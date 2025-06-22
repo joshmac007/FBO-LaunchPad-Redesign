@@ -1,38 +1,37 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback } from "react"
-import { useRouter } from "next/navigation"
-import {
-  ArrowLeft,
-  Plane,
-  Search,
-  Download,
-  Calendar,
-  WifiOff,
-  Receipt as ReceiptIcon,
-  CheckCircle,
-  Clock,
-  RefreshCw,
-  Eye,
-  MoreHorizontal,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  FileText,
-  HelpCircle,
-  X,
-  SlidersHorizontal,
-  DollarSign,
+import { useState, useEffect, useCallback, Suspense, useMemo } from "react"
+import { useSearchParams, useRouter } from 'next/navigation'
+import Link from "next/link"
+import { useQuery, keepPreviousData } from "@tanstack/react-query"
+import { useSearchDebounce } from "@/hooks/useDebounce"
+import { ReceiptTableRow } from "@/app/components/ReceiptTableRow"
+import { 
+  Plus, Search, Download, Eye, Edit, Trash2, MoreHorizontal, 
+  Filter, RefreshCw, Clock, Users, TrendingUp, Calendar,
+  CheckSquare, Square, Settings, Bell, AlertTriangle, Loader2,
+  Receipt as ReceiptIcon, CheckCircle, FileText, DollarSign
 } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
-import { format } from "date-fns"
+import { 
+  getReceipts,
+  type Receipt,
+  type ReceiptListFilters,
+  type ReceiptListResponse
+} from "@/app/services/receipt-service"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -41,824 +40,585 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Calendar as CalendarComponent } from "@/components/ui/calendar"
-import {
-  getReceipts,
-  filterReceipts,
-  sortReceipts,
-  convertReceiptsToCSV,
-  downloadReceiptsCSV,
-  getReceiptStatistics,
-  type Receipt,
-} from "@/app/services/receipt-service"
-import { isOfflineMode, formatCurrency, formatDateTime } from "@/app/services/utils"
-import Link from "next/link"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import { toast } from "sonner"
+import { Separator } from "@/components/ui/separator"
+import { cn } from "@/lib/utils"
 
-const ITEMS_PER_PAGE = 10
+// Types for receipt stats (calculated from server response)
+interface ReceiptStats {
+  total_receipts: number
+  drafts_count: number
+  generated_count: number
+  paid_today_count: number
+  total_revenue: number
+}
 
-export default function ReceiptsPage() {
+function ReceiptsPageInternal() {
+  const searchParams = useSearchParams()
   const router = useRouter()
+
+  // State management
+  const [selectedReceipts, setSelectedReceipts] = useState<string[]>([])
   
-  // Core data state - separated as per the implementation guide
-  const [isLoading, setIsLoading] = useState(true)
-  const [allReceipts, setAllReceipts] = useState<Receipt[]>([])
-  const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([])
-  const [error, setError] = useState<string | null>(null)
-
-  // Search and filter state
+  // Server-side filter states
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [dateRangeFilter, setDateRangeFilter] = useState({
+    startDate: "",
+    endDate: ""
+  })
+  
+  // Client-side search state (debounced)
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("ALL")
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState("ALL")
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
-  const [showFilters, setShowFilters] = useState(false)
-
-  // Sorting state
-  const [sortBy, setSortBy] = useState("createdAt")
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
-
+  
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
-
-  // UI state
+  const [itemsPerPage] = useState(20)
+  
+  // UI states
   const [isExporting, setIsExporting] = useState(false)
-  const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null)
 
-  // Robust data fetching function with proper error handling
-  const loadReceipts = useCallback(async () => {
-    try {
-      setIsLoading(true)
-      setError(null) // Clear any previous errors
+  // Use React Query with server-side filtering and pagination
+  const {
+    data,
+    isLoading: queryIsLoading,
+    isError: queryIsError,
+    error: queryError,
+    isFetching,
+    refetch,
+  } = useQuery<{ receipts: Receipt[]; stats: ReceiptStats; pagination: { total: number; page: number; per_page: number; total_pages: number } }, Error>({
+    queryKey: ['receipts', { statusFilter, dateRangeFilter, currentPage, itemsPerPage }],
+    queryFn: async () => {
+      // Build filter params for server-side filtering
+      const filters: ReceiptListFilters = {
+        page: currentPage,
+        per_page: itemsPerPage
+      }
       
-      const receiptData = await getReceipts()
-      setAllReceipts(receiptData)
-    } catch (error) {
-      console.error("Error loading receipts:", error)
-      setError("Failed to load receipts. Please try again.")
-      setAllReceipts([]) // Reset to empty array on error
-    } finally {
-      // This ALWAYS executes, ensuring loading state is properly reset
-      setIsLoading(false)
+      if (statusFilter !== "all") {
+        filters.status = statusFilter
+      }
+      
+      if (dateRangeFilter.startDate) {
+        filters.date_from = dateRangeFilter.startDate
+      }
+      
+      if (dateRangeFilter.endDate) {
+        filters.date_to = dateRangeFilter.endDate
+      }
+
+      // Use updated getReceipts function with server-side filtering
+      const response = await getReceipts(filters)
+      
+      // Calculate stats from the receipts (could be moved to server-side later)
+      const stats: ReceiptStats = {
+        total_receipts: response.total,
+        drafts_count: response.receipts.filter(r => r.status === 'DRAFT').length,
+        generated_count: response.receipts.filter(r => r.status === 'GENERATED').length,
+        paid_today_count: response.receipts.filter(r => {
+          const today = new Date().toDateString()
+          const receiptDate = new Date(r.paidAt || '').toDateString()
+          return r.status === 'PAID' && receiptDate === today
+        }).length,
+        total_revenue: response.receipts
+          .filter(r => r.status === 'PAID')
+          .reduce((sum, r) => sum + (r.grandTotalAmount || r.amount), 0)
+      }
+      
+      return { 
+        receipts: response.receipts, 
+        stats,
+        pagination: {
+          total: response.total,
+          page: response.page,
+          per_page: response.per_page,
+          total_pages: response.total_pages
+        }
+      }
+    },
+    staleTime: 15 * 60 * 1000, // 15 minutes
+    refetchInterval: 60000, // 1 minute
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+  })
+
+  // Debounce search input to prevent excessive re-renders
+  const { debouncedSearchTerm, isSearching } = useSearchDebounce(searchTerm, 300)
+
+  // Client-side search filtering (applied after server-side filtering and pagination)
+  const displayedReceipts = useMemo(() => {
+    let receipts = data?.receipts || []
+    
+    // Apply client-side search filter to current page results
+    if (debouncedSearchTerm) {
+      const searchLower = debouncedSearchTerm.toLowerCase()
+      receipts = receipts.filter(receipt =>
+        receipt.receiptNumber.toLowerCase().includes(searchLower) ||
+        receipt.tailNumber.toLowerCase().includes(searchLower) ||
+        receipt.customer.toLowerCase().includes(searchLower)
+      )
     }
-  }, []) // Empty dependency array as loadReceipts doesn't depend on any props/state
 
-  // Initial data loading - runs once on component mount
+    return receipts
+  }, [data?.receipts, debouncedSearchTerm])
+
+  // Get pagination info from server response
+  const totalPages = data?.pagination.total_pages || 1
+  const totalReceipts = data?.pagination.total || 0
+
+  // Reset pagination when server-side filters change
   useEffect(() => {
-    loadReceipts()
-  }, [loadReceipts])
+    setCurrentPage(1)
+  }, [statusFilter, dateRangeFilter])
 
-  // Separate effect for data processing - runs when data or filters change
-  useEffect(() => {
-    let filtered = filterReceipts(
-      allReceipts,
-      searchTerm,
-      startDate ? format(startDate, "yyyy-MM-dd") : undefined,
-      endDate ? format(endDate, "yyyy-MM-dd") : undefined,
-      statusFilter,
-      paymentMethodFilter,
-    )
+  // Event handlers
+  const handleViewReceipt = useCallback((receipt: Receipt) => {
+    router.push(`/csr/receipts/${receipt.id}`)
+  }, [router])
 
-    filtered = sortReceipts(filtered, sortBy, sortOrder)
-    setFilteredReceipts(filtered)
-    setCurrentPage(1) // Reset to first page when filters change
-  }, [allReceipts, searchTerm, startDate, endDate, statusFilter, paymentMethodFilter, sortBy, sortOrder])
-
-  // Pagination
-  const totalPages = Math.ceil(filteredReceipts.length / ITEMS_PER_PAGE)
-  const paginatedReceipts = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
-    return filteredReceipts.slice(startIndex, startIndex + ITEMS_PER_PAGE)
-  }, [filteredReceipts, currentPage])
-
-  // Statistics
-  const statistics = useMemo(() => getReceiptStatistics(filteredReceipts), [filteredReceipts])
-
-  const handleSort = (column: string) => {
-    if (sortBy === column) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+  const handleEditReceipt = useCallback((receipt: Receipt) => {
+    if (receipt.status === 'DRAFT') {
+      router.push(`/csr/receipts/${receipt.id}`)
     } else {
-      setSortBy(column)
-      setSortOrder("asc")
+      // View only for non-draft receipts
+      router.push(`/csr/receipts/${receipt.id}`)
+    }
+  }, [router])
+
+  const handleVoidReceipt = useCallback(async (receipt: Receipt) => {
+    // TODO: Implement void functionality
+    console.log("Void receipt:", receipt.id)
+    toast.info("Void functionality coming soon")
+  }, [])
+
+  const toggleReceiptSelection = useCallback((receiptId: string) => {
+    setSelectedReceipts(prev => 
+      prev.includes(receiptId) 
+        ? prev.filter(id => id !== receiptId)
+        : [...prev, receiptId]
+    )
+  }, [])
+
+  const toggleAllReceipts = useCallback(() => {
+    if (selectedReceipts.length === displayedReceipts.length) {
+      setSelectedReceipts([])
+    } else {
+      setSelectedReceipts(displayedReceipts.map(r => r.id.toString()))
+    }
+  }, [selectedReceipts.length, displayedReceipts])
+
+  // Badge helpers following fuel-orders pattern
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "PAID":
+        return <Badge variant="secondary" className="bg-green-100 text-green-800">Paid</Badge>
+      case "GENERATED":
+        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Generated</Badge>
+      case "DRAFT":
+        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Draft</Badge>
+      case "VOID":
+        return <Badge variant="secondary" className="bg-gray-200 text-gray-700">Void</Badge>
+      case "PENDING":
+        return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">Pending</Badge>
+      default:
+        return <Badge variant="outline">{status}</Badge>
     }
   }
 
-  const handleExport = async () => {
+  // Export functionality
+  const exportToCSV = () => {
     setIsExporting(true)
     try {
-      const csvContent = convertReceiptsToCSV(filteredReceipts)
-      const date = new Date().toISOString().split("T")[0]
-      const filename = `receipts-export-${date}.csv`
-      downloadReceiptsCSV(csvContent, filename)
+      const headers = [
+        "Receipt #",
+        "Generation Date", 
+        "Paid Date",
+        "Status",
+        "Tail #",
+        "Customer Name",
+        "Fuel Type",
+        "Quantity",
+        "Amount"
+      ]
+      
+      const csvContent = [
+        headers.join(","),
+        ...displayedReceipts.map((receipt) =>
+          [
+            receipt.receiptNumber,
+            receipt.generatedAt || "",
+            receipt.paidAt || "",
+            receipt.status,
+            receipt.tailNumber,
+            receipt.customer,
+            receipt.fuelType,
+            receipt.quantity,
+            receipt.grandTotalAmount || receipt.amount
+          ].join(","),
+        ),
+      ].join("\n")
+
+      const blob = new Blob([csvContent], { type: "text/csv" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `receipts-export-${new Date().toISOString().split('T')[0]}.csv`
+      a.click()
+      window.URL.revokeObjectURL(url)
+      
+      toast.success("Receipts exported successfully")
     } catch (error) {
-      console.error("Export error:", error)
+      toast.error("Failed to export receipts")
     } finally {
       setIsExporting(false)
     }
   }
 
-  const clearFilters = () => {
-    setSearchTerm("")
-    setStatusFilter("ALL")
-    setPaymentMethodFilter("ALL")
-    setStartDate(undefined)
-    setEndDate(undefined)
-  }
+  const handleRefresh = useCallback(() => {
+    refetch()
+    toast.info("Refreshing receipts...")
+  }, [refetch])
 
-  const handleRetry = () => {
-    loadReceipts()
-  }
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "PAID":
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Paid</Badge>
-      case "PENDING":
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>
-      case "REFUNDED":
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Refunded</Badge>
-      default:
-        return <Badge variant="secondary">{status}</Badge>
-    }
-  }
-
-  const getSortIcon = (column: string) => {
-    if (sortBy !== column) {
-      return <ArrowUpDown className="h-4 w-4" />
-    }
-    return sortOrder === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
-  }
-
-  const activeFiltersCount = [
-    searchTerm,
-    statusFilter !== "ALL" ? statusFilter : null,
-    paymentMethodFilter !== "ALL" ? paymentMethodFilter : null,
-    startDate,
-    endDate,
-  ].filter(Boolean).length
-
-  // Declarative UI rendering based on state
-  if (isLoading) {
+  // Handle loading state
+  if (queryIsLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <motion.div
-          className="flex flex-col items-center gap-4"
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
-        >
-          <motion.div
-            className="h-8 w-8 border-4 border-[#2A628F] border-t-transparent rounded-full"
-            animate={{
-              rotate: 360,
-              transition: {
-                repeat: Number.POSITIVE_INFINITY,
-                duration: 1,
-                ease: "linear",
-              },
-            }}
-          />
-          <p className="text-[#3A4356] dark:text-[#CBD5E0]">Loading receipts...</p>
-        </motion.div>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <p>Loading receipts...</p>
+        </div>
       </div>
     )
   }
 
-  if (error) {
+  // Handle error state
+  if (queryIsError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <motion.div
-          className="flex flex-col items-center gap-4 text-center"
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
-        >
-          <div className="p-4 bg-red-50 rounded-full">
-            <X className="h-8 w-8 text-red-500" />
-          </div>
-          <div>
-            <h2 className="text-xl font-semibold text-[#3A4356] dark:text-[#F8FAFC] mb-2">Error Loading Receipts</h2>
-            <p className="text-[#3A4356] dark:text-[#CBD5E0] mb-4">{error}</p>
-            <Button onClick={handleRetry} className="gap-2">
-              <RefreshCw className="h-4 w-4" />
-              Try Again
-            </Button>
-          </div>
-        </motion.div>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <AlertTriangle className="h-12 w-12 text-red-500" />
+          <p className="text-red-600 text-lg font-semibold">Error Loading Receipts</p>
+          <p className="text-muted-foreground">{queryError?.message}</p>
+          <Button onClick={() => window.location.reload()}>Try Again</Button>
+        </div>
       </div>
     )
   }
 
-  const offline = isOfflineMode()
+  const statusOptions = [
+    { value: 'all', label: 'All Statuses' },
+    { value: 'DRAFT', label: 'Draft' },
+    { value: 'GENERATED', label: 'Generated' },
+    { value: 'PAID', label: 'Paid' },
+    { value: 'VOID', label: 'Void' },
+  ]
+
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-40">
-        <div className="container flex h-16 items-center px-4 justify-between">
-          <div className="flex items-center gap-2">
-            <Plane className="h-6 w-6 text-[#2A628F] rotate-45" />
-            <span className="text-xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">FBO LaunchPad</span>
-            <Badge variant="secondary" className="bg-[#2A628F]/10 text-[#2A628F] ml-2">
-              CSR
-            </Badge>
+    <div className="space-y-6">
+      {/* Header with Stats */}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Receipts Management</h1>
+            <p className="text-muted-foreground">Search, filter, and manage all customer receipts</p>
           </div>
-          {offline && (
-            <motion.div
-              className="flex items-center gap-2 bg-amber-500/10 text-amber-500 px-3 py-1 rounded-md"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <WifiOff className="h-4 w-4" />
-              <span className="text-xs font-medium">Offline Mode</span>
-            </motion.div>
-          )}
-        </div>
-      </header>
-
-      <main className="container px-4 md:px-6 py-6 md:py-8">
-        <div className="flex flex-col gap-6 max-w-7xl mx-auto">
-          {/* Navigation */}
-          <motion.div
-            className="flex items-center gap-2"
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/csr/dashboard">
-                <ArrowLeft className="h-4 w-4 mr-1" /> Back to Dashboard
-              </Link>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm bg-blue-50 border border-blue-200 text-blue-700">
+              <div className="w-2 h-2 rounded-full bg-blue-500" />
+              Auto-refresh (1min)
+            </div>
+            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isFetching}>
+              {isFetching ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Refresh
             </Button>
-          </motion.div>
-
-          {/* Page Header */}
-          <motion.div
-            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-          >
-            <div>
-              <h1 className="text-3xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">Receipts Management</h1>
-              <p className="text-[#3A4356] dark:text-[#CBD5E0] mt-1">Manage and track all fuel receipt transactions</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <HelpCircle className="h-4 w-4 mr-1" />
-                    Help
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Receipts Management Help</DialogTitle>
-                    <DialogDescription>Learn how to effectively manage receipts in the system.</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="font-semibold mb-2">Search & Filter</h4>
-                      <ul className="text-sm space-y-1 text-muted-foreground">
-                        <li>• Search by receipt number, tail number, customer, or fueler name</li>
-                        <li>• Filter by status, payment method, and date range</li>
-                        <li>• Use the filter toggle to show/hide advanced options</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold mb-2">Sorting & Export</h4>
-                      <ul className="text-sm space-y-1 text-muted-foreground">
-                        <li>• Click column headers to sort data</li>
-                        <li>• Export filtered results to CSV format</li>
-                        <li>• View detailed receipt information</li>
-                      </ul>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-              <Button onClick={handleExport} disabled={isExporting} className="gap-2">
-                {isExporting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                Export CSV
-              </Button>
-            </div>
-          </motion.div>
-
-          {/* Statistics Cards */}
-          <motion.div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-          >
-            <Card className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-[#2A628F]/10 rounded-lg">
-                    <ReceiptIcon className="h-5 w-5 text-[#2A628F]" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">{statistics.total}</p>
-                    <p className="text-sm text-[#3A4356] dark:text-[#CBD5E0]">Total Receipts</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-green-500/10 rounded-lg">
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">{statistics.paid}</p>
-                    <p className="text-sm text-[#3A4356] dark:text-[#CBD5E0]">Paid</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-yellow-500/10 rounded-lg">
-                    <Clock className="h-5 w-5 text-yellow-500" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">{statistics.pending}</p>
-                    <p className="text-sm text-[#3A4356] dark:text-[#CBD5E0]">Pending</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-red-500/10 rounded-lg">
-                    <RefreshCw className="h-5 w-5 text-red-500" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">{statistics.refunded}</p>
-                    <p className="text-sm text-[#3A4356] dark:text-[#CBD5E0]">Refunded</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-emerald-500/10 rounded-lg">
-                    <DollarSign className="h-5 w-5 text-emerald-500" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">
-                      {formatCurrency(statistics.totalAmount)}
-                    </p>
-                    <p className="text-sm text-[#3A4356] dark:text-[#CBD5E0]">Total Revenue</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Search and Filters */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-          >
-            <Card>
-              <CardHeader className="pb-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div className="flex items-center gap-2">
-                    <Search className="h-5 w-5 text-[#2A628F]" />
-                    <CardTitle>Search & Filter Receipts</CardTitle>
-                    {activeFiltersCount > 0 && (
-                      <Badge variant="secondary" className="bg-[#2A628F]/10 text-[#2A628F]">
-                        {activeFiltersCount} active
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className="gap-2">
-                      <SlidersHorizontal className="h-4 w-4" />
-                      {showFilters ? "Hide" : "Show"} Filters
-                    </Button>
-                    {activeFiltersCount > 0 && (
-                      <Button variant="outline" size="sm" onClick={clearFilters} className="gap-2" data-testid="clear-filters-button">
-                        <X className="h-4 w-4" />
-                        Clear
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Search Bar */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by receipt number, tail number, customer, or fueler name..."
-                    className="pl-10"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    data-testid="search-input"
-                  />
-                </div>
-
-                {/* Advanced Filters */}
-                <AnimatePresence>
-                  {showFilters && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t"
-                    >
-                      <div className="space-y-2">
-                        <Label>Start Date</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" className="w-full justify-start text-left font-normal">
-                              <Calendar className="mr-2 h-4 w-4" />
-                              {startDate ? format(startDate, "PPP") : "Pick a date"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <CalendarComponent
-                              mode="single"
-                              selected={startDate}
-                              onSelect={setStartDate}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>End Date</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" className="w-full justify-start text-left font-normal">
-                              <Calendar className="mr-2 h-4 w-4" />
-                              {endDate ? format(endDate, "PPP") : "Pick a date"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <CalendarComponent mode="single" selected={endDate} onSelect={setEndDate} initialFocus />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Status</Label>
-                        <Select value={statusFilter} onValueChange={setStatusFilter}>
-                          <SelectTrigger data-testid="status-filter">
-                            <SelectValue placeholder="All statuses" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="ALL" data-testid="status-filter-option-ALL">All statuses</SelectItem>
-                            <SelectItem value="PAID" data-testid="status-filter-option-PAID">Paid</SelectItem>
-                            <SelectItem value="PENDING" data-testid="status-filter-option-PENDING">Pending</SelectItem>
-                            <SelectItem value="REFUNDED" data-testid="status-filter-option-REFUNDED">Refunded</SelectItem>
-                            <SelectItem value="DRAFT" data-testid="status-filter-option-DRAFT">Draft</SelectItem>
-                            <SelectItem value="GENERATED" data-testid="status-filter-option-GENERATED">Generated</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Payment Method</Label>
-                        <Select value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="All methods" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="ALL">All methods</SelectItem>
-                            <SelectItem value="Corporate Account">Corporate Account</SelectItem>
-                            <SelectItem value="Credit Card">Credit Card</SelectItem>
-                            <SelectItem value="Cash">Cash</SelectItem>
-                            <SelectItem value="Check">Check</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Results Summary */}
-          <motion.div
-            className="flex items-center justify-between text-sm text-[#3A4356] dark:text-[#CBD5E0]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3, delay: 0.4 }}
-          >
-            <span>
-              Showing {paginatedReceipts.length} of {filteredReceipts.length} receipts
-              {activeFiltersCount > 0 && ` (filtered from ${allReceipts.length} total)`}
-            </span>
-            <span>Total Value: {formatCurrency(statistics.totalAmount)}</span>
-          </motion.div>
-
-          {/* Receipts Table */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.4 }}
-          >
-            <Card>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <Table data-testid="receipts-table">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[120px]">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto p-0 font-semibold"
-                            onClick={() => handleSort("receiptNumber")}
-                          >
-                            Receipt #{getSortIcon("receiptNumber")}
-                          </Button>
-                        </TableHead>
-                        <TableHead>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto p-0 font-semibold"
-                            onClick={() => handleSort("tailNumber")}
-                          >
-                            Tail Number
-                            {getSortIcon("tailNumber")}
-                          </Button>
-                        </TableHead>
-                        <TableHead>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto p-0 font-semibold"
-                            onClick={() => handleSort("customer")}
-                          >
-                            Customer
-                            {getSortIcon("customer")}
-                          </Button>
-                        </TableHead>
-                        <TableHead>Fuel Type</TableHead>
-                        <TableHead className="text-right">Quantity</TableHead>
-                        <TableHead className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto p-0 font-semibold"
-                            onClick={() => handleSort("amount")}
-                          >
-                            Amount
-                            {getSortIcon("amount")}
-                          </Button>
-                        </TableHead>
-                        <TableHead>Payment Method</TableHead>
-                        <TableHead>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto p-0 font-semibold"
-                            onClick={() => handleSort("status")}
-                          >
-                            Status
-                            {getSortIcon("status")}
-                          </Button>
-                        </TableHead>
-                        <TableHead>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto p-0 font-semibold"
-                            onClick={() => handleSort("createdAt")}
-                          >
-                            Date
-                            {getSortIcon("createdAt")}
-                          </Button>
-                        </TableHead>
-                        <TableHead className="w-[50px]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {paginatedReceipts.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={10} className="text-center py-8">
-                            <div className="flex flex-col items-center gap-2">
-                              <ReceiptIcon className="h-8 w-8 text-muted-foreground" />
-                              <p className="text-muted-foreground">
-                                {activeFiltersCount > 0 ? "No receipts match your filters" : "No receipts found"}
-                              </p>
-                              {activeFiltersCount > 0 && (
-                                <Button variant="outline" size="sm" onClick={clearFilters}>
-                                  Clear filters
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        paginatedReceipts.map((receipt, index) => (
-                          <motion.tr
-                            key={receipt.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.3, delay: index * 0.05 }}
-                            className="hover:bg-muted/50"
-                            data-testid="receipt-row"
-                          >
-                            <TableCell className="font-medium">{receipt.receiptNumber}</TableCell>
-                            <TableCell><span data-testid="receipt-tail-number">{receipt.tailNumber}</span></TableCell>
-                            <TableCell>{receipt.customer}</TableCell>
-                            <TableCell>{receipt.fuelType}</TableCell>
-                            <TableCell className="text-right">{receipt.quantity.toLocaleString()} gal</TableCell>
-                            <TableCell className="text-right font-medium">{formatCurrency(receipt.amount)}</TableCell>
-                            <TableCell>{receipt.paymentMethod}</TableCell>
-                            <TableCell><span data-testid="receipt-status-badge">{getStatusBadge(receipt.status)}</span></TableCell>
-                            <TableCell>{formatDateTime(receipt.createdAt)}</TableCell>
-                            <TableCell>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => setSelectedReceipt(receipt)}>
-                                    <Eye className="h-4 w-4 mr-2" />
-                                    View Details
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`/csr/receipts/${receipt.id}`} data-testid="view-receipt-button">
-                                      <FileText className="h-4 w-4 mr-2" />
-                                      Edit Receipt
-                                    </Link>
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </motion.tr>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <motion.div
-              className="flex items-center justify-between"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3, delay: 0.5 }}
-            >
-              <div className="text-sm text-muted-foreground" data-testid="current-page-indicator">
-                Page {currentPage} of {totalPages}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
-                  data-testid="previous-page-button"
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                  disabled={currentPage === totalPages}
-                  data-testid="next-page-button"
-                >
-                  Next
-                </Button>
-              </div>
-            </motion.div>
-          )}
+          </div>
         </div>
-      </main>
 
-      {/* Receipt Details Dialog */}
-      <Dialog open={!!selectedReceipt} onOpenChange={() => setSelectedReceipt(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Receipt Details</DialogTitle>
-            <DialogDescription>
-              {selectedReceipt && `Receipt ${selectedReceipt.receiptNumber} - ${selectedReceipt.customer}`}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedReceipt && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Receipt Number</Label>
-                  <p className="font-medium">{selectedReceipt.receiptNumber}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Status</Label>
-                  <div className="mt-1">{getStatusBadge(selectedReceipt.status)}</div>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Tail Number</Label>
-                  <p className="font-medium">{selectedReceipt.tailNumber}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Customer</Label>
-                  <p className="font-medium">{selectedReceipt.customer}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Fuel Type</Label>
-                  <p>{selectedReceipt.fuelType}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Quantity</Label>
-                  <p>{selectedReceipt.quantity.toLocaleString()} gallons</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Amount</Label>
-                  <p className="font-medium text-lg">{formatCurrency(selectedReceipt.amount)}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Payment Method</Label>
-                  <p>{selectedReceipt.paymentMethod}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Fueler</Label>
-                  <p>{selectedReceipt.fuelerName}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Location</Label>
-                  <p>{selectedReceipt.location}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Created</Label>
-                  <p>{formatDateTime(selectedReceipt.createdAt)}</p>
-                </div>
-                {selectedReceipt.updatedAt && (
-                  <div>
-                    <Label className="text-sm font-medium text-muted-foreground">Updated</Label>
-                    <p>{formatDateTime(selectedReceipt.updatedAt)}</p>
+        {/* Stats Cards - Following fuel-orders pattern */}
+        {data?.stats && (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Receipts (Last 30 Days)</CardTitle>
+                <ReceiptIcon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{data.stats.total_receipts}</div>
+                <p className="text-xs text-muted-foreground">Non-draft receipts</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Drafts</CardTitle>
+                <Edit className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{data.stats.drafts_count}</div>
+                <p className="text-xs text-muted-foreground">In progress</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Generated (Unpaid)</CardTitle>
+                <FileText className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{data.stats.generated_count}</div>
+                <p className="text-xs text-muted-foreground">Awaiting payment</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Paid Today</CardTitle>
+                <CheckCircle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{data.stats.paid_today_count}</div>
+                <p className="text-xs text-muted-foreground">Today's payments</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
+
+      {/* Action Bar */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex gap-2">
+          {/* Note: Receipts are created from fuel orders, no direct creation */}
+          <p className="text-sm text-muted-foreground">Receipts are created from completed fuel orders</p>
+        </div>
+
+        <div className="flex gap-2">
+          <Button onClick={exportToCSV} variant="outline" className="gap-2" disabled={isExporting}>
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Export CSV
+          </Button>
+        </div>
+      </div>
+
+      {/* Advanced Filters - Following fuel-orders pattern */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="h-5 w-5" />
+            Search & Filter
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="lg:col-span-1">
+              <Label htmlFor="search">Search Receipts</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="search"
+                  placeholder="Receipt #, Tail #, or Customer Name..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-10"
+                />
+                {isSearching && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   </div>
                 )}
               </div>
-
-              {selectedReceipt.notes && (
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Notes</Label>
-                  <p className="mt-1 p-3 bg-muted rounded-md">{selectedReceipt.notes}</p>
-                </div>
-              )}
-
-              {selectedReceipt.status === "REFUNDED" && (
-                <div className="p-4 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-800">
-                  <h4 className="font-semibold text-red-800 dark:text-red-200 mb-2">Refund Information</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-sm font-medium text-red-700 dark:text-red-300">Refund Amount</Label>
-                      <p className="font-medium">{formatCurrency(selectedReceipt.refundAmount || 0)}</p>
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium text-red-700 dark:text-red-300">Refunded At</Label>
-                      <p>{selectedReceipt.refundedAt ? formatDateTime(selectedReceipt.refundedAt) : "N/A"}</p>
-                    </div>
-                  </div>
-                  {selectedReceipt.refundReason && (
-                    <div className="mt-2">
-                      <Label className="text-sm font-medium text-red-700 dark:text-red-300">Refund Reason</Label>
-                      <p className="mt-1">{selectedReceipt.refundReason}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setSelectedReceipt(null)}>
-                  Close
-                </Button>
-                <Button asChild>
-                  <Link href={`/csr/receipts/${selectedReceipt.id}`}>Edit Receipt</Link>
-                </Button>
+            </div>
+            <div>
+              <Label htmlFor="status">Status</Label>
+              <Select value={statusFilter} onValueChange={setStatusFilter} disabled={isFetching}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="dateRange">Date Range</Label>
+              <div className="flex gap-1">
+                <Input
+                  type="date"
+                  value={dateRangeFilter.startDate}
+                  onChange={(e) => setDateRangeFilter(prev => ({...prev, startDate: e.target.value}))}
+                  className="text-xs"
+                />
+                <Input
+                  type="date"
+                  value={dateRangeFilter.endDate}
+                  onChange={(e) => setDateRangeFilter(prev => ({...prev, endDate: e.target.value}))}
+                  className="text-xs"
+                />
               </div>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Receipts Table */}
+      <Card className={cn({ 'opacity-60 transition-opacity': isFetching })}>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Receipts ({totalReceipts})</CardTitle>
+              <CardDescription>
+                {statusFilter === "all" ? "All receipts" : `${statusFilter} receipts`}
+                {selectedReceipts.length > 0 && ` • ${selectedReceipts.length} selected`}
+              </CardDescription>
+            </div>
+            {displayedReceipts.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleAllReceipts}
+                className="flex items-center gap-2"
+              >
+                {selectedReceipts.length === displayedReceipts.length ? (
+                  <CheckSquare className="h-4 w-4" />
+                ) : (
+                  <Square className="h-4 w-4" />
+                )}
+                Select All
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    <Checkbox
+                      checked={selectedReceipts.length === displayedReceipts.length && displayedReceipts.length > 0}
+                      onCheckedChange={toggleAllReceipts}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
+                  <TableHead>Receipt #</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Tail #</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {displayedReceipts.length > 0 ? (
+                  displayedReceipts.map((receipt) => (
+                    <ReceiptTableRow
+                      key={receipt.id}
+                      receipt={receipt}
+                      isSelected={selectedReceipts.includes(receipt.id.toString())}
+                      onToggleSelection={toggleReceiptSelection}
+                      onView={handleViewReceipt}
+                      onEdit={handleEditReceipt}
+                      onVoid={handleVoidReceipt}
+                    />
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={8} className="h-24 text-center">
+                      No receipts found. Try adjusting your filters.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalReceipts)} of {totalReceipts} receipts
+            {debouncedSearchTerm && ` (filtered on current page)`}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </Button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum
+                if (totalPages <= 5) {
+                  pageNum = i + 1
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i
+                } else {
+                  pageNum = currentPage - 2 + i
+                }
+
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={currentPage === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(pageNum)}
+                    className="w-10 h-8"
+                  >
+                    {pageNum}
+                  </Button>
+                )
+              })}
+              {totalPages > 5 && currentPage < totalPages - 2 && (
+                <>
+                  <span className="px-2">...</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(totalPages)}
+                    className="w-10 h-8"
+                  >
+                    {totalPages}
+                  </Button>
+                </>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+export default function ReceiptsPage() {
+  return (
+    <Suspense fallback={<div>Loading receipts...</div>}>
+      <ReceiptsPageInternal />
+    </Suspense>
   )
 }

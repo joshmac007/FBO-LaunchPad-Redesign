@@ -11,6 +11,7 @@ import { Plus, Upload, Search, ToggleLeft, ToggleRight } from "lucide-react"
 import { FeeScheduleTable } from "./FeeScheduleTable"
 import { AddAircraftDialog } from "./AddAircraftDialog"
 import { getConsolidatedFeeSchedule } from "@/app/services/admin-fee-config-service"
+import { UploadFeesDialog } from "./UploadFeesDialog"
 
 interface FeeScheduleTabProps {
   fboId?: number
@@ -121,10 +122,7 @@ export function FeeScheduleTab({ fboId = 1 }: FeeScheduleTabProps) {
       <div className="flex items-center gap-4 flex-wrap">
         <AddAircraftDialog fboId={fboId} categories={categories} />
         
-        <Button variant="outline" className="flex items-center gap-2">
-          <Upload className="h-4 w-4" />
-          Upload Fees
-        </Button>
+        <UploadFeesDialog fboId={fboId} />
 
         <Button
           variant={viewMode === 'caa' ? 'default' : 'outline'}

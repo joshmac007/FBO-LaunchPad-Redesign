@@ -33,6 +33,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Plus } from "lucide-react"
+import { addAircraftToFeeSchedule } from "@/app/services/admin-fee-config-service"
 
 const addAircraftSchema = z.object({
   aircraft_type_name: z.string().min(1, "Aircraft type name is required"),
@@ -67,10 +68,11 @@ export function AddAircraftDialog({ fboId, categories }: AddAircraftDialogProps)
   // This would be implemented with a proper API call
   const addAircraftMutation = useMutation({
     mutationFn: async (data: AddAircraftForm) => {
-      // Placeholder for actual API call
-      console.log("Adding aircraft:", data)
-      // return createAircraftFeeStructure(fboId, data)
-      throw new Error("API not implemented yet")
+      return addAircraftToFeeSchedule(fboId, {
+        aircraft_type_name: data.aircraft_type_name,
+        fee_category_id: parseInt(data.fee_category_id, 10),
+        min_fuel_gallons: parseInt(data.min_fuel_gallons, 10),
+      })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
@@ -79,7 +81,9 @@ export function AddAircraftDialog({ fboId, categories }: AddAircraftDialogProps)
       form.reset()
     },
     onError: (error) => {
-      toast.error("Failed to add aircraft")
+      toast.error("Failed to add aircraft", {
+        description: (error as Error).message || "An unexpected error occurred."
+      })
       console.error("Add aircraft error:", error)
     }
   })

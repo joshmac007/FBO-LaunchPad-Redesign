@@ -68,7 +68,7 @@ export function EditableFeeCell({
     }
   }
 
-  const displayValue = value !== null ? `$${value.toFixed(2)}` : "$0.00"
+  const displayValue = typeof value === 'number' ? `$${value.toFixed(2)}` : "$0.00"
 
   if (isEditing) {
     return (

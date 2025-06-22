@@ -11,7 +11,8 @@ from ...schemas.admin_fee_config_schemas import (
     AircraftTypeMappingSchema, CreateAircraftTypeMappingSchema, UpdateAircraftTypeMappingSchema,
     CSVUploadResultSchema,
     FeeRuleSchema, CreateFeeRuleSchema, UpdateFeeRuleSchema,
-    WaiverTierSchema, CreateWaiverTierSchema, UpdateWaiverTierSchema
+    WaiverTierSchema, CreateWaiverTierSchema, UpdateWaiverTierSchema,
+    CreateAircraftFeeSetupSchema
 )
 from ...utils.enhanced_auth_decorators_v2 import require_permission_v2
 
@@ -43,6 +44,7 @@ waiver_tier_schema = WaiverTierSchema()
 waiver_tier_list_schema = WaiverTierSchema(many=True)
 create_waiver_tier_schema = CreateWaiverTierSchema()
 update_waiver_tier_schema = UpdateWaiverTierSchema()
+create_aircraft_fee_setup_schema = CreateAircraftFeeSetupSchema()
 
 
 @admin_fee_config_bp.errorhandler(ValidationError)
@@ -497,5 +499,31 @@ def delete_fee_rule_override(fbo_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        current_app.logger.error(f"Error deleting fee rule override: {e}")
-        return jsonify({"error": "An internal error occurred"}), 500 
+        current_app.logger.error(f"Error deleting fee rule override: {str(e)}")
+        return jsonify({'error': 'A database error occurred'}), 500
+
+
+@admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/aircraft-fee-setup', methods=['POST'])
+@require_permission_v2('manage_fbo_fee_schedules')
+def create_aircraft_fee_setup(fbo_id):
+    """Create a new aircraft type, map it to a fee category, and set its min fuel."""
+    try:
+        if not request.json:
+            return jsonify({'error': 'Invalid JSON in request body'}), 400
+        
+        data = create_aircraft_fee_setup_schema.load(request.json)
+        
+        result = AdminFeeConfigService.create_aircraft_fee_setup(
+            fbo_location_id=fbo_id,
+            aircraft_type_name=data['aircraft_type_name'],
+            fee_category_id=data['fee_category_id'],
+            min_fuel_gallons=data['min_fuel_gallons']
+        )
+        return jsonify(result), 201
+    except ValidationError as e:
+        return jsonify({'error': 'Validation failed', 'messages': e.messages}), 400
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 409 # Using 409 for logical conflicts
+    except Exception as e:
+        current_app.logger.error(f"Error in aircraft fee setup: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500 

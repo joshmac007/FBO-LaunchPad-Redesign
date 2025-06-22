@@ -41,13 +41,15 @@ interface EditCategoryDefaultsDialogProps {
   categoryId: number
   categoryName: string
   categoryRules: FeeRule[]
+  viewMode: 'standard' | 'caa'
 }
 
 export function EditCategoryDefaultsDialog({ 
   fboId, 
   categoryId, 
   categoryName, 
-  categoryRules 
+  categoryRules,
+  viewMode 
 }: EditCategoryDefaultsDialogProps) {
   const [open, setOpen] = useState(false)
   const queryClient = useQueryClient()
@@ -64,20 +66,26 @@ export function EditCategoryDefaultsDialog({
     if (open && categoryRules.length > 0) {
       const feeValues: Record<string, string> = {}
       categoryRules.forEach(rule => {
-        feeValues[rule.id.toString()] = rule.amount.toString()
+        const value = viewMode === 'caa'
+          ? rule.caa_override_amount?.toString() ?? rule.amount.toString()
+          : rule.amount.toString()
+        feeValues[rule.id.toString()] = value
       })
       form.reset({ fees: feeValues })
     }
-  }, [open, categoryRules, form])
+  }, [open, categoryRules, form, viewMode])
 
   const updateCategoryDefaultsMutation = useMutation({
     mutationFn: async (data: EditCategoryDefaultsForm) => {
-      const updatePromises = categoryRules.map(rule => {
-        const newAmount = Number(data.fees[rule.id.toString()])
-        if (newAmount !== rule.amount) {
-          return updateFeeRule(fboId, rule.id, { amount: newAmount })
-        }
-        return Promise.resolve(rule)
+      const updatePromises = Object.entries(data.fees).map(([ruleId, amountStr]) => {
+        const ruleIdNum = parseInt(ruleId)
+        const amountNum = Number(amountStr)
+
+        const payload = viewMode === 'caa'
+            ? { has_caa_override: true, caa_override_amount: amountNum }
+            : { amount: amountNum };
+        
+        return updateFeeRule(fboId, ruleIdNum, payload)
       })
       
       return Promise.all(updatePromises)

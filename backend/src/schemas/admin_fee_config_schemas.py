@@ -278,16 +278,11 @@ class CreateWaiverTierSchema(Schema):
     is_caa_specific_tier = fields.Boolean(missing=False)
 
 
-class UpdateWaiverTierSchema(Schema):
-    """Schema for updating a waiver tier."""
-    name = fields.String(validate=validate.Length(min=1, max=100))
-    fuel_uplift_multiplier = fields.Decimal(
-        validate=validate.Range(min=0),
-        as_string=True
-    )
-    fees_waived_codes = fields.List(
-        fields.String(),
-        validate=validate.Length(min=1)
-    )
-    tier_priority = fields.Integer(validate=validate.Range(min=1))
-    is_caa_specific_tier = fields.Boolean() 
+class UpdateWaiverTierSchema(CreateWaiverTierSchema):
+    pass
+
+
+class CreateAircraftFeeSetupSchema(Schema):
+    aircraft_type_name = fields.Str(required=True, validate=validate.Length(min=1))
+    fee_category_id = fields.Int(required=True)
+    min_fuel_gallons = fields.Float(required=True, validate=validate.Range(min=0)) 
