@@ -269,30 +269,6 @@ export default function CustomerSelector({
             </CardContent>
           </Card>
         )}
-
-        {/* Fallback: Direct ID input for backwards compatibility */}
-        {!selectedCustomer && (
-          <div className="pt-2 border-t">
-            <Label htmlFor="customer-id-fallback" className="text-sm text-gray-600">
-              Or enter Customer ID directly:
-            </Label>
-            <Input
-              id="customer-id-fallback"
-              type="number"
-              placeholder="Enter customer ID"
-              className="mt-1"
-              onChange={(e) => {
-                const id = parseInt(e.target.value)
-                if (id && customers.length > 0) {
-                  const customer = customers.find(c => c.id === id)
-                  if (customer) {
-                    handleCustomerSelect(customer)
-                  }
-                }
-              }}
-            />
-          </div>
-        )}
       </div>
     </div>
   )

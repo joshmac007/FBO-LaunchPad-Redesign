@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, g
 from ..utils.enhanced_auth_decorators_v2 import require_permission_v2
 from ..services.aircraft_service import AircraftService
+from ..models.aircraft_type import AircraftType
 from marshmallow import ValidationError
 from ..schemas import (
     AircraftCreateRequestSchema,
@@ -9,6 +10,7 @@ from ..schemas import (
     AircraftListResponseSchema,
     ErrorResponseSchema
 )
+from ..schemas.aircraft_schemas import AircraftTypeResponseSchema
 
 # Create blueprint for aircraft routes
 aircraft_bp = Blueprint('aircraft_bp', __name__, url_prefix='/api/aircraft')
@@ -120,12 +122,16 @@ def create_aircraft():
                 "error": "Validation error",
                 "details": e.messages
             }), 400
-        
-        aircraft, message, status_code = AircraftService.create_aircraft(data)
-        
-        if aircraft is not None:
-            return jsonify({"message": message, "aircraft": aircraft.to_dict()}), status_code
+
+        if isinstance(data, dict):
+            aircraft, message, status_code = AircraftService.create_aircraft(data)
+            
+            if aircraft is not None:
+                return jsonify({"message": message, "aircraft": aircraft.to_dict()}), status_code
+            else:
+                return jsonify({"error": message}), status_code
         else:
+            return jsonify({"error": "Invalid data format"}), 400
             return jsonify({"error": message}), status_code
             
     except Exception as e:
@@ -188,7 +194,7 @@ def get_aircraft_by_tail(tail_number):
     except Exception as e:
         from flask import current_app
         current_app.logger.error(f"Error getting aircraft {tail_number}: {e}")
-        return jsonify({"error": "Server error"}), 500
+        return jsonify({"error": str(e)}), 500
 
 @aircraft_bp.route('/<string:tail_number>', methods=['PATCH'])
 @require_permission_v2('manage_aircraft', {'resource_type': 'aircraft', 'id_param': 'tail_number'})
@@ -263,12 +269,14 @@ def update_aircraft(tail_number):
                 "error": "Validation error",
                 "details": e.messages
             }), 400
+
+        if not isinstance(data, dict):
+            return jsonify({"error": "Invalid data format"}), 400
         
         aircraft, message, status_code = AircraftService.update_aircraft(tail_number, data)
         
         if aircraft is not None:
             return jsonify({"message": message, "aircraft": aircraft.to_dict()}), status_code
-        else:
             return jsonify({"error": message}), status_code
             
     except Exception as e:
@@ -422,4 +430,57 @@ def create_aircraft_quick():
     except Exception as e:
         from flask import current_app
         current_app.logger.error(f"Error in quick aircraft creation: {e}")
+        return jsonify({"error": "Server error"}), 500
+
+@aircraft_bp.route('/types', methods=['GET', 'OPTIONS'])
+@require_permission_v2('manage_aircraft')
+def get_aircraft_types():
+    """Get all available aircraft types.
+    Requires manage_aircraft permission.
+    ---
+    tags:
+      - Aircraft
+    security:
+      - bearerAuth: []
+    responses:
+      200:
+        description: Aircraft types retrieved successfully
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/AircraftTypeResponseSchema'
+      401:
+        description: Unauthorized
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      403:
+        description: Forbidden (missing permission)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      500:
+        description: Server error
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+    """
+    if request.method == 'OPTIONS':
+        return jsonify({'message': 'OPTIONS request successful'}), 200
+    
+    try:
+        # Query all aircraft types, ordered alphabetically by name
+        aircraft_types = AircraftType.query.order_by(AircraftType.name.asc()).all()
+        
+        # Serialize using the schema
+        schema = AircraftTypeResponseSchema(many=True)
+        serialized_types = schema.dump(aircraft_types)
+        
+        return jsonify(serialized_types), 200
+        
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error fetching aircraft types: {e}")
         return jsonify({"error": "Server error"}), 500

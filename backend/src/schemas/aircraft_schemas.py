@@ -21,6 +21,10 @@ class AircraftListSchema(Schema):
     message = fields.String()
     aircraft = fields.List(fields.Nested(AircraftResponseSchema))
 
+class AircraftTypeResponseSchema(Schema):
+    id = fields.Integer(dump_only=True)
+    name = fields.String(dump_only=True)
+
 class ErrorResponseSchema(Schema):
     error = fields.String()
     details = fields.Raw(required=False)

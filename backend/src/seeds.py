@@ -1,6 +1,7 @@
 from src.extensions import db
 from src.models import Permission, Role, User
 from src.models.fuel_truck import FuelTruck
+from src.models.aircraft_type import AircraftType
 from datetime import datetime
 from sqlalchemy import text
 
@@ -92,6 +93,18 @@ default_fuel_trucks = [
         "current_meter_reading": 0.00,
         "is_active": False  # Inactive truck for testing
     }
+]
+
+default_aircraft_types = [
+    {"name": "Citation CJ3", "base_min_fuel_gallons_for_waiver": 100.00},
+    {"name": "Citation Mustang", "base_min_fuel_gallons_for_waiver": 80.00},
+    {"name": "Gulfstream G650", "base_min_fuel_gallons_for_waiver": 200.00},
+    {"name": "King Air 350", "base_min_fuel_gallons_for_waiver": 120.00},
+    {"name": "Pilatus PC-12", "base_min_fuel_gallons_for_waiver": 90.00},
+    {"name": "Cessna 172", "base_min_fuel_gallons_for_waiver": 30.00},
+    {"name": "Cessna 182", "base_min_fuel_gallons_for_waiver": 35.00},
+    {"name": "Piper Archer", "base_min_fuel_gallons_for_waiver": 32.00},
+    {"name": "Beechcraft Bonanza", "base_min_fuel_gallons_for_waiver": 40.00},
 ]
 
 def seed_data():
@@ -241,6 +254,26 @@ def seed_data():
         if trucks_created > 0:
             db.session.commit()
             print(f"Successfully created {trucks_created} default fuel trucks.")
+
+        # Create Default Aircraft Types
+        print("Creating Default Aircraft Types...")
+        aircraft_types_created = 0
+        for aircraft_type_data in default_aircraft_types:
+            existing_type = AircraftType.query.filter_by(name=aircraft_type_data['name']).first()
+            if not existing_type:
+                aircraft_type = AircraftType(
+                    name=aircraft_type_data['name'],
+                    base_min_fuel_gallons_for_waiver=aircraft_type_data['base_min_fuel_gallons_for_waiver']
+                )
+                db.session.add(aircraft_type)
+                aircraft_types_created += 1
+                print(f"Default Aircraft Type '{aircraft_type_data['name']}' created.")
+            else:
+                print(f"Aircraft Type '{aircraft_type_data['name']}' already exists.")
+
+        if aircraft_types_created > 0:
+            db.session.commit()
+            print(f"Successfully created {aircraft_types_created} default aircraft types.")
 
         print("Database seeding completed successfully.")
         print("Next step: Run 'flask create-permission-groups run' to configure permission groups and role assignments.")

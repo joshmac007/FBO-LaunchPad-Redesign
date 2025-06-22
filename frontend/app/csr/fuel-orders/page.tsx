@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 import { 
   getFuelOrders, 
-  createFuelOrder,
+  createFuelOrder, 
   cancelFuelOrder, 
   updateFuelOrderStatus,
   transformToDisplay,
@@ -52,8 +52,11 @@ import { toast } from "sonner"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import NewFuelOrderDialog from "./components/NewFuelOrderDialog"
+import { motion } from "framer-motion"
 
 // Types
+/*
 interface FuelOrder {
   id: string
   orderNumber: string
@@ -75,6 +78,7 @@ interface FuelOrder {
   assignedTruck?: string
   notes?: string
 }
+*/
 
 // Map backend status to frontend status
 function mapBackendStatus(backendStatus: string): string {
@@ -136,7 +140,7 @@ function EnhancedFuelOrdersPageInternal() {
   const [isNewOrderDialogOpen, setIsNewOrderDialogOpen] = useState(false)
   const [cancelOrderDialog, setCancelOrderDialog] = useState<{
     isOpen: boolean
-    order: FuelOrder | null
+    order: FuelOrderDisplay | null
   }>({
     isOpen: false,
     order: null
@@ -144,6 +148,8 @@ function EnhancedFuelOrdersPageInternal() {
   const [isCanceling, setIsCanceling] = useState(false)
 
   // New order form state
+  // This is now handled by NewFuelOrderDialog
+  /*
   const [newOrder, setNewOrder] = useState({
     tailNumber: "",
     fuelType: "100LL",
@@ -154,6 +160,7 @@ function EnhancedFuelOrdersPageInternal() {
     locationOnRamp: "",
     additiveRequested: false
   })
+  */
 
   useEffect(() => {
     if (tailNumberParam) {
@@ -213,7 +220,12 @@ function EnhancedFuelOrdersPageInternal() {
     return orders;
   }, [data?.orders, debouncedSearchTerm]);
 
+  const handleMarkComplete = (order: FuelOrderDisplay) => {
+    handleCompleteOrder(order.id.toString());
+  };
+
   // Event handlers
+  /* This is now handled by NewFuelOrderDialog
   const handleCreateOrder = async () => {
     if (!newOrder.tailNumber || !newOrder.quantity || !newOrder.customerId) {
       toast.error("Please fill in all required fields")
@@ -253,13 +265,14 @@ function EnhancedFuelOrdersPageInternal() {
         locationOnRamp: "",
         additiveRequested: false
       })
-    } catch (error: any) {
-      console.error('Failed to create order:', error)
-      toast.error(error.message || "Failed to create order. Please try again.")
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || err.message || "Failed to create order"
+      toast.error(errorMessage)
     } finally {
       setIsCreating(false)
     }
   }
+  */
 
   const handleCancelOrder = useCallback(async (order: FuelOrderDisplay) => {
     setCancelOrderDialog({ isOpen: true, order })
@@ -427,15 +440,6 @@ function EnhancedFuelOrdersPageInternal() {
     toast.info("Refreshing fuel orders...");
   }, [refetch]);
 
-  const handleMarkComplete = useCallback(async (order: FuelOrderDisplay) => {
-    try {
-      await updateFuelOrderStatus(parseInt(order.id.toString()), { status: "COMPLETED" });
-      refetch();
-    } catch (error) {
-      toast.error("Failed to mark order as complete.");
-    }
-  }, [refetch]);
-
   const handleViewOrder = useCallback((order: FuelOrderDisplay) => {
     // Navigate to order detail view - implement as needed
     console.log("View order:", order.id);
@@ -540,130 +544,10 @@ function EnhancedFuelOrdersPageInternal() {
       {/* Action Bar */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex gap-2">
-          <Dialog open={isNewOrderDialogOpen} onOpenChange={setIsNewOrderDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                New Fuel Order
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Create New Fuel Order</DialogTitle>
-                <DialogDescription>Fill in the details below to create a new fuel order.</DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="tailNumber">Tail Number *</Label>
-                    <Input
-                      id="tailNumber"
-                      placeholder="N123AB"
-                      value={newOrder.tailNumber}
-                      onChange={(e) => setNewOrder({ ...newOrder, tailNumber: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="customer">Customer *</Label>
-                    <Select
-                      value={newOrder.customerId}
-                      onValueChange={(value) => setNewOrder({ ...newOrder, customerId: value })}
-                    >
-                      <SelectTrigger id="customer">
-                        <SelectValue placeholder="Select customer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {/* {customers.map((customer) => (
-                          <SelectItem key={customer.id} value={customer.id.toString()}>
-                            {customer.name}
-                          </SelectItem>
-                        ))} */}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="fuelType">Fuel Type *</Label>
-                    <Select
-                      value={newOrder.fuelType}
-                      onValueChange={(value) => setNewOrder({ ...newOrder, fuelType: value })}
-                    >
-                      <SelectTrigger id="fuelType">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="100LL">100LL</SelectItem>
-                        <SelectItem value="Jet A">Jet A</SelectItem>
-                        <SelectItem value="Jet A-1">Jet A-1</SelectItem>
-                        <SelectItem value="Mogas">Mogas</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="quantity">Quantity (gallons) *</Label>
-                    <Input
-                      id="quantity"
-                      type="number"
-                      placeholder="50"
-                      value={newOrder.quantity}
-                      onChange={(e) => setNewOrder({ ...newOrder, quantity: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="priority">Priority</Label>
-                    <Select
-                      value={newOrder.priority}
-                      onValueChange={(value) => setNewOrder({ ...newOrder, priority: value })}
-                    >
-                      <SelectTrigger id="priority">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="normal">Normal</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="urgent">Urgent</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="locationOnRamp">Location on Ramp</Label>
-                  <Input
-                    id="locationOnRamp"
-                    placeholder="Gate A1, Hangar 3, etc."
-                    value={newOrder.locationOnRamp}
-                    onChange={(e) => setNewOrder({ ...newOrder, locationOnRamp: e.target.value })}
-                  />
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="additiveRequested"
-                    checked={newOrder.additiveRequested}
-                    onCheckedChange={(checked) => setNewOrder({ ...newOrder, additiveRequested: !!checked })}
-                  />
-                  <Label htmlFor="additiveRequested">Additive Requested</Label>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea
-                    id="notes"
-                    placeholder="Any special instructions or notes..."
-                    value={newOrder.notes}
-                    onChange={(e) => setNewOrder({ ...newOrder, notes: e.target.value })}
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-4">
-                  <Button variant="outline" onClick={() => setIsNewOrderDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleCreateOrder} disabled={isCreating}>
-                    {isCreating ? "Creating..." : "Create Order"}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={() => setIsNewOrderDialogOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            New Fuel Order
+          </Button>
 
           {selectedOrders.length > 0 && (
             <Button variant="destructive" onClick={handleBulkCancel}>
@@ -827,27 +711,33 @@ function EnhancedFuelOrdersPageInternal() {
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
-<TableBody>
-  {filteredOrders.length > 0 ? (
-    filteredOrders.map((order) => (
-      <FuelOrderTableRow
-        key={order.id}
-        order={order}
-        isSelected={selectedOrders.includes(order.id.toString())}
-        onToggleSelection={toggleOrderSelection}
-        onView={handleViewOrder}
-        onCancel={handleCancelOrder}
-        onMarkComplete={handleMarkComplete}
-      />
-    ))
-  ) : (
-    <TableRow>
-      <TableCell colSpan={12} className="h-24 text-center">
-        No fuel orders found.
-      </TableCell>
-    </TableRow>
-  )}
-</TableBody>
+              <TableBody>
+                {filteredOrders.length > 0 ? (
+                  filteredOrders.map((order) => (
+                    <FuelOrderTableRow
+                      key={order.id}
+                      order={order}
+                      isSelected={selectedOrders.includes(order.id.toString())}
+                      onToggleSelection={(orderId: string) => {
+                        setSelectedOrders(prev => 
+                          prev.includes(orderId) 
+                            ? prev.filter(id => id !== orderId)
+                            : [...prev, orderId]
+                        )
+                      }}
+                      onCancel={() => setCancelOrderDialog({ isOpen: true, order: order })}
+                      onView={(order) => router.push(`/csr/fuel-orders/${order.id}`)}
+                      onMarkComplete={handleMarkComplete}
+                    />
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={12} className="h-24 text-center">
+                      No fuel orders found.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
             </Table>
           </div>
         </CardContent>

@@ -45,99 +45,99 @@ class ReceiptService:
         Raises:
             ValueError: If fuel order is invalid or already has a receipt
         """
-        # Begin atomic transaction for entire operation
-        with db.session.begin():
-            try:
-                # Fetch the fuel order with relationships
-                fuel_order = (FuelOrder.query
-                             .options(joinedload(FuelOrder.aircraft))
-                             .filter_by(id=fuel_order_id)
-                             .first())
-                
-                if not fuel_order:
-                    raise ValueError(f"Fuel order with ID {fuel_order_id} not found")
-                
-                # Validate fuel order is completed
-                if fuel_order.status != FuelOrderStatus.COMPLETED:
-                    raise ValueError(f"Cannot create receipt for fuel order with status {fuel_order.status.value}")
-                
-                # --- START NEW VALIDATION BLOCK ---
-                if not fuel_order.aircraft:
-                    raise ValueError(
-                        f"Data integrity error: FuelOrder ID {fuel_order_id} has tail_number "
-                        f"'{fuel_order.tail_number}', but no matching record exists in the Aircraft table."
-                    )
-                print(f"--- R_SVC_04a: Aircraft record '{fuel_order.aircraft.tail_number}' confirmed to be linked.", flush=True)
-                # --- END NEW VALIDATION BLOCK ---
-                
-                # Check if fuel order already has a receipt
-                existing_receipt = Receipt.query.filter_by(fuel_order_id=fuel_order_id).first()
-                if existing_receipt:
-                    raise ValueError(f"Fuel order {fuel_order_id} already has a receipt (ID: {existing_receipt.id})")
-                
-                # Handle customer logic - create placeholder if needed
-                customer_id = fuel_order.customer_id
-                if not customer_id:
-                    # Check if placeholder customer already exists for this tail number
-                    placeholder_email = f"{fuel_order.tail_number.lower()}@placeholder.invalid"
-                    existing_placeholder = Customer.query.filter_by(
-                        email=placeholder_email,
-                        is_placeholder=True
-                    ).first()
-                    
-                    if existing_placeholder:
-                        customer_id = existing_placeholder.id
-                    else:
-                        # Create new placeholder customer
-                        placeholder_customer = Customer(
-                            name=fuel_order.tail_number,
-                            email=placeholder_email,
-                            is_placeholder=True,
-                            is_caa_member=False
-                        )
-                        db.session.add(placeholder_customer)
-                        db.session.flush()  # Get the ID
-                        customer_id = placeholder_customer.id
-                
-                # Get aircraft type information
-                aircraft_type_name = None
-                if fuel_order.aircraft and fuel_order.aircraft.aircraft_type:
-                    aircraft_type_name = fuel_order.aircraft.aircraft_type
-                
-                # Calculate fuel quantity dispensed
-                fuel_quantity_gallons = None
-                if fuel_order.start_meter_reading and fuel_order.end_meter_reading:
-                    fuel_quantity_gallons = fuel_order.end_meter_reading - fuel_order.start_meter_reading
-                
-                # Create the receipt record
-                receipt = Receipt(
-                    fbo_location_id=fbo_location_id,
-                    fuel_order_id=fuel_order_id,
-                    customer_id=customer_id,
-                    aircraft_type_at_receipt_time=aircraft_type_name,
-                    fuel_type_at_receipt_time=fuel_order.fuel_type,
-                    fuel_quantity_gallons_at_receipt_time=fuel_quantity_gallons,
-                    status=ReceiptStatus.DRAFT,
-                    created_by_user_id=user_id,
-                    updated_by_user_id=user_id
+        try:
+            # Fetch the fuel order with relationships
+            fuel_order = (FuelOrder.query
+                         .options(joinedload(FuelOrder.aircraft))
+                         .filter_by(id=fuel_order_id)
+                         .first())
+            
+            if not fuel_order:
+                raise ValueError(f"Fuel order with ID {fuel_order_id} not found")
+            
+            # Validate fuel order is completed
+            if fuel_order.status != FuelOrderStatus.COMPLETED:
+                raise ValueError(f"Cannot create receipt for fuel order with status {fuel_order.status.value}")
+            
+            # --- START NEW VALIDATION BLOCK ---
+            if not fuel_order.aircraft:
+                raise ValueError(
+                    f"Data integrity error: FuelOrder ID {fuel_order_id} has tail_number "
+                    f"'{fuel_order.tail_number}', but no matching record exists in the Aircraft table."
                 )
+            print(f"--- R_SVC_04a: Aircraft record '{fuel_order.aircraft.tail_number}' confirmed to be linked.", flush=True)
+            # --- END NEW VALIDATION BLOCK ---
+            
+            # Check if fuel order already has a receipt
+            existing_receipt = Receipt.query.filter_by(fuel_order_id=fuel_order_id).first()
+            if existing_receipt:
+                raise ValueError(f"Fuel order {fuel_order_id} already has a receipt (ID: {existing_receipt.id})")
+            
+            # Handle customer logic - create placeholder if needed
+            customer_id = fuel_order.customer_id
+            if not customer_id:
+                # Check if placeholder customer already exists for this tail number
+                placeholder_email = f"{fuel_order.tail_number.lower()}@placeholder.invalid"
+                existing_placeholder = Customer.query.filter_by(
+                    email=placeholder_email,
+                    is_placeholder=True
+                ).first()
                 
-                db.session.add(receipt)
-                # Transaction will auto-commit on successful completion
-                
-                current_app.logger.info(f"Created draft receipt {receipt.id} for fuel order {fuel_order_id}")
-                return receipt
-                
-            except IntegrityError as e:
-                current_app.logger.error(f"Integrity error creating receipt: {str(e)}")
-                raise ValueError("Failed to create receipt due to data integrity constraints")
-            except SQLAlchemyError as e:
-                current_app.logger.error(f"Database error creating receipt: {str(e)}")
-                raise
-            except Exception as e:
-                # Transaction will auto-rollback on any exception
-                current_app.logger.error(f"Error in atomic transaction for receipt creation: {str(e)}")
-                raise
+                if existing_placeholder:
+                    customer_id = existing_placeholder.id
+                else:
+                    # Create new placeholder customer
+                    placeholder_customer = Customer(
+                        name=fuel_order.tail_number,
+                        email=placeholder_email,
+                        is_placeholder=True,
+                        is_caa_member=False
+                    )
+                    db.session.add(placeholder_customer)
+                    db.session.flush()  # Get the ID
+                    customer_id = placeholder_customer.id
+            
+            # Get aircraft type information
+            aircraft_type_name = None
+            if fuel_order.aircraft and fuel_order.aircraft.aircraft_type:
+                aircraft_type_name = fuel_order.aircraft.aircraft_type
+            
+            # Calculate fuel quantity dispensed
+            fuel_quantity_gallons = None
+            if fuel_order.start_meter_reading and fuel_order.end_meter_reading:
+                fuel_quantity_gallons = fuel_order.end_meter_reading - fuel_order.start_meter_reading
+            
+            # Create the receipt record
+            receipt = Receipt(
+                fbo_location_id=fbo_location_id,
+                fuel_order_id=fuel_order_id,
+                customer_id=customer_id,
+                aircraft_type_at_receipt_time=aircraft_type_name,
+                fuel_type_at_receipt_time=fuel_order.fuel_type,
+                fuel_quantity_gallons_at_receipt_time=fuel_quantity_gallons,
+                status=ReceiptStatus.DRAFT,
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id
+            )
+            
+            db.session.add(receipt)
+            db.session.commit()  # Explicit commit for proper transaction handling
+            
+            current_app.logger.info(f"Created draft receipt {receipt.id} for fuel order {fuel_order_id}")
+            return receipt
+            
+        except IntegrityError as e:
+            db.session.rollback()  # Explicit rollback on integrity error
+            current_app.logger.error(f"Integrity error creating receipt: {str(e)}")
+            raise ValueError("Failed to create receipt due to data integrity constraints")
+        except SQLAlchemyError as e:
+            db.session.rollback()  # Explicit rollback on database error
+            current_app.logger.error(f"Database error creating receipt: {str(e)}")
+            raise
+        except Exception as e:
+            db.session.rollback()  # Explicit rollback on any other exception
+            current_app.logger.error(f"Error creating draft receipt: {str(e)}")
+            raise
     
     def update_draft(self, receipt_id: int, fbo_location_id: int, update_data: Dict[str, Any], user_id: int) -> Receipt:
         """
@@ -281,47 +281,49 @@ class ReceiptService:
             # Calculate fees using the fee calculation service
             calculation_result = self.fee_calculation_service.calculate_for_transaction(context)
             
-            # Begin atomic transaction for updating receipt and line items
-            with db.session.begin():
-                # Delete existing line items
-                ReceiptLineItem.query.filter_by(receipt_id=receipt_id).delete()
-                
-                # Create new line items from calculation result
-                for line_item_data in calculation_result.line_items:
-                    line_item = ReceiptLineItem(
-                        receipt_id=receipt_id,
-                        line_item_type=LineItemType(line_item_data.line_item_type),
-                        description=line_item_data.description,
-                        fee_code_applied=line_item_data.fee_code_applied,
-                        quantity=line_item_data.quantity,
-                        unit_price=line_item_data.unit_price or Decimal('0.00'),
-                        amount=line_item_data.amount
-                    )
-                    db.session.add(line_item)
-                
-                # Update receipt totals
-                receipt.fuel_subtotal = calculation_result.fuel_subtotal
-                receipt.total_fees_amount = calculation_result.total_fees_amount
-                receipt.total_waivers_amount = calculation_result.total_waivers_amount
-                receipt.tax_amount = calculation_result.tax_amount
-                receipt.grand_total_amount = calculation_result.grand_total_amount
-                receipt.is_caa_applied = calculation_result.is_caa_applied
-                receipt.fuel_unit_price_at_receipt_time = fuel_price_per_gallon
-                receipt.updated_at = datetime.utcnow()
-                
-                # Transaction will auto-commit on successful completion
+            # Delete existing line items
+            ReceiptLineItem.query.filter_by(receipt_id=receipt_id).delete()
+            
+            # Create new line items from calculation result
+            for line_item_data in calculation_result.line_items:
+                line_item = ReceiptLineItem(
+                    receipt_id=receipt_id,
+                    line_item_type=LineItemType(line_item_data.line_item_type),
+                    description=line_item_data.description,
+                    fee_code_applied=line_item_data.fee_code_applied,
+                    quantity=line_item_data.quantity,
+                    unit_price=line_item_data.unit_price or Decimal('0.00'),
+                    amount=line_item_data.amount
+                )
+                db.session.add(line_item)
+            
+            # Update receipt totals
+            receipt.fuel_subtotal = calculation_result.fuel_subtotal
+            receipt.total_fees_amount = calculation_result.total_fees_amount
+            receipt.total_waivers_amount = calculation_result.total_waivers_amount
+            receipt.tax_amount = calculation_result.tax_amount
+            receipt.grand_total_amount = calculation_result.grand_total_amount
+            receipt.is_caa_applied = calculation_result.is_caa_applied
+            receipt.fuel_unit_price_at_receipt_time = fuel_price_per_gallon
+            receipt.updated_at = datetime.utcnow()
+            
+            # Commit the transaction
+            db.session.commit()
             
             current_app.logger.info(f"Calculated fees for receipt {receipt_id}: ${receipt.grand_total_amount}")
             return receipt
             
         except IntegrityError as e:
+            db.session.rollback()  # Explicit rollback on integrity error
             current_app.logger.error(f"Integrity error calculating fees: {str(e)}")
             raise ValueError("Failed to calculate fees due to data integrity constraints")
         except SQLAlchemyError as e:
+            db.session.rollback()  # Explicit rollback on database error
             current_app.logger.error(f"Database error calculating fees: {str(e)}")
             raise
         except Exception as e:
-            current_app.logger.error(f"Error in atomic transaction for fee calculation: {str(e)}")
+            db.session.rollback()  # Explicit rollback on any other exception
+            current_app.logger.error(f"Error calculating fees: {str(e)}")
             raise
     
     def _get_fuel_price(self, fbo_id: int, fuel_type: str) -> Decimal:

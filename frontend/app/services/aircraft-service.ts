@@ -1,5 +1,11 @@
 import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config"
 
+// Aircraft Type interface for the types endpoint
+export interface AircraftType {
+  id: number
+  name: string
+}
+
 // Frontend Aircraft model - accurately reflecting backend structure
 export interface Aircraft {
   id: string  // Use tail_number as the ID
@@ -113,8 +119,8 @@ export async function getAdminAircraftByTailNumber(tailNumber: string): Promise<
     const backendAircraft = await handleApiResponse<BackendAdminAircraft>(response)
     return mapBackendAdminToFrontendAircraft(backendAircraft)
   } catch (error) {
-    // Check if the error message indicates a 404 Not Found
-    if (error instanceof Error && error.message.includes("API error (404)")) {
+    // Check for aircraft not found error message
+    if (error instanceof Error && error.message.includes("not found")) {
       return null // Return null for 404s as per requirement
     }
     // Re-throw other errors
@@ -209,9 +215,20 @@ export async function getAircraftByTailNumber(tailNumber: string): Promise<Aircr
     
     return mappedAircraft
   } catch (error) {
-    if (error instanceof Error && error.message.includes("API error (404)")) {
+    // Check for aircraft not found error message
+    if (error instanceof Error && error.message.includes("not found")) {
       return null
     }
     throw error
   }
+}
+
+// --- Aircraft Types Function ---
+
+export async function getAircraftTypes(): Promise<AircraftType[]> {
+  const response = await fetch(`${API_BASE_URL}/aircraft/types`, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  })
+  return await handleApiResponse<AircraftType[]>(response)
 }

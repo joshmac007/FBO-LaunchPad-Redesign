@@ -937,13 +937,25 @@ class FuelOrderService:
         new_order_state = {c.name: getattr(order, c.name) for c in order.__table__.columns}
         
         # Create a non-recursive dictionary for the audit log details
+        # Convert enum values to strings for JSON serialization
+        def serialize_value(value):
+            """Convert enum objects and other non-serializable types to JSON-safe values."""
+            if hasattr(value, 'value'):  # Enum objects have a .value attribute
+                return value.value
+            elif isinstance(value, datetime):
+                return value.isoformat()
+            elif value is None:
+                return None
+            else:
+                return str(value)
+        
         details_for_log = {
             'reason': update_data.get("reason", "No reason provided."),
-            'previous_status': old_order_state.get('status'),
-            'new_status': new_order_state.get('status'),
+            'previous_status': serialize_value(old_order_state.get('status')),
+            'new_status': serialize_value(new_order_state.get('status')),
             'changed_fields': {
-                'old': {k: v for k, v in old_order_state.items() if v != new_order_state.get(k)},
-                'new': {k: v for k, v in new_order_state.items() if v != old_order_state.get(k)}
+                'old': {k: serialize_value(v) for k, v in old_order_state.items() if v != new_order_state.get(k)},
+                'new': {k: serialize_value(v) for k, v in new_order_state.items() if v != old_order_state.get(k)}
             }
         }
         

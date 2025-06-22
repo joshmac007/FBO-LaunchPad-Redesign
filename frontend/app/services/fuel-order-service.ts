@@ -86,7 +86,7 @@ export interface FuelOrderCreateRequest {
   tail_number: string
   fuel_type: string  // Added missing fuel_type field required by backend
   requested_amount: number
-  customer_id: number
+  customer_id?: number
   priority?: string
   csr_notes?: string
   additive_requested?: boolean
