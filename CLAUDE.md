@@ -1,417 +1,205 @@
-# Task Master AI - Claude Code Integration Guide
+Of course. Here is the complete, new and improved `claude.md` file.
 
-## Essential Commands
-
-### Core Workflow Commands
-
-```bash
-# Project Setup
-task-master init                                    # Initialize Task Master in current project
-task-master parse-prd .taskmaster/docs/prd.txt      # Generate tasks from PRD document
-task-master models --setup                        # Configure AI models interactively
-
-# Daily Development Workflow
-task-master list                                   # Show all tasks with status
-task-master next                                   # Get next available task to work on
-task-master show <id>                             # View detailed task information (e.g., task-master show 1.2)
-task-master set-status --id=<id> --status=done    # Mark task complete
-
-# Task Management
-task-master add-task --prompt="description" --research        # Add new task with AI assistance
-task-master expand --id=<id> --research --force              # Break task into subtasks
-task-master update-task --id=<id> --prompt="changes"         # Update specific task
-task-master update --from=<id> --prompt="changes"            # Update multiple tasks from ID onwards
-task-master update-subtask --id=<id> --prompt="notes"        # Add implementation notes to subtask
-
-# Analysis & Planning
-task-master analyze-complexity --research          # Analyze task complexity
-task-master complexity-report                      # View complexity analysis
-task-master expand --all --research               # Expand all eligible tasks
-
-# Dependencies & Organization
-task-master add-dependency --id=<id> --depends-on=<id>       # Add task dependency
-task-master move --from=<id> --to=<id>                       # Reorganize task hierarchy
-task-master validate-dependencies                            # Check for dependency issues
-task-master generate                                         # Update task markdown files (usually auto-called)
-```
-
-## Key Files & Project Structure
-
-### Core Files
-
-- `.taskmaster/tasks/tasks.json` - Main task data file (auto-managed)
-- `.taskmaster/config.json` - AI model configuration (use `task-master models` to modify)
-- `.taskmaster/docs/prd.txt` - Product Requirements Document for parsing
-- `.taskmaster/tasks/*.txt` - Individual task files (auto-generated from tasks.json)
-- `.env` - API keys for CLI usage
-
-### Claude Code Integration Files
-
-- `CLAUDE.md` - Auto-loaded context for Claude Code (this file)
-- `.claude/settings.json` - Claude Code tool allowlist and preferences
-- `.claude/commands/` - Custom slash commands for repeated workflows
-- `.mcp.json` - MCP server configuration (project-specific)
-
-### Directory Structure
-
-```
-project/
-├── .taskmaster/
-│   ├── tasks/              # Task files directory
-│   │   ├── tasks.json      # Main task database
-│   │   ├── task-1.md      # Individual task files
-│   │   └── task-2.md
-│   ├── docs/              # Documentation directory
-│   │   ├── prd.txt        # Product requirements
-│   ├── reports/           # Analysis reports directory
-│   │   └── task-complexity-report.json
-│   ├── templates/         # Template files
-│   │   └── example_prd.txt  # Example PRD template
-│   └── config.json        # AI models & settings
-├── .claude/
-│   ├── settings.json      # Claude Code configuration
-│   └── commands/         # Custom slash commands
-├── .env                  # API keys
-├── .mcp.json            # MCP configuration
-└── CLAUDE.md            # This file - auto-loaded by Claude Code
-```
-
-## MCP Integration
-
-Task Master provides an MCP server that Claude Code can connect to. Configure in `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "task-master-ai": {
-      "command": "npx",
-      "args": ["-y", "--package=task-master-ai", "task-master-ai"],
-      "env": {
-        "ANTHROPIC_API_KEY": "your_key_here",
-        "PERPLEXITY_API_KEY": "your_key_here",
-        "OPENAI_API_KEY": "OPENAI_API_KEY_HERE",
-        "GOOGLE_API_KEY": "GOOGLE_API_KEY_HERE",
-        "XAI_API_KEY": "XAI_API_KEY_HERE",
-        "OPENROUTER_API_KEY": "OPENROUTER_API_KEY_HERE",
-        "MISTRAL_API_KEY": "MISTRAL_API_KEY_HERE",
-        "AZURE_OPENAI_API_KEY": "AZURE_OPENAI_API_KEY_HERE",
-        "OLLAMA_API_KEY": "OLLAMA_API_KEY_HERE"
-      }
-    }
-  }
-}
-```
-
-### Essential MCP Tools
-
-```javascript
-help; // = shows available taskmaster commands
-// Project setup
-initialize_project; // = task-master init
-parse_prd; // = task-master parse-prd
-
-// Daily workflow
-get_tasks; // = task-master list
-next_task; // = task-master next
-get_task; // = task-master show <id>
-set_task_status; // = task-master set-status
-
-// Task management
-add_task; // = task-master add-task
-expand_task; // = task-master expand
-update_task; // = task-master update-task
-update_subtask; // = task-master update-subtask
-update; // = task-master update
-
-// Analysis
-analyze_project_complexity; // = task-master analyze-complexity
-complexity_report; // = task-master complexity-report
-```
-
-## Claude Code Workflow Integration
-
-### Standard Development Workflow
-
-#### 1. Project Initialization
-
-```bash
-# Initialize Task Master
-task-master init
-
-# Create or obtain PRD, then parse it
-task-master parse-prd .taskmaster/docs/prd.txt
-
-# Analyze complexity and expand tasks
-task-master analyze-complexity --research
-task-master expand --all --research
-```
-
-If tasks already exist, another PRD can be parsed (with new information only!) using parse-prd with --append flag. This will add the generated tasks to the existing list of tasks..
-
-#### 2. Daily Development Loop
-
-```bash
-# Start each session
-task-master next                           # Find next available task
-task-master show <id>                     # Review task details
-
-# During implementation, check in code context into the tasks and subtasks
-task-master update-subtask --id=<id> --prompt="implementation notes..."
-
-# Complete tasks
-task-master set-status --id=<id> --status=done
-```
-
-#### 3. Multi-Claude Workflows
-
-For complex projects, use multiple Claude Code sessions:
-
-```bash
-# Terminal 1: Main implementation
-cd project && claude
-
-# Terminal 2: Testing and validation
-cd project-test-worktree && claude
-
-# Terminal 3: Documentation updates
-cd project-docs-worktree && claude
-```
-
-### Custom Slash Commands
-
-Create `.claude/commands/taskmaster-next.md`:
-
-```markdown
-Find the next available Task Master task and show its details.
-
-Steps:
-
-1. Run `task-master next` to get the next task
-2. If a task is available, run `task-master show <id>` for full details
-3. Provide a summary of what needs to be implemented
-4. Suggest the first implementation step
-```
-
-Create `.claude/commands/taskmaster-complete.md`:
-
-```markdown
-Complete a Task Master task: $ARGUMENTS
-
-Steps:
-
-1. Review the current task with `task-master show $ARGUMENTS`
-2. Verify all implementation is complete
-3. Run any tests related to this task
-4. Mark as complete: `task-master set-status --id=$ARGUMENTS --status=done`
-5. Show the next available task with `task-master next`
-```
-
-## Tool Allowlist Recommendations
-
-Add to `.claude/settings.json`:
-
-```json
-{
-  "allowedTools": [
-    "Edit",
-    "Bash(task-master *)",
-    "Bash(git commit:*)",
-    "Bash(git add:*)",
-    "Bash(npm run *)",
-    "mcp__task_master_ai__*"
-  ]
-}
-```
-
-## Configuration & Setup
-
-### API Keys Required
-
-At least **one** of these API keys must be configured:
-
-- `ANTHROPIC_API_KEY` (Claude models) - **Recommended**
-- `PERPLEXITY_API_KEY` (Research features) - **Highly recommended**
-- `OPENAI_API_KEY` (GPT models)
-- `GOOGLE_API_KEY` (Gemini models)
-- `MISTRAL_API_KEY` (Mistral models)
-- `OPENROUTER_API_KEY` (Multiple models)
-- `XAI_API_KEY` (Grok models)
-
-An API key is required for any provider used across any of the 3 roles defined in the `models` command.
-
-### Model Configuration
-
-```bash
-# Interactive setup (recommended)
-task-master models --setup
-
-# Set specific models
-task-master models --set-main claude-3-5-sonnet-20241022
-task-master models --set-research perplexity-llama-3.1-sonar-large-128k-online
-task-master models --set-fallback gpt-4o-mini
-```
-
-## Task Structure & IDs
-
-### Task ID Format
-
-- Main tasks: `1`, `2`, `3`, etc.
-- Subtasks: `1.1`, `1.2`, `2.1`, etc.
-- Sub-subtasks: `1.1.1`, `1.1.2`, etc.
-
-### Task Status Values
-
-- `pending` - Ready to work on
-- `in-progress` - Currently being worked on
-- `done` - Completed and verified
-- `deferred` - Postponed
-- `cancelled` - No longer needed
-- `blocked` - Waiting on external factors
-
-### Task Fields
-
-```json
-{
-  "id": "1.2",
-  "title": "Implement user authentication",
-  "description": "Set up JWT-based auth system",
-  "status": "pending",
-  "priority": "high",
-  "dependencies": ["1.1"],
-  "details": "Use bcrypt for hashing, JWT for tokens...",
-  "testStrategy": "Unit tests for auth functions, integration tests for login flow",
-  "subtasks": []
-}
-```
-
-## Claude Code Best Practices with Task Master
-
-### Context Management
-
-- Use `/clear` between different tasks to maintain focus
-- This CLAUDE.md file is automatically loaded for context
-- Use `task-master show <id>` to pull specific task context when needed
-
-### Iterative Implementation
-
-1. `task-master show <subtask-id>` - Understand requirements
-2. Explore codebase and plan implementation
-3. `task-master update-subtask --id=<id> --prompt="detailed plan"` - Log plan
-4. `task-master set-status --id=<id> --status=in-progress` - Start work
-5. Implement code following logged plan
-6. `task-master update-subtask --id=<id> --prompt="what worked/didn't work"` - Log progress
-7. `task-master set-status --id=<id> --status=done` - Complete task
-
-### Complex Workflows with Checklists
-
-For large migrations or multi-step processes:
-
-1. Create a markdown PRD file describing the new changes: `touch task-migration-checklist.md` (prds can be .txt or .md)
-2. Use Taskmaster to parse the new prd with `task-master parse-prd --append` (also available in MCP)
-3. Use Taskmaster to expand the newly generated tasks into subtasks. Consdier using `analyze-complexity` with the correct --to and --from IDs (the new ids) to identify the ideal subtask amounts for each task. Then expand them.
-4. Work through items systematically, checking them off as completed
-5. Use `task-master update-subtask` to log progress on each task/subtask and/or updating/researching them before/during implementation if getting stuck
-
-### Git Integration
-
-Task Master works well with `gh` CLI:
-
-```bash
-# Create PR for completed task
-gh pr create --title "Complete task 1.2: User authentication" --body "Implements JWT auth system as specified in task 1.2"
-
-# Reference task in commits
-git commit -m "feat: implement JWT auth (task 1.2)"
-```
-
-### Parallel Development with Git Worktrees
-
-```bash
-# Create worktrees for parallel task development
-git worktree add ../project-auth feature/auth-system
-git worktree add ../project-api feature/api-refactor
-
-# Run Claude Code in each worktree
-cd ../project-auth && claude    # Terminal 1: Auth work
-cd ../project-api && claude     # Terminal 2: API work
-```
-
-## Troubleshooting
-
-### AI Commands Failing
-
-```bash
-# Check API keys are configured
-cat .env                           # For CLI usage
-
-# Verify model configuration
-task-master models
-
-# Test with different model
-task-master models --set-fallback gpt-4o-mini
-```
-
-### MCP Connection Issues
-
-- Check `.mcp.json` configuration
-- Verify Node.js installation
-- Use `--mcp-debug` flag when starting Claude Code
-- Use CLI as fallback if MCP unavailable
-
-### Task File Sync Issues
-
-```bash
-# Regenerate task files from tasks.json
-task-master generate
-
-# Fix dependency issues
-task-master fix-dependencies
-```
-
-DO NOT RE-INITIALIZE. That will not do anything beyond re-adding the same Taskmaster core files.
-
-## Important Notes
-
-### AI-Powered Operations
-
-These commands make AI calls and may take up to a minute:
-
-- `parse_prd` / `task-master parse-prd`
-- `analyze_project_complexity` / `task-master analyze-complexity`
-- `expand_task` / `task-master expand`
-- `expand_all` / `task-master expand --all`
-- `add_task` / `task-master add-task`
-- `update` / `task-master update`
-- `update_task` / `task-master update-task`
-- `update_subtask` / `task-master update-subtask`
-
-### File Management
-
-- Never manually edit `tasks.json` - use commands instead
-- Never manually edit `.taskmaster/config.json` - use `task-master models`
-- Task markdown files in `tasks/` are auto-generated
-- Run `task-master generate` after manual changes to tasks.json
-
-### Claude Code Session Management
-
-- Use `/clear` frequently to maintain focused context
-- Create custom slash commands for repeated Task Master workflows
-- Configure tool allowlist to streamline permissions
-- Use headless mode for automation: `claude -p "task-master next"`
-
-### Multi-Task Updates
-
-- Use `update --from=<id>` to update multiple future tasks
-- Use `update-task --id=<id>` for single task updates
-- Use `update-subtask --id=<id>` for implementation logging
-
-### Research Mode
-
-- Add `--research` flag for research-based AI enhancement
-- Requires a research model API key like Perplexity (`PERPLEXITY_API_KEY`) in environment
-- Provides more informed task creation and updates
-- Recommended for complex technical tasks
+This version integrates the rigorous development philosophy from the researcher's file directly into your project's specific context. It establishes a clear, high-quality standard of work while providing all the necessary practical information for the AI to be effective immediately.
 
 ---
 
-_This guide ensures Claude Code has immediate access to Task Master's essential functionality for agentic development workflows._
+# CLAUDE.MD - FBO LaunchPad Development Guide
+
+This file provides guidance to Claude for working on the FBO LaunchPad repository. It contains our core development philosophy, project-specific context, and essential commands. Read and adhere to this guide for every task.
+
+## 1. Core Philosophy & Guiding Principles
+
+**Your primary directive is to follow Test-Driven Development (TDD).** Every line of production code must be written in response to a failing test. This is not a suggestion; it is the fundamental practice for this project.
+
+-   **Test First:** Always write a failing test that describes the desired business behavior before writing any implementation code (Red-Green-Refactor).
+-   **Test Behavior, Not Implementation:** Tests must validate the public API of a module or component, treating the internals as a black box. Do not test private functions or internal state.
+-   **Schema-First Development:** Define data structures with validation schemas first (**Zod** for frontend, **Pydantic** for backend), then derive static types. This is the single source of truth.
+-   **Immutability:** Treat all data as immutable. Create new objects/arrays instead of modifying existing ones.
+-   **Clarity Over Cleverness:** Write self-documenting code with clear names. Avoid comments that explain *what* the code does; the code itself should be the explanation.
+-   **Respect Existing Architecture:** Adhere to the established project structure, API conventions, and state management patterns outlined below.
+
+## 2. Essential Commands
+
+### Frontend Development (Next.js)
+```bash
+cd frontend
+npm run dev            # Start development server (http://localhost:3000)
+npm run build          # Build for production
+npm run lint           # Run ESLint
+npm run test           # Run Jest tests
+npm run test:watch     # Run Jest in watch mode
+npm run test:e2e       # Run Cypress E2E tests
+```
+
+### Backend Development (Flask with Docker)
+```bash
+cd backend
+docker-compose up -d   # Start backend and database services
+docker-compose down -v # Stop services and remove volumes (full reset)
+
+# Run commands inside the running container
+docker-compose exec backend flask db upgrade   # Run database migrations
+docker-compose exec backend flask seed run     # Seed base data
+docker-compose exec backend pytest             # Run all backend tests
+```
+
+### Quick Reset & Reseed Workflow
+```bash
+cd backend
+docker-compose down -v
+docker-compose up -d
+docker-compose exec backend flask seed run
+docker-compose exec backend flask create-permission-groups run
+```
+
+## 3. Project Architecture
+
+### System Overview
+FBO LaunchPad is a Fixed Base Operator management system for aircraft fueling operations with a React/Next.js frontend and Flask/Python backend.
+
+### Technology Stack
+-   **Frontend**: Next.js 15, TypeScript, Tailwind CSS v4, Shadcn UI, React Query, **Zod (for schema validation)**
+-   **Backend**: Flask, SQLAlchemy, PostgreSQL, Redis, **Pydantic (for schema validation)**
+-   **Authentication**: JWT tokens with Permission-Based Access Control (PBAC)
+-   **Infrastructure**: Docker Compose for backend services
+-   **Testing**: Jest/React Testing Library (frontend), Pytest (backend), Cypress (E2E)
+
+### Key User Roles & Permissions
+-   **System Administrator**: Full system access.
+-   **Customer Service Representative (CSR)**: Manages fuel orders.
+-   **Line Service Technician (LST/Fueler)**: Executes fuel orders.
+-   **Member**: Basic view access.
+
+### Core Data Models
+-   **Users**: JWT authentication with roles and permissions.
+-   **Fuel Orders**: Lifecycle from creation to completion.
+-   **Aircraft**: Created from fuel orders if tail number is new.
+-   **Customers**, **Fuel Trucks**, **Receipts**.
+
+### Frontend Architecture (`frontend/`)
+-   **Structure**: Next.js App Router (`app/`) with routes for `admin`, `csr`, `fueler`.
+-   **Components**: Shared components in `app/components/`, Shadcn UI in `components/ui/`.
+-   **API Layer**: API calls are in `app/services/` and use React Query for state management.
+-   **State Management**: React Query for server state. React Context for Auth/Permissions. No global state library.
+-   **Permissions**: UI is controlled via a `PermissionContext`.
+
+### Backend Architecture (`backend/`)
+-   **Structure**: Feature-based organization.
+    -   `src/models/`: SQLAlchemy ORM models.
+    -   `src/schemas/`: **Pydantic** serialization schemas (the source of truth for data shapes).
+    -   `src/services/`: Business logic layer.
+    -   `src/routes/`: Flask blueprints (API endpoints).
+    -   `tests/`: Pytest test suite.
+-   **Permissions**: Layered system with decorators (`@require_permission`).
+
+## 4. Development Principles & Code Style
+
+This section details **how** we write code. Adhere to these rules strictly.
+
+### The TDD Workflow: Red-Green-Refactor
+This is the **mandatory** development cycle for any change, big or small.
+
+1.  **RED**: Write a new test that describes a piece of required functionality. Run the test suite and watch it fail. It must fail for the expected reason.
+2.  **GREEN**: Write the *absolute minimum* amount of production code required to make the failing test pass. Do not add extra features or "nice-to-haves."
+3.  **REFACTOR**: With the tests passing, assess the code you just wrote. Can it be made cleaner, clearer, or more efficient without changing its behavior? Refactor only if it adds value. Run tests again to ensure they still pass. Commit your work.
+
+### Frontend (TypeScript/Next.js)
+
+-   **Strict TypeScript**: `tsconfig.json` is set to `strict: true`. **No `any` types, ever.** Use `unknown` for values whose type is truly unknown. Avoid type assertions (`as Type`) and `@ts-ignore`.
+-   **Schema-First with Zod**: For any data structure that crosses an API boundary or comes from user input, define a `Zod` schema first. Derive TypeScript types from this schema.
+    ```typescript
+    // frontend/app/schemas/fuelOrder.ts
+    import { z } from 'zod';
+    
+    export const FuelOrderSchema = z.object({
+      id: z.string().uuid(),
+      tailNumber: z.string().min(1, "Tail number is required"),
+      gallonsRequested: z.number().positive(),
+      status: z.enum(['Created', 'Dispatched', 'Complete']),
+    });
+    
+    export type FuelOrder = z.infer<typeof FuelOrderSchema>;
+    ```
+-   **Test Data Factories**: Use factory functions in tests to create mock data. They **must** return valid types derived from the real Zod schemas to ensure tests and production code stay in sync.
+    ```typescript
+    // frontend/tests/factories.ts
+    import { FuelOrder, FuelOrderSchema } from '@/schemas/fuelOrder';
+
+    export const createMockFuelOrder = (overrides?: Partial<FuelOrder>): FuelOrder => {
+      const defaults: FuelOrder = {
+        id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+        tailNumber: 'N12345',
+        gallonsRequested: 100,
+        status: 'Created',
+      };
+      // Return a valid object, validated by the real schema
+      return FuelOrderSchema.parse({ ...defaults, ...overrides });
+    };
+    ```
+-   **Component Testing (RTL)**: Test component behavior from the user's perspective. Find elements by their accessible roles and text. Do not test implementation details like internal state or private function calls.
+
+### Backend (Python/Flask)
+
+-   **Strict Typing**: All code must have type hints. Code must pass `mypy` checks.
+-   **Schema-First with Pydantic**: All API request/response bodies and service-layer data structures must be defined as `Pydantic` models. This provides runtime validation and is the single source of truth for data.
+    ```python
+    # backend/src/schemas/fuel_order.py
+    from pydantic import BaseModel, Field, conint
+    from uuid import UUID
+    from enum import Enum
+
+    class FuelOrderStatus(str, Enum):
+        CREATED = "Created"
+        DISPATCHED = "Dispatched"
+        COMPLETE = "Complete"
+
+    class FuelOrderSchema(BaseModel):
+        id: UUID
+        tail_number: str = Field(..., min_length=1)
+        gallons_requested: conint(gt=0)
+        status: FuelOrderStatus
+        
+        class Config:
+            orm_mode = True # For SQLAlchemy integration
+    ```
+-   **Service Layer**: All business logic must reside in the `src/services/` layer, not in routes. Services should be stateless and easily testable in isolation.
+-   **Testing (Pytest)**: Write unit tests for service layer logic and integration tests for API endpoints. Use fixtures for setting up test data and dependencies.
+
+### Refactoring Guidelines
+
+-   **Commit Before Refactoring**: Always commit a working "Green" state before starting to refactor.
+-   **Abstract Knowledge, Not Just Syntax**: Do not create an abstraction just because two pieces of code look the same. Only abstract when they represent the same **business concept**. A wrong abstraction is far more costly than duplicated code.
+-   **Small, Focused Functions**: Keep functions short and focused on a single responsibility. Use guard clauses (early returns) to reduce nesting.
+
+## 5. Typical Development Task Workflow
+
+This combines the TDD process with our project's specific setup.
+
+#### Example Task: Adding a "High Priority" field to Fuel Orders
+
+1.  **Start Services**: `cd backend && docker-compose up -d`, then `cd frontend && npm run dev`.
+
+2.  **Write a Failing Backend Test (RED)**: In `backend/tests/services/test_fuel_order_service.py`, add a test that tries to create an order with `is_priority=True` and asserts it's saved correctly. Run `pytest`. It will fail.
+
+3.  **Make Backend Test Pass (GREEN)**:
+    -   Update the `FuelOrderSchema` Pydantic model in `backend/src/schemas/` to include `is_priority: bool = False`.
+    -   Add the `is_priority` column to the `FuelOrder` SQLAlchemy model in `backend/src/models/`.
+    -   Generate and run a database migration: `docker-compose exec backend flask db migrate -m "add priority to fuel orders"` then `... flask db upgrade`.
+    -   Update the `FuelOrderService` to handle the new field.
+    -   Run `pytest`. The test should now pass.
+
+4.  **Write a Failing Frontend Test (RED)**: In the frontend, write a component test for the fuel order form. Simulate a user checking a "High Priority" checkbox and submitting. Assert that the API service function is called with an object including `isPriority: true`. Run `npm run test`. It will fail.
+
+5.  **Make Frontend Test Pass (GREEN)**:
+    -   Update the `FuelOrderSchema` Zod schema in `frontend/app/schemas/` to include `isPriority: z.boolean().optional()`.
+    -   Add the checkbox to the `FuelOrderForm` React component.
+    -   Update the component's state management and the API service call to include the new field.
+    -   Run `npm run test`. The test should now pass.
+
+6.  **Refactor (if needed)**: Look at the code you just wrote in both the frontend and backend. Is it clean? Are the names clear? Could logic be simplified? Refactor if it adds value and ensure all tests still pass.
+
+7.  **Commit**: Commit the complete, tested feature.
+    ```bash
+    git commit -m "feat: add priority flag to fuel orders"
+    ```

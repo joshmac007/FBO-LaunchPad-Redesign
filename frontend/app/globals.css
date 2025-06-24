@@ -478,13 +478,13 @@
   --chart-4: oklch(0.7952 0.1617 86.0468);
   --chart-5: oklch(0.7038 0.1230 182.5025);
   --radius: 0.5rem;
-  --sidebar: oklch(0.2103 0.0059 285.8852);
+  --sidebar: oklch(0.15 0.01 210);
   --sidebar-foreground: oklch(0.9846 0.0017 247.8389);
   --sidebar-primary: oklch(0.6450 0.2154 16.4393);
   --sidebar-primary-foreground: oklch(0.9846 0.0017 247.8389);
-  --sidebar-accent: oklch(0.3128 0.0273 300.0760);
+  --sidebar-accent: oklch(0.25 0.02 210);
   --sidebar-accent-foreground: oklch(0.9846 0.0017 247.8389);
-  --sidebar-border: oklch(0.2686 0 0);
+  --sidebar-border: oklch(0.2 0.01 210);
   --sidebar-ring: oklch(0.6450 0.2154 16.4393);
   --font-sans: sans-serif;
   --font-serif: serif;
