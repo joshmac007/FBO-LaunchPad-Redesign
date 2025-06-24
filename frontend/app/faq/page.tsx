@@ -277,9 +277,9 @@ export default function FAQPage() {
                           >
                             <span className="font-medium text-lg">{item.question}</span>
                             {expandedQuestions[item.id] ? (
-                              <ChevronUp className="h-5 w-5 text-primary flex-shrink-0" />
+                              <ChevronUp className="h-5 w-5 text-primary shrink-0" />
                             ) : (
-                              <ChevronDown className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                              <ChevronDown className="h-5 w-5 text-muted-foreground shrink-0" />
                             )}
                           </button>
                           {expandedQuestions[item.id] && (

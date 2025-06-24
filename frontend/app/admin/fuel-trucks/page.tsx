@@ -370,7 +370,7 @@ export default function FuelTruckManagementPage() {
                           }}>
                             <Edit className="mr-2 h-4 w-4" />Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive hover:!text-destructive-foreground hover:!bg-destructive" onClick={() => { setSelectedTruck(truck); setIsDeleteDialogOpen(true); setFormError(null);}}>
+                          <DropdownMenuItem className="text-destructive hover:text-destructive-foreground! hover:bg-destructive!" onClick={() => { setSelectedTruck(truck); setIsDeleteDialogOpen(true); setFormError(null);}}>
                             <Trash2 className="mr-2 h-4 w-4" />Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>

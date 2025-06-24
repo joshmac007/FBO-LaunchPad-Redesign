@@ -73,15 +73,15 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-50 flex flex-col border-r bg-white dark:bg-gray-900 transition-all duration-300 ease-in-out",
+        "fixed inset-y-0 left-0 z-50 flex flex-col border-r bg-sidebar transition-all duration-300 ease-in-out",
         collapsed ? "w-[80px]" : "w-[280px]",
       )}
     >
       {/* Sidebar Header */}
-      <div className="flex h-16 items-center justify-between border-b px-4">
+      <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
         <Link href="/member/dashboard" className="flex items-center gap-2">
-          <Plane className="h-6 w-6 text-primary rotate-45" />
-          {!collapsed && <span className="text-xl font-bold">FBO LaunchPad</span>}
+          <Plane className="h-6 w-6 text-sidebar-primary rotate-45" />
+          {!collapsed && <span className="text-xl font-bold text-sidebar-foreground">FBO LaunchPad</span>}
         </Link>
         <Button variant="ghost" size="icon" onClick={() => setCollapsed(!collapsed)} className="h-8 w-8 rounded-full">
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -96,7 +96,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
             <div className="mb-4">
               {!collapsed && (
                 <div className="mb-2 px-4">
-                  <h3 className="text-xs font-medium uppercase text-gray-500">Main Menu</h3>
+                  <h3 className="text-xs font-medium uppercase text-sidebar-foreground/70">MAIN MENU</h3>
                 </div>
               )}
               {mainNavItems.map((item) => (
@@ -107,8 +107,8 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                       className={cn(
                         "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                         isActive(item.href)
-                          ? "bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200",
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                       )}
                     >
                       {item.icon}
@@ -124,7 +124,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
             <div className="mt-auto">
               {!collapsed && (
                 <div className="mb-2 px-4">
-                  <h3 className="text-xs font-medium uppercase text-gray-500">Utilities</h3>
+                  <h3 className="text-xs font-medium uppercase text-sidebar-foreground/70">UTILITIES</h3>
                 </div>
               )}
               {utilityNavItems.map((item) => (
@@ -135,8 +135,8 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
                       className={cn(
                         "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                         isActive(item.href)
-                          ? "bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200",
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                       )}
                     >
                       {item.icon}
@@ -152,7 +152,7 @@ export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
       </div>
 
       {/* Sidebar Footer */}
-      <div className="border-t p-4">
+      <div className="border-t border-sidebar-border p-4">
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>
             <Button

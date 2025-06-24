@@ -1,0 +1,32 @@
+{
+  "version": 1.1,
+  "atDirectives": [
+    {
+      "name": "@theme",
+      "description": "Tailwind CSS v4 theme directive for defining design tokens inline"
+    },
+    {
+      "name": "@apply",
+      "description": "Tailwind CSS directive to apply utility classes within CSS rules"
+    },
+    {
+      "name": "@layer",
+      "description": "Tailwind CSS directive to assign styles to a cascade layer"
+    },
+    {
+      "name": "@variants",
+      "description": "Tailwind CSS directive to generate variants"
+    },
+    {
+      "name": "@responsive",
+      "description": "Tailwind CSS directive to generate responsive variants"
+    },
+    {
+      "name": "@screen",
+      "description": "Tailwind CSS directive to create media queries"
+    }
+  ],
+  "properties": [],
+  "pseudoClasses": [],
+  "pseudoElements": []
+} 

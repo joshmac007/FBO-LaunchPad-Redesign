@@ -303,7 +303,7 @@ export default function FuelOrderDetailPage() {
             <CardContent className="space-y-6">
               {error && (
                 <div className="bg-red-500/10 border border-red-500/50 rounded-md p-3 flex items-start gap-2">
-                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+                  <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
                   <p className="text-red-500 text-sm">{error}</p>
                 </div>
               )}

@@ -50,7 +50,7 @@ export default function Home() {
     return () => clearInterval(interval)
   }, [])
 
-  const handleDemoClick = (e) => {
+  const handleDemoClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault()
     setBtnClicked(true)
 
@@ -101,7 +101,7 @@ export default function Home() {
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="py-20 md:py-28 relative overflow-hidden bg-gradient-to-br from-primary/5 via-background to-accent/5">
+        <section className="py-20 md:py-28 relative overflow-hidden bg-linear-to-br from-primary/5 via-background to-accent/5">
           <div className="absolute inset-0 bg-grid-pattern opacity-[0.02] dark:opacity-[0.05]"></div>
           <div className="container px-4 md:px-6 relative">
             <div className="grid gap-6 lg:grid-cols-2 lg:gap-12 items-center">
@@ -231,7 +231,7 @@ export default function Home() {
         </section>
 
         {/* Solution Section */}
-        <section className="py-16 md:py-24 bg-gradient-to-br from-primary/5 to-accent/5">
+        <section className="py-16 md:py-24 bg-linear-to-br from-primary/5 to-accent/5">
           <div className="container px-4 md:px-6">
             <div className="grid gap-12 lg:grid-cols-2 items-center">
               <div className="space-y-6">
@@ -243,19 +243,19 @@ export default function Home() {
                 </p>
                 <ul className="space-y-4">
                   <li className="flex items-start gap-3">
-                    <CheckCircle2 className="h-6 w-6 text-primary mt-0.5 flex-shrink-0" />
+                    <CheckCircle2 className="h-6 w-6 text-primary mt-0.5 shrink-0" />
                     <span className="text-foreground leading-relaxed">
                       CSRs create detailed fuel orders with aircraft info, fuel type, and special instructions
                     </span>
                   </li>
                   <li className="flex items-start gap-3">
-                    <CheckCircle2 className="h-6 w-6 text-primary mt-0.5 flex-shrink-0" />
+                    <CheckCircle2 className="h-6 w-6 text-primary mt-0.5 shrink-0" />
                     <span className="text-foreground leading-relaxed">
                       Line Technicians receive orders on mobile devices with real-time updates and photo capture
                     </span>
                   </li>
                   <li className="flex items-start gap-3">
-                    <CheckCircle2 className="h-6 w-6 text-primary mt-0.5 flex-shrink-0" />
+                    <CheckCircle2 className="h-6 w-6 text-primary mt-0.5 shrink-0" />
                     <span className="text-foreground leading-relaxed">
                       Management gets complete visibility with digital audit trails and performance analytics
                     </span>
@@ -314,7 +314,7 @@ export default function Home() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center mb-16">
               <div className="relative">
-                <div className="absolute -inset-4 bg-gradient-to-r from-primary/20 to-accent/20 rounded-2xl blur-xl"></div>
+                <div className="absolute -inset-4 bg-linear-to-r from-primary/20 to-accent/20 rounded-2xl blur-xl"></div>
                 <div className="relative bg-card border rounded-2xl p-2 shadow-xl">
                   <img
                     src="/images/aircraft-data-flow.png"
@@ -449,7 +449,7 @@ export default function Home() {
         </section>
 
         {/* How It Works Section */}
-        <section className="py-16 md:py-24 bg-gradient-to-br from-primary/5 to-accent/5" id="how-it-works">
+        <section className="py-16 md:py-24 bg-linear-to-br from-primary/5 to-accent/5" id="how-it-works">
           <div className="container px-4 md:px-6">
             <div className="flex flex-col items-center justify-center space-y-4 text-center mb-16">
               <div className="space-y-4">
@@ -503,7 +503,7 @@ export default function Home() {
                     <p className="text-muted-foreground text-lg leading-relaxed">{item.description}</p>
                   </div>
                   <div className={`relative ${index % 2 === 1 ? "md:order-1" : ""}`}>
-                    <div className="absolute -inset-4 bg-gradient-to-r from-primary/20 to-accent/20 rounded-2xl blur-xl"></div>
+                    <div className="absolute -inset-4 bg-linear-to-r from-primary/20 to-accent/20 rounded-2xl blur-xl"></div>
                     <div className="relative bg-card border rounded-2xl p-4 shadow-xl">
                       <img src={item.image || "/placeholder.svg"} alt={item.alt} className="rounded-xl w-full" />
                     </div>
@@ -566,7 +566,7 @@ export default function Home() {
         </section>
 
         {/* CTA Section */}
-        <section className="py-16 md:py-24 bg-gradient-to-br from-primary/10 to-accent/10">
+        <section className="py-16 md:py-24 bg-linear-to-br from-primary/10 to-accent/10">
           <div className="container px-4 md:px-6">
             <div className="flex flex-col items-center justify-center space-y-8 text-center max-w-4xl mx-auto">
               <div className="space-y-4">

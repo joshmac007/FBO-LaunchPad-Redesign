@@ -284,7 +284,7 @@ export default function CustomerManagementPage() {
               </div>
               {createFormError && (
                 <div className="col-span-4 bg-red-50 p-2 rounded-md border border-red-200 text-xs text-red-600 flex items-center">
-                  <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <AlertCircle className="h-4 w-4 mr-2 shrink-0" />
                   {createFormError}
                 </div>
               )}
@@ -364,7 +364,7 @@ export default function CustomerManagementPage() {
                               <Edit2 className="mr-2 h-4 w-4" />
                               Edit
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDeleteClick(customer)} className="text-red-600 hover:!text-red-600 hover:!bg-red-100">
+                            <DropdownMenuItem onClick={() => handleDeleteClick(customer)} className="text-red-600 hover:text-red-600! hover:bg-red-100!">
                               <Trash2 className="mr-2 h-4 w-4" />
                               Delete
                             </DropdownMenuItem>
@@ -440,7 +440,7 @@ export default function CustomerManagementPage() {
               </div>
               {editFormError && (
                 <div className="col-span-4 bg-red-50 p-2 rounded-md border border-red-200 text-xs text-red-600 flex items-center">
-                  <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <AlertCircle className="h-4 w-4 mr-2 shrink-0" />
                   {editFormError}
                 </div>
               )}
@@ -478,7 +478,7 @@ export default function CustomerManagementPage() {
           </DialogHeader>
           {deleteError && (
             <div className="bg-red-50 p-3 rounded-md border border-red-200 text-sm text-red-700 flex items-center my-2">
-              <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+              <AlertCircle className="h-4 w-4 mr-2 shrink-0" />
               {deleteError}
             </div>
           )}

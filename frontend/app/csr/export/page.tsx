@@ -323,7 +323,7 @@ export default function ExportDataPage() {
           transition={{ duration: 0.5 }}
         >
           <motion.div
-            className="h-8 w-8 border-4 border-[#2A628F] border-t-transparent rounded-full"
+            className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full"
             animate={{
               rotate: 360,
               transition: {
@@ -333,7 +333,7 @@ export default function ExportDataPage() {
               },
             }}
           />
-          <p className="text-[#3A4356] dark:text-[#CBD5E0]">Loading...</p>
+          <p className="text-muted-foreground">Loading...</p>
         </motion.div>
       </div>
     )
@@ -347,9 +347,9 @@ export default function ExportDataPage() {
       <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-40">
         <div className="container flex h-16 items-center px-4 justify-between">
           <div className="flex items-center gap-2">
-            <Plane className="h-6 w-6 text-[#2A628F] rotate-45" />
-            <span className="text-xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">FBO LaunchPad</span>
-            <Badge variant="secondary" className="bg-[#2A628F]/10 text-[#2A628F] ml-2">
+            <Plane className="h-6 w-6 text-primary rotate-45" />
+            <span className="text-xl font-bold text-foreground">FBO LaunchPad</span>
+            <Badge variant="secondary" className="bg-primary/10 text-primary ml-2">
               CSR
             </Badge>
           </div>
@@ -390,8 +390,8 @@ export default function ExportDataPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
           >
-            <h1 className="text-3xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">Export Data</h1>
-            <p className="text-[#3A4356] dark:text-[#CBD5E0] max-w-2xl mx-auto">
+            <h1 className="text-3xl font-bold text-foreground">Export Data</h1>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
               Export fuel orders and receipts data in CSV format. Use filters to customize your export and download data
               for analysis.
             </p>
@@ -405,28 +405,28 @@ export default function ExportDataPage() {
               exit={{ opacity: 0, y: -10 }}
               className="max-w-md mx-auto"
             >
-              <Card className="border-l-4 border-l-[#2A628F]">
+              <Card className="border-l-4 border-l-primary">
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-3">
                     {exportStatus === "processing" && (
                       <>
-                        <Loader2 className="h-5 w-5 animate-spin text-[#2A628F]" />
+                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
                         <div className="flex-1">
-                          <p className="text-sm font-medium text-[#3A4356] dark:text-[#F8FAFC]">Processing export...</p>
-                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
+                          <p className="text-sm font-medium text-foreground">Processing export...</p>
+                          <div className="w-full bg-muted rounded-full h-2 mt-2">
                             <div
-                              className="bg-[#2A628F] h-2 rounded-full transition-all duration-300"
+                              className="bg-primary h-2 rounded-full transition-all duration-300"
                               style={{ width: `${exportProgress}%` }}
                             />
                           </div>
-                          <p className="text-xs text-[#3A4356] dark:text-[#CBD5E0] mt-1">{exportProgress}% complete</p>
+                          <p className="text-xs text-muted-foreground mt-1">{exportProgress}% complete</p>
                         </div>
                       </>
                     )}
                     {exportStatus === "success" && (
                       <>
                         <CheckCircle className="h-5 w-5 text-green-500" />
-                        <p className="text-sm font-medium text-green-700 dark:text-green-400">
+                        <p className="text-sm font-medium text-green-600 dark:text-green-400">
                           Export completed successfully!
                         </p>
                       </>
@@ -434,7 +434,7 @@ export default function ExportDataPage() {
                     {exportStatus === "error" && (
                       <>
                         <AlertCircle className="h-5 w-5 text-red-500" />
-                        <p className="text-sm font-medium text-red-700 dark:text-red-400">
+                        <p className="text-sm font-medium text-destructive">
                           Export failed. Please try again.
                         </p>
                       </>
@@ -475,14 +475,14 @@ export default function ExportDataPage() {
                     <Card className="hover:shadow-md transition-shadow">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-[#2A628F]/10 rounded-lg">
-                            <FileText className="h-5 w-5 text-[#2A628F]" />
+                          <div className="p-2 bg-primary/10 rounded-lg">
+                            <FileText className="h-5 w-5 text-primary" />
                           </div>
                           <div>
-                            <p className="text-2xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">
+                            <p className="text-2xl font-bold text-foreground">
                               {fuelOrderStats.total}
                             </p>
-                            <p className="text-sm text-[#3A4356] dark:text-[#CBD5E0]">Total Orders</p>
+                            <p className="text-sm text-muted-foreground">Total Orders</p>
                           </div>
                         </div>
                       </CardContent>
@@ -501,10 +501,10 @@ export default function ExportDataPage() {
                             <Clock className="h-5 w-5 text-amber-500" />
                           </div>
                           <div>
-                            <p className="text-2xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">
+                            <p className="text-2xl font-bold text-foreground">
                               {fuelOrderStats.pending}
                             </p>
-                            <p className="text-sm text-[#3A4356] dark:text-[#CBD5E0]">Pending</p>
+                            <p className="text-sm text-muted-foreground">Pending</p>
                           </div>
                         </div>
                       </CardContent>
@@ -523,10 +523,10 @@ export default function ExportDataPage() {
                             <Loader2 className="h-5 w-5 text-blue-500" />
                           </div>
                           <div>
-                            <p className="text-2xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">
+                            <p className="text-2xl font-bold text-foreground">
                               {fuelOrderStats.inProgress}
                             </p>
-                            <p className="text-sm text-[#3A4356] dark:text-[#CBD5E0]">In Progress</p>
+                            <p className="text-sm text-muted-foreground">In Progress</p>
                           </div>
                         </div>
                       </CardContent>
@@ -545,10 +545,10 @@ export default function ExportDataPage() {
                             <CheckCircle className="h-5 w-5 text-green-500" />
                           </div>
                           <div>
-                            <p className="text-2xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">
+                            <p className="text-2xl font-bold text-foreground">
                               {fuelOrderStats.completed}
                             </p>
-                            <p className="text-sm text-[#3A4356] dark:text-[#CBD5E0]">Completed</p>
+                            <p className="text-sm text-muted-foreground">Completed</p>
                           </div>
                         </div>
                       </CardContent>
@@ -565,7 +565,7 @@ export default function ExportDataPage() {
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
-                        <FileText className="h-5 w-5 text-[#2A628F]" />
+                        <FileText className="h-5 w-5 text-primary" />
                         Export Fuel Orders
                       </CardTitle>
                       <CardDescription>
@@ -649,14 +649,14 @@ export default function ExportDataPage() {
                     <Card className="hover:shadow-md transition-shadow">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-[#2A628F]/10 rounded-lg">
-                            <Receipt className="h-5 w-5 text-[#2A628F]" />
+                          <div className="p-2 bg-primary/10 rounded-lg">
+                            <Receipt className="h-5 w-5 text-primary" />
                           </div>
                           <div>
-                            <p className="text-2xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">
+                            <p className="text-2xl font-bold text-foreground">
                               {receiptStats.total}
                             </p>
-                            <p className="text-sm text-[#3A4356] dark:text-[#CBD5E0]">Total Receipts</p>
+                            <p className="text-sm text-muted-foreground">Total Receipts</p>
                           </div>
                         </div>
                       </CardContent>
@@ -675,8 +675,8 @@ export default function ExportDataPage() {
                             <CheckCircle className="h-5 w-5 text-green-500" />
                           </div>
                           <div>
-                            <p className="text-2xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">{receiptStats.paid}</p>
-                            <p className="text-sm text-[#3A4356] dark:text-[#CBD5E0]">Paid</p>
+                            <p className="text-2xl font-bold text-foreground">{receiptStats.paid}</p>
+                            <p className="text-sm text-muted-foreground">Paid</p>
                           </div>
                         </div>
                       </CardContent>
@@ -695,10 +695,10 @@ export default function ExportDataPage() {
                             <Clock className="h-5 w-5 text-amber-500" />
                           </div>
                           <div>
-                            <p className="text-2xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">
+                            <p className="text-2xl font-bold text-foreground">
                               {receiptStats.pending}
                             </p>
-                            <p className="text-sm text-[#3A4356] dark:text-[#CBD5E0]">Pending</p>
+                            <p className="text-sm text-muted-foreground">Pending</p>
                           </div>
                         </div>
                       </CardContent>
@@ -717,10 +717,10 @@ export default function ExportDataPage() {
                             <span className="text-emerald-500 font-bold text-lg">$</span>
                           </div>
                           <div>
-                            <p className="text-2xl font-bold text-[#3A4356] dark:text-[#F8FAFC]">
+                            <p className="text-2xl font-bold text-foreground">
                               ${receiptStats.totalAmount.toLocaleString()}
                             </p>
-                            <p className="text-sm text-[#3A4356] dark:text-[#CBD5E0]">Total Revenue</p>
+                            <p className="text-sm text-muted-foreground">Total Revenue</p>
                           </div>
                         </div>
                       </CardContent>
@@ -737,7 +737,7 @@ export default function ExportDataPage() {
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
-                        <Receipt className="h-5 w-5 text-[#2A628F]" />
+                        <Receipt className="h-5 w-5 text-primary" />
                         Export Receipts
                       </CardTitle>
                       <CardDescription>Download receipt data as CSV with filtering options</CardDescription>
