@@ -4,17 +4,21 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { usePermissions } from "@/hooks/usePermissions"
 import AppSidebar from "@/components/layout/app-sidebar"
 import AccessDenied from "@/app/components/access-denied"
-import { cn } from "@/lib/utils"
 import { PERMISSION_GROUPS } from "@/app/constants/permissions"
+import {
+  Sidebar,
+  SidebarInset,
+  SidebarProvider,
+  SidebarRail,
+} from "@/components/ui/sidebar"
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [hasAccess, setHasAccess] = useState(false)
 
@@ -95,22 +99,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppSidebar 
-        collapsed={sidebarCollapsed} 
-        setCollapsed={setSidebarCollapsed} 
-        userRole="admin" // Keep for compatibility, but sidebar should use permissions internally
-      />
-      <div
-        className={cn(
-          "transition-all duration-300 ease-in-out min-h-screen",
-          sidebarCollapsed ? "lg:ml-20" : "lg:ml-72",
-        )}
-      >
+    <SidebarProvider>
+      <Sidebar>
+        <AppSidebar userRole="admin" />
+        <SidebarRail />
+      </Sidebar>
+      <SidebarInset>
         <main className="p-4 md:p-6 lg:pr-8 lg:py-8">
           <div className="mx-auto max-w-7xl">{children}</div>
         </main>
-      </div>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }

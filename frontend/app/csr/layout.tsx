@@ -5,12 +5,16 @@ import { useState, useEffect } from "react"
 import { usePermissions } from "@/hooks/usePermissions"
 import AppSidebar from "@/components/layout/app-sidebar"
 import AccessDenied from "@/app/components/access-denied"
-import { cn } from "@/lib/utils"
 import { QueryProvider } from "@/app/providers/query-provider"
+import {
+  Sidebar,
+  SidebarInset,
+  SidebarProvider,
+  SidebarRail,
+} from "@/components/ui/sidebar"
 
 const CSRLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { loading, isAuthenticated, hasPermission, user } = usePermissions()
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isClient, setIsClient] = useState(false)
 
   // Ensure consistent rendering between server and client
@@ -40,19 +44,17 @@ const CSRLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <QueryProvider>
-      <div className="min-h-screen bg-background">
-        <AppSidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} userRole="csr" />
-        <div
-          className={cn(
-            "transition-all duration-300 ease-in-out min-h-screen",
-            sidebarCollapsed ? "lg:pl-[80px]" : "lg:pl-[280px]",
-          )}
-        >
+      <SidebarProvider>
+        <Sidebar>
+          <AppSidebar userRole="csr" />
+          <SidebarRail />
+        </Sidebar>
+        <SidebarInset>
           <main className="p-4 sm:p-6 lg:p-8">
             <div className="mx-auto max-w-7xl">{children}</div>
           </main>
-        </div>
-      </div>
+        </SidebarInset>
+      </SidebarProvider>
     </QueryProvider>
   )
 }

@@ -5,8 +5,6 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Plane,
-  ChevronLeft,
-  ChevronRight,
   Home,
   FileText,
   Receipt,
@@ -22,9 +20,7 @@ import {
   Droplet,
   CheckCircle,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { useTheme } from "next-themes"
@@ -37,6 +33,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { usePermissions } from "@/hooks/usePermissions"
+import {
+  useSidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarFooter,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+} from "@/components/ui/sidebar"
 
 interface NavItem {
   title: string
@@ -48,12 +56,11 @@ interface NavItem {
 }
 
 interface AppSidebarProps {
-  collapsed: boolean
-  setCollapsed: (collapsed: boolean) => void
   userRole?: "csr" | "admin" | "member" | "fueler" // Keep for backward compatibility
 }
 
-export default function AppSidebar({ collapsed, setCollapsed, userRole = "csr" }: AppSidebarProps) {
+export default function AppSidebar({ userRole = "csr" }: AppSidebarProps) {
+  const { state } = useSidebar()
   const pathname = usePathname()
   const router = useRouter()
   const { theme, setTheme } = useTheme()
@@ -298,184 +305,134 @@ export default function AppSidebar({ collapsed, setCollapsed, userRole = "csr" }
   const utilityNavItems = getUtilityNavItems()
 
   return (
-    <TooltipProvider delayDuration={0}>
-      <aside
-        className={cn(
-          "fixed inset-y-0 left-0 z-50 flex flex-col border-r bg-white dark:bg-gray-900 transition-all duration-300 ease-in-out",
-          collapsed ? "w-[80px]" : "w-[280px]",
+    <>
+      <SidebarHeader>
+        <Link href={getDefaultDashboard()} className="flex items-center gap-2 p-2">
+          <Plane className="h-6 w-6 text-primary rotate-45" />
+          {state === 'expanded' && <span className="text-xl font-bold">FBO LaunchPad</span>}
+        </Link>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          {accessibleNavItems.length > 0 && (
+            <>
+              <SidebarGroupLabel>Main Menu</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {accessibleNavItems.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive(item.href)}
+                        tooltip={state === 'collapsed' ? `${item.title}${item.description ? ` - ${item.description}` : ''}` : undefined}
+                      >
+                        <Link href={item.href}>
+                          {item.icon}
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </>
+          )}
+
+        </SidebarGroup>
+        
+        <SidebarGroup>
+          <SidebarGroupLabel>Utilities</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {utilityNavItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.href)}
+                    tooltip={state === 'collapsed' ? `${item.title}${item.description ? ` - ${item.description}` : ''}` : undefined}
+                  >
+                    <Link href={item.href}>
+                      {item.icon}
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  tooltip={state === 'collapsed' ? (mounted && theme === "dark" ? "Light Mode" : "Dark Mode") : undefined}
+                >
+                  {mounted && theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+                  <span>{mounted && theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        
+        {/* Permission Loading State */}
+        {permissionsLoading && (
+          <div className="px-4 py-2">
+            <div className="text-xs text-muted-foreground">Loading permissions...</div>
+          </div>
         )}
-      >
-        {/* Sidebar Header with Logo */}
-        <div className="flex h-16 items-center justify-between border-b px-4">
-          <Link href={getDefaultDashboard()} className="flex items-center gap-2">
-            <Plane className="h-6 w-6 text-primary rotate-45" />
-            {!collapsed && <span className="text-xl font-bold">FBO LaunchPad</span>}
-          </Link>
-          <Button variant="ghost" size="icon" onClick={() => setCollapsed(!collapsed)} className="h-8 w-8 rounded-full">
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </Button>
-        </div>
+      </SidebarContent>
 
-        {/* Sidebar Content */}
-        <div className="flex-1 overflow-y-auto py-6">
-          <nav className="flex flex-col gap-1 px-2">
-            {/* Main Navigation */}
-            {accessibleNavItems.length > 0 && (
-              <div className="mb-6">
-                {!collapsed && (
-                  <div className="mb-3 px-4">
-                    <h3 className="text-xs font-medium uppercase text-muted-foreground tracking-wider">Main Menu</h3>
-                  </div>
-                )}
-                {accessibleNavItems.map((item) => (
-                  <Tooltip key={item.href} delayDuration={0}>
-                    <TooltipTrigger asChild>
-                      <Link
-                        href={item.href}
-                        className={cn(
-                          "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                          isActive(item.href)
-                            ? "bg-primary/10 text-primary shadow-sm"
-                            : "text-foreground hover:bg-muted hover:text-foreground",
-                        )}
-                      >
-                        {item.icon}
-                        {!collapsed && <span>{item.title}</span>}
-                      </Link>
-                    </TooltipTrigger>
-                    {collapsed && (
-                      <TooltipContent side="right">
-                        <div>
-                          <div className="font-medium">{item.title}</div>
-                          {item.description && (
-                            <div className="text-xs text-muted-foreground mt-1">{item.description}</div>
-                          )}
-                        </div>
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                ))}
-              </div>
-            )}
-
-            {/* Utility Navigation */}
-            {utilityNavItems.length > 0 && (
-              <div>
-                {!collapsed && (
-                  <div className="mb-3 px-4">
-                    <h3 className="text-xs font-medium uppercase text-muted-foreground tracking-wider">Utilities</h3>
-                  </div>
-                )}
-                {utilityNavItems.map((item) => (
-                  <Tooltip key={item.href} delayDuration={0}>
-                    <TooltipTrigger asChild>
-                      <Link
-                        href={item.href}
-                        className={cn(
-                          "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                          isActive(item.href)
-                            ? "bg-primary/10 text-primary shadow-sm"
-                            : "text-foreground hover:bg-muted hover:text-foreground",
-                        )}
-                      >
-                        {item.icon}
-                        {!collapsed && <span>{item.title}</span>}
-                      </Link>
-                    </TooltipTrigger>
-                    {collapsed && (
-                      <TooltipContent side="right">
-                        <div>
-                          <div className="font-medium">{item.title}</div>
-                          {item.description && (
-                            <div className="text-xs text-muted-foreground mt-1">{item.description}</div>
-                          )}
-                        </div>
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                ))}
-
-                {/* Theme Toggle */}
-                <Tooltip delayDuration={0}>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size={collapsed ? "icon" : "default"}
-                      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                      className={cn(
-                        "w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 mt-1",
-                        collapsed && "justify-center",
-                      )}
-                    >
-                      {mounted && theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-                      {!collapsed && <span>{mounted && theme === "dark" ? "Light Mode" : "Dark Mode"}</span>}
-                    </Button>
-                  </TooltipTrigger>
-                  {collapsed && (
-                    <TooltipContent side="right">
-                      {mounted && theme === "dark" ? "Light Mode" : "Dark Mode"}
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </div>
-            )}
-
-            {/* Permission Loading State */}
-            {permissionsLoading && (
-              <div className="px-4 py-2">
-                <div className="text-xs text-muted-foreground">Loading permissions...</div>
-              </div>
-            )}
-          </nav>
-        </div>
-
-        {/* Sidebar Footer with User Info */}
-        <div className="border-t p-4">
-          {permissionUser?.isLoggedIn ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="w-full justify-start gap-3 p-2 h-auto">
-                  <Avatar className="h-8 w-8">
+      <SidebarFooter>
+        {permissionUser?.isLoggedIn ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
+                <Avatar className="h-8 w-8 rounded-lg">
+                  <AvatarImage src="" alt={permissionUser.name} />
+                  <AvatarFallback className="rounded-lg">
+                    {permissionUser.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">{permissionUser.name || 'User'}</span>
+                  <Badge variant="secondary" className="text-xs w-fit">
+                    {getUserRoleLabel()}
+                  </Badge>
+                </div>
+              </SidebarMenuButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
+              side="bottom"
+              align="end"
+              sideOffset={4}
+            >
+              <DropdownMenuLabel className="p-0 font-normal">
+                <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+                  <Avatar className="h-8 w-8 rounded-lg">
                     <AvatarImage src="" alt={permissionUser.name} />
-                    <AvatarFallback>
+                    <AvatarFallback className="rounded-lg">
                       {permissionUser.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || 'U'}
                     </AvatarFallback>
                   </Avatar>
-                  {!collapsed && (
-                    <div className="flex-1 text-left">
-                      <div className="text-sm font-medium">{permissionUser.name || 'User'}</div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-xs">
-                          {getUserRoleLabel()}
-                        </Badge>
-                      </div>
-                    </div>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>
-                  <div>
-                    <div className="font-medium">{permissionUser.name || 'User'}</div>
-                    <div className="text-xs text-muted-foreground">{permissionUser.email}</div>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-semibold">{permissionUser.name || 'User'}</span>
+                    <span className="truncate text-xs">{permissionUser.email}</span>
                   </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <div className="text-center">
-              <Button variant="outline" size="sm" onClick={() => router.push("/login")}>
-                Sign In
-              </Button>
-            </div>
-          )}
-        </div>
-      </aside>
-    </TooltipProvider>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Log out</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <SidebarMenuButton onClick={() => router.push("/login")}>
+            Sign In
+          </SidebarMenuButton>
+        )}
+      </SidebarFooter>
+    </>
   )
 }
