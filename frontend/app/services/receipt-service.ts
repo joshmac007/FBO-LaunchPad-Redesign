@@ -266,6 +266,7 @@ export interface ReceiptListFilters {
   customer_id?: number
   date_from?: string
   date_to?: string
+  search?: string
   page?: number
   per_page?: number
 }
@@ -296,6 +297,9 @@ export async function getReceipts(filters?: ReceiptListFilters): Promise<Receipt
   }
   if (filters?.date_to) {
     queryParams.append('date_to', filters.date_to)
+  }
+  if (filters?.search) {
+    queryParams.append('search', filters.search)
   }
   if (filters?.page) {
     queryParams.append('page', filters.page.toString())
@@ -707,5 +711,18 @@ export async function voidReceipt(receiptId: number, reason?: string): Promise<R
   })
 
   const data = await handleApiResponse<{ receipt: Receipt }>(response)
+  return data.receipt
+}
+
+// Toggle waiver for a line item
+export async function toggleLineItemWaiver(receiptId: number, lineItemId: number): Promise<ExtendedReceipt> {
+  const fboId = getCurrentUserFboId();
+  
+  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receiptId}/line-items/${lineItemId}/toggle-waiver`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+  })
+
+  const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response)
   return data.receipt
 }

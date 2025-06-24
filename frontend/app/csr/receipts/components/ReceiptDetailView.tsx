@@ -62,19 +62,14 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
     try {
       setIsDownloading(true)
       
-      // Get user's FBO ID
-      const { getCurrentUser } = await import("@/app/services/auth-service")
-      const user = getCurrentUser()
-      if (!user?.fbo_id) {
-        throw new Error("User is not associated with an FBO")
-      }
+      // Use the standard API configuration
+      const { API_BASE_URL, getAuthHeaders, getCurrentUserFboId } = await import("@/app/services/api-config")
+      const fboId = getCurrentUserFboId()
       
       // Call the PDF generation endpoint
-      const response = await fetch(`/api/fbo/${user.fbo_id}/receipts/${receipt.id}/pdf`, {
+      const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receipt.id}/pdf`, {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
+        headers: getAuthHeaders(),
       })
       
       if (!response.ok) {
@@ -87,7 +82,7 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `Receipt_${receipt.receiptNumber || receipt.id}.pdf`
+      link.download = `Receipt_${receipt.receipt_number || receipt.id}.pdf`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -117,10 +112,41 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
   const handleEmailReceipt = async () => {
     try {
       setIsEmailing(true)
-      // TODO: Implement email functionality
-      console.log("Emailing receipt:", receipt.receiptNumber)
+      
+      // Create email content for the receipt
+      const subject = `Receipt ${receipt.receipt_number || receipt.id} - FBO LaunchPad`
+      const body = `Dear Customer,
+
+Please find your receipt details below:
+
+Receipt Number: ${receipt.receipt_number || receipt.id}
+Aircraft: ${receipt.tailNumber}
+Total Amount: ${formatCurrency(parseFloat(receipt.grand_total_amount))}
+Status: ${receipt.status}
+
+Thank you for choosing FBO LaunchPad for your aviation services.
+
+Best regards,
+FBO LaunchPad Team`
+
+      // Encode the email parameters
+      const mailtoUrl = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      
+      // Open the user's default email client
+      window.location.href = mailtoUrl
+      
+      toast({
+        title: "Email Client Opened",
+        description: "Your default email client has been opened with the receipt details.",
+        className: "bg-blue-500 text-white",
+      })
     } catch (error) {
-      console.error("Error emailing receipt:", error)
+      console.error("Error opening email client:", error)
+      toast({
+        title: "Error",
+        description: "Failed to open email client. " + (error instanceof Error ? error.message : ""),
+        variant: "destructive",
+      })
     } finally {
       setIsEmailing(false)
     }
@@ -174,8 +200,68 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 print:bg-white">
-      <div className="max-w-4xl mx-auto p-6 print:p-0">
+    <>
+      {/* Print-specific styles */}
+      <style jsx>{`
+        @media print {
+          @page {
+            size: A4;
+            margin: 0.5in;
+          }
+          
+          body {
+            print-color-adjust: exact;
+            -webkit-print-color-adjust: exact;
+          }
+          
+          .print\\:hidden {
+            display: none !important;
+          }
+          
+          .print\\:block {
+            display: block !important;
+          }
+          
+          .print\\:text-black {
+            color: black !important;
+          }
+          
+          .print\\:border-black {
+            border-color: black !important;
+          }
+          
+          .print\\:shadow-none {
+            box-shadow: none !important;
+          }
+          
+          .print\\:border-none {
+            border: none !important;
+          }
+          
+          .print\\:bg-white {
+            background-color: white !important;
+          }
+          
+          .print\\:p-0 {
+            padding: 0 !important;
+          }
+          
+          .print\\:p-4 {
+            padding: 1rem !important;
+          }
+          
+          .print\\:mt-4 {
+            margin-top: 1rem !important;
+          }
+          
+          .print\\:pt-4 {
+            padding-top: 1rem !important;
+          }
+        }
+      `}</style>
+      
+      <div className="min-h-screen bg-gray-50 print:bg-white">
+        <div className="max-w-4xl mx-auto p-6 print:p-0">
         {/* Actions Bar - Hidden in print */}
         <div className="flex justify-between items-center mb-6 print:hidden">
           <div className="flex items-center gap-2">
@@ -536,5 +622,6 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
         </motion.div>
       </div>
     </div>
+    </>
   )
 } 

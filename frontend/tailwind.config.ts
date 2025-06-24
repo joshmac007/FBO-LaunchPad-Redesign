@@ -1,5 +1,23 @@
 import type { Config } from "tailwindcss"
-import { colors, typography, spacing, borderRadius, shadows } from "./app/styles/design-tokens"
+import {
+  colors,
+  typography,
+  spacing,
+  borderRadius as designBorderRadius,
+  shadows,
+} from "./app/styles/design-tokens"
+
+// Remove keys we will override (lg, md, sm) to avoid duplicate properties
+const { lg: _lg, md: _md, sm: _sm, ...baseBorderRadius } = designBorderRadius
+
+// Helper to convert numeric values in typography tokens to strings
+const fontWeightStrings = Object.fromEntries(
+  Object.entries(typography.fontWeight).map(([k, v]) => [k, v.toString()])
+)
+
+const lineHeightStrings = Object.fromEntries(
+  Object.entries(typography.lineHeight).map(([k, v]) => [k, v.toString()])
+)
 
 const config: Config = {
   darkMode: ["class"],
@@ -21,6 +39,8 @@ const config: Config = {
     extend: {
       fontFamily: {
         montserrat: ["var(--font-montserrat)", "sans-serif"],
+        sans: [typography.fontFamily.base],
+        mono: [typography.fontFamily.mono],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -66,18 +86,14 @@ const config: Config = {
         neutral: colors.neutral,
       },
       borderRadius: {
+        ...baseBorderRadius,
         lg: `var(--radius)`,
         md: `calc(var(--radius) - 2px)`,
         sm: "calc(var(--radius) - 4px)",
-        ...borderRadius,
-      },
-      fontFamily: {
-        sans: [typography.fontFamily.base],
-        mono: [typography.fontFamily.mono],
       },
       fontSize: typography.fontSize,
-      fontWeight: typography.fontWeight,
-      lineHeight: typography.lineHeight,
+      fontWeight: fontWeightStrings,
+      lineHeight: lineHeightStrings,
       spacing: spacing,
       boxShadow: shadows,
       keyframes: {

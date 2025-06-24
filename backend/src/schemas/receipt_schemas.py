@@ -113,6 +113,10 @@ class ReceiptListQuerySchema(Schema):
     customer_id = fields.Integer(validate=validate.Range(min=1), allow_none=True)
     date_from = fields.DateTime(allow_none=True)
     date_to = fields.DateTime(allow_none=True)
+    search = fields.String(
+        validate=validate.Length(max=100),
+        allow_none=True
+    )
     page = fields.Integer(validate=validate.Range(min=1), missing=1)
     per_page = fields.Integer(validate=validate.Range(min=1, max=100), missing=50)
     

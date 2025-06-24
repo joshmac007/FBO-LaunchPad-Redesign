@@ -13,6 +13,7 @@ from typing import Dict, Any
 from ..models.receipt import Receipt
 from ..models.receipt_line_item import ReceiptLineItem
 from ..services.receipt_service import ReceiptService
+from ..services.admin_fee_config_service import AdminFeeConfigService
 from ..schemas.receipt_schemas import (
     create_draft_receipt_schema,
     update_draft_receipt_schema,
@@ -345,6 +346,7 @@ def list_receipts(fbo_id):
         customer_id (int, optional): Filter by customer ID
         date_from (datetime, optional): Filter by creation date from
         date_to (datetime, optional): Filter by creation date to
+        search (str, optional): Search by receipt number, tail number, or customer name
         page (int, optional): Page number (default: 1)
         per_page (int, optional): Items per page (default: 50, max: 100)
         
@@ -516,4 +518,45 @@ def receipt_health_check(fbo_id):
         'service': 'receipt_service',
         'fbo_id': fbo_id,
         'timestamp': datetime.utcnow().isoformat()
-    }), 200 
+    }), 200
+
+
+@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/available-services', methods=['GET'])
+@require_permission_v2('view_receipts')
+def get_available_services(fbo_id):
+    """
+    Get available additional services (fee rules) for receipt line items.
+    
+    CSR-accessible endpoint to fetch available services that can be added to receipts.
+    
+    Returns:
+        200: List of available services
+        500: Server error
+    """
+    try:
+        fee_rules = AdminFeeConfigService.get_fee_rules(fbo_id)
+        
+        # Transform fee rules into available services format
+        available_services = [
+            {
+                'id': rule['id'],
+                'code': rule['fee_code'],
+                'description': rule['fee_name'],
+                'price': rule['amount'],
+                'fee_name': rule['fee_name'],
+                'is_taxable': rule['is_taxable'],
+                'currency': rule['currency'],
+                'is_potentially_waivable_by_fuel_uplift': rule['is_potentially_waivable_by_fuel_uplift']
+            }
+            for rule in fee_rules
+        ]
+        
+        return jsonify({
+            'available_services': available_services,
+            'count': len(available_services),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error fetching available services for FBO {fbo_id}: {str(e)}")
+        return jsonify({'error': 'Failed to fetch available services'}), 500 

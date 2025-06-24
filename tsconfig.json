@@ -13,11 +13,17 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["cypress", "node"]
+    "types": ["cypress", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["frontend/*"]
+    }
   },
   "include": [
     "cypress/**/*.ts",
-    "cypress/**/*.tsx"
+    "cypress/**/*.tsx",
+    "frontend/**/*.ts",
+    "frontend/**/*.tsx"
   ],
   "exclude": [
     "node_modules"

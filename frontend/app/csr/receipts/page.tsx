@@ -79,6 +79,9 @@ function ReceiptsPageInternal() {
   // UI states
   const [isExporting, setIsExporting] = useState(false)
 
+  // Debounce search input to prevent excessive re-renders
+  const { debouncedSearchTerm, isSearching } = useSearchDebounce(searchTerm, 300)
+
   // Use React Query with server-side filtering and pagination
   const {
     data,
@@ -88,7 +91,7 @@ function ReceiptsPageInternal() {
     isFetching,
     refetch,
   } = useQuery<{ receipts: Receipt[]; stats: ReceiptStats; pagination: { total: number; page: number; per_page: number; total_pages: number } }, Error>({
-    queryKey: ['receipts', { statusFilter, dateRangeFilter, currentPage, itemsPerPage }],
+    queryKey: ['receipts', { statusFilter, dateRangeFilter, debouncedSearchTerm, currentPage, itemsPerPage }],
     queryFn: async () => {
       // Build filter params for server-side filtering
       const filters: ReceiptListFilters = {
@@ -106,6 +109,10 @@ function ReceiptsPageInternal() {
       
       if (dateRangeFilter.endDate) {
         filters.date_to = dateRangeFilter.endDate
+      }
+      
+      if (debouncedSearchTerm) {
+        filters.search = debouncedSearchTerm
       }
 
       // Use updated getReceipts function with server-side filtering
@@ -143,25 +150,8 @@ function ReceiptsPageInternal() {
     refetchOnWindowFocus: false,
   })
 
-  // Debounce search input to prevent excessive re-renders
-  const { debouncedSearchTerm, isSearching } = useSearchDebounce(searchTerm, 300)
-
-  // Client-side search filtering (applied after server-side filtering and pagination)
-  const displayedReceipts = useMemo(() => {
-    let receipts = data?.receipts || []
-    
-    // Apply client-side search filter to current page results
-    if (debouncedSearchTerm) {
-      const searchLower = debouncedSearchTerm.toLowerCase()
-      receipts = receipts.filter(receipt =>
-        receipt.receiptNumber.toLowerCase().includes(searchLower) ||
-        receipt.tailNumber.toLowerCase().includes(searchLower) ||
-        receipt.customer.toLowerCase().includes(searchLower)
-      )
-    }
-
-    return receipts
-  }, [data?.receipts, debouncedSearchTerm])
+  // All filtering is now done server-side
+  const displayedReceipts = data?.receipts || []
 
   // Get pagination info from server response
   const totalPages = data?.pagination.total_pages || 1
@@ -170,7 +160,7 @@ function ReceiptsPageInternal() {
   // Reset pagination when server-side filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [statusFilter, dateRangeFilter])
+  }, [statusFilter, dateRangeFilter, debouncedSearchTerm])
 
   // Event handlers
   const handleViewReceipt = useCallback((receipt: Receipt) => {
@@ -550,7 +540,6 @@ function ReceiptsPageInternal() {
         <div className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
             Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalReceipts)} of {totalReceipts} receipts
-            {debouncedSearchTerm && ` (filtered on current page)`}
           </div>
           <div className="flex items-center gap-2">
             <Button

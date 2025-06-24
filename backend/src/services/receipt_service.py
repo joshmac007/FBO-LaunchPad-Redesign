@@ -533,6 +533,20 @@ class ReceiptService:
                 
                 if 'date_to' in filters:
                     query = query.filter(Receipt.created_at <= filters['date_to'])
+                
+                if 'search' in filters and filters['search']:
+                    search_term = f"%{filters['search']}%"
+                    # Import FuelOrder model for the join
+                    from ..models.fuel_order import FuelOrder
+                    from ..models.customer import Customer
+                    
+                    query = query.outerjoin(FuelOrder).outerjoin(Customer).filter(
+                        db.or_(
+                            Receipt.receipt_number.ilike(search_term),
+                            FuelOrder.tail_number.ilike(search_term),
+                            Customer.name.ilike(search_term)
+                        )
+                    )
             
             # Apply pagination
             paginated_results = query.paginate(

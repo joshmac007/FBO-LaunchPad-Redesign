@@ -1,6 +1,18 @@
 import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config"
 import { isOfflineMode } from "./utils"
 
+// Available service interface for receipt additional services
+export interface AvailableService {
+  code: string
+  description: string
+  price: number
+  id: number
+  fee_name: string
+  is_taxable: boolean
+  currency: string
+  is_potentially_waivable_by_fuel_uplift: boolean
+}
+
 // Fee calculation request
 export interface FeeCalculationRequest {
   aircraftId: string
@@ -38,6 +50,38 @@ export async function calculateFees(request: FeeCalculationRequest): Promise<Fee
   })
 
   return handleApiResponse<FeeCalculationResult>(response)
+}
+
+// Get available services (fee rules) for a specific FBO
+export async function getAvailableServices(fboId: number): Promise<AvailableService[]> {
+  if (isOfflineMode()) {
+    // Return mock data for offline mode
+    return getMockAvailableServices()
+  }
+
+  // Online mode - fetch from API using CSR-accessible endpoint
+  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/available-services`, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  })
+
+  const result = await handleApiResponse<{ available_services: AvailableService[] }>(response)
+  
+  return result.available_services
+}
+
+// Mock available services for offline mode
+function getMockAvailableServices(): AvailableService[] {
+  return [
+    { id: 1, code: 'GPU_SERVICE', description: 'GPU Service', price: 50.00, fee_name: 'GPU Service', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: true },
+    { id: 2, code: 'LAVATORY_SERVICE', description: 'Lavatory Service', price: 75.00, fee_name: 'Lavatory Service', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: true },
+    { id: 3, code: 'WATER_SERVICE', description: 'Water Service', price: 25.00, fee_name: 'Water Service', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: false },
+    { id: 4, code: 'CATERING_COORDINATION', description: 'Catering Coordination', price: 100.00, fee_name: 'Catering Coordination', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: false },
+    { id: 5, code: 'HANGAR_OVERNIGHT', description: 'Hangar Overnight', price: 200.00, fee_name: 'Hangar Overnight', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: true },
+    { id: 6, code: 'TIE_DOWN', description: 'Tie Down', price: 50.00, fee_name: 'Tie Down', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: true },
+    { id: 7, code: 'CUSTOMS_HANDLING', description: 'Customs Handling', price: 150.00, fee_name: 'Customs Handling', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: false },
+    { id: 8, code: 'CREW_CAR', description: 'Crew Car', price: 75.00, fee_name: 'Crew Car', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: true },
+  ]
 }
 
 // Local fee calculation
