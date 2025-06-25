@@ -11,7 +11,11 @@
     "test:watch": "jest --watch",
     "test:e2e": "cypress run",
     "test:e2e:open": "cypress open",
-    "test:user-management": "node tests/e2e/user-management-simple.test.js"
+    "test:user-management": "node tests/e2e/user-management-simple.test.js",
+    "test:sidebar": "jest --testPathPattern=sidebar",
+    "test:sidebar:watch": "jest --testPathPattern=sidebar --watch",
+    "test:sidebar:coverage": "jest --testPathPattern=sidebar --coverage",
+    "test:all": "npm run test && npm run test:e2e"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
