@@ -2,8 +2,8 @@
  * Test utilities and helpers for sidebar testing
  */
 
+import React, { ReactElement } from 'react'
 import { render, screen } from '@testing-library/react'
-import { ReactElement } from 'react'
 import { SidebarProvider } from '@/components/ui/sidebar'
 
 // Mock user types for testing
@@ -17,7 +17,7 @@ export const mockUsers = {
     },
     loading: false,
     can: jest.fn(),
-    canAny: jest.fn().mockReturnValue(true),
+    canAny: jest.fn().mockReturnValue(true), // Admin has access to ALL permissions
     isAdmin: true,
     isCSR: false,
     isFueler: false,
@@ -32,13 +32,18 @@ export const mockUsers = {
     },
     loading: false,
     can: jest.fn(),
-    canAny: jest.fn().mockReturnValue(true),
+    canAny: jest.fn().mockImplementation((permissions) => {
+      // CSR has access to CSR permissions
+      return permissions.some((p: string) => p.includes('csr') || p.includes('view_') || p.includes('create_'))
+    }),
     isAdmin: false,
     isCSR: true,
     isFueler: false,
     isMember: false,
     isAuthenticated: jest.fn().mockReturnValue(true),
-    hasPermission: jest.fn().mockReturnValue(true),
+    hasPermission: jest.fn().mockImplementation((permission) => {
+      return permission.includes('access_csr_dashboard') || permission.includes('view_') || permission.includes('create_')
+    }),
   },
   fueler: {
     user: {
@@ -49,7 +54,10 @@ export const mockUsers = {
     },
     loading: false,
     can: jest.fn(),
-    canAny: jest.fn().mockReturnValue(true),
+    canAny: jest.fn().mockImplementation((permissions) => {
+      // Fueler has access to fueler permissions
+      return permissions.some((p: string) => p.includes('fueler') || p.includes('access_fueler_dashboard'))
+    }),
     isAdmin: false,
     isCSR: false,
     isFueler: true,
@@ -64,7 +72,10 @@ export const mockUsers = {
     },
     loading: false,
     can: jest.fn(),
-    canAny: jest.fn().mockReturnValue(true),
+    canAny: jest.fn().mockImplementation((permissions) => {
+      // Member has very limited permissions
+      return permissions.length === 0 || permissions.some((p: string) => p.includes('member'))
+    }),
     isAdmin: false,
     isCSR: false,
     isFueler: false,
@@ -92,42 +103,36 @@ export const mockUsers = {
   },
 }
 
-// Test wrapper with SidebarProvider
-export const SidebarTestWrapper = ({ 
-  children, 
-  defaultOpen = true 
-}: { 
-  children: React.ReactNode
-  defaultOpen?: boolean 
-}) => (
-  <SidebarProvider defaultOpen={defaultOpen}>
-    {children}
-  </SidebarProvider>
-)
-
 // Helper to render components with sidebar context
 export const renderWithSidebar = (
   ui: ReactElement,
   options: { defaultOpen?: boolean } = {}
 ) => {
-  return render(
-    <SidebarTestWrapper defaultOpen={options.defaultOpen}>
-      {ui}
-    </SidebarTestWrapper>
-  )
+  const Wrapper = ({ children }: { children: React.ReactNode }) => 
+    React.createElement(SidebarProvider, { defaultOpen: options.defaultOpen ?? true }, children)
+  
+  return render(ui, { wrapper: Wrapper })
 }
 
 // Navigation item expectations by role
 export const expectedNavItems = {
   admin: [
+    // Admin sees ALL dashboards because System Administrator is in all requiredRoles
     'Admin Dashboard',
-    'User Management',
+    'User Management', 
     'LST Management',
     'Permissions',
     'Fuel Trucks',
     'Customer Management',
     'Aircraft Management',
     'Fee Management',
+    'CSR Dashboard',      // Admin can access CSR features
+    'Fuel Orders',
+    'Receipts', 
+    'Export Data',
+    'Fueler Dashboard',   // Admin can access Fueler features
+    'Completed Orders',
+    'Member Dashboard',   // Admin can access Member features
   ],
   csr: [
     'CSR Dashboard',
@@ -147,26 +152,41 @@ export const expectedNavItems = {
 // Items that should NOT appear for each role
 export const unexpectedNavItems = {
   admin: [
-    'CSR Dashboard',
-    'Fueler Dashboard',
-    'Member Dashboard',
+    // Admin should see all items, so no unexpected items
   ],
   csr: [
     'Admin Dashboard',
-    'User Management',
+    'User Management', 
+    'LST Management',
     'Permissions',
+    'Fuel Trucks',
+    'Customer Management',
+    'Aircraft Management',
+    'Fee Management',
     'Fueler Dashboard',
     'Member Dashboard',
   ],
   fueler: [
     'Admin Dashboard',
     'User Management',
+    'LST Management', 
+    'Permissions',
+    'Fuel Trucks',
+    'Customer Management',
+    'Aircraft Management',
+    'Fee Management',
     'CSR Dashboard',
     'Member Dashboard',
   ],
   member: [
     'Admin Dashboard',
     'User Management',
+    'LST Management',
+    'Permissions', 
+    'Fuel Trucks',
+    'Customer Management',
+    'Aircraft Management',
+    'Fee Management',
     'CSR Dashboard',
     'Fueler Dashboard',
   ],
@@ -183,6 +203,10 @@ export const permissionScenarios = {
   },
   csrWithoutOrders: {
     ...mockUsers.csr,
+    canAny: jest.fn().mockImplementation((permissions) => {
+      // CSR without order permissions - only has dashboard access
+      return permissions.includes('access_csr_dashboard')
+    }),
     hasPermission: jest.fn().mockImplementation((permission) => {
       // CSR without order permissions
       return permission === 'access_csr_dashboard'
@@ -332,7 +356,6 @@ export const userInteractions = {
 
 export default {
   mockUsers,
-  SidebarTestWrapper,
   renderWithSidebar,
   expectedNavItems,
   unexpectedNavItems,

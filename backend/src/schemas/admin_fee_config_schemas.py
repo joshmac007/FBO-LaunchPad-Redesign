@@ -285,4 +285,6 @@ class UpdateWaiverTierSchema(CreateWaiverTierSchema):
 class CreateAircraftFeeSetupSchema(Schema):
     aircraft_type_name = fields.Str(required=True, validate=validate.Length(min=1))
     fee_category_id = fields.Int(required=True)
-    min_fuel_gallons = fields.Float(required=True, validate=validate.Range(min=0)) 
+    min_fuel_gallons = fields.Float(required=True, validate=validate.Range(min=0))
+    initial_ramp_fee_rule_id = fields.Int(allow_none=True)
+    initial_ramp_fee_amount = fields.Float(allow_none=True, validate=validate.Range(min=0)) 

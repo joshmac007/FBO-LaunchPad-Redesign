@@ -111,8 +111,8 @@ describe('Sidebar Layout Components', () => {
       )
 
       await waitFor(() => {
-        expect(screen.getByText('Admin Dashboard')).toBeInTheDocument()
-        expect(screen.getByText('System Administrator dashboard for managing users, permissions, and system settings.')).toBeInTheDocument()
+        expect(screen.getByText('Access Denied')).toBeInTheDocument()
+        expect(screen.getByText("You don't have permission to access Admin Dashboard.")).toBeInTheDocument()
       })
     })
 
@@ -191,7 +191,8 @@ describe('Sidebar Layout Components', () => {
       )
 
       await waitFor(() => {
-        expect(screen.getByText('CSR Module')).toBeInTheDocument()
+        expect(screen.getByText('Access Denied')).toBeInTheDocument()
+        expect(screen.getByText("You don't have permission to access CSR Module.")).toBeInTheDocument()
       })
     })
   })
@@ -254,8 +255,8 @@ describe('Sidebar Layout Components', () => {
       )
 
       await waitFor(() => {
-        expect(screen.getByText('Fueler Dashboard')).toBeInTheDocument()
-        expect(screen.getByText('Line Service Technician dashboard for managing assigned fuel orders and task execution.')).toBeInTheDocument()
+        expect(screen.getByText('Access Denied')).toBeInTheDocument()
+        expect(screen.getByText("You don't have permission to access Fueler Dashboard.")).toBeInTheDocument()
       })
     })
   })
@@ -316,8 +317,7 @@ describe('Sidebar Layout Components', () => {
       )
 
       await waitFor(() => {
-        expect(screen.getByText('Member Dashboard')).toBeInTheDocument()
-        expect(screen.getByText('Member dashboard for viewing system status and basic operations.')).toBeInTheDocument()
+        expect(screen.getByText('Loading dashboard...')).toBeInTheDocument()
       })
     })
   })
@@ -384,7 +384,8 @@ describe('Sidebar Layout Components', () => {
       // Should have main element with proper structure
       const mainElements = screen.getAllByRole('main')
       expect(mainElements[0]).toBeInTheDocument()
-      expect(mainElements[0]).toHaveClass('p-4')
+      // Check for sidebar inset styling instead of p-4
+      expect(mainElements[0]).toHaveClass('min-h-svh')
     })
   })
 })

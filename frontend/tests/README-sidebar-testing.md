@@ -40,7 +40,7 @@ Tests real browser interactions and full user workflows:
 ### 5. Test Utilities (`utils/sidebar-test-helpers.ts`)
 Shared testing utilities and helpers:
 - **Mock data**: Pre-configured user objects for each role
-- **Test wrappers**: SidebarProvider setup
+- **Test wrappers**: SidebarProvider setup2
 - **Assertion helpers**: Common expectations
 - **Interaction helpers**: User event simulations
 

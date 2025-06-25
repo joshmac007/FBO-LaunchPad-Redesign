@@ -179,7 +179,7 @@ class FeeCalculationService:
                 if item.is_taxable and item.line_item_type in ['FUEL', 'FEE']
             )
             
-            tax_amount = self._calculate_taxes(taxable_amount)
+            tax_amount = self._calculate_taxes(taxable_amount) # type: ignore
             if tax_amount > 0:
                 tax_line_item = FeeCalculationResultLineItem(
                     line_item_type='TAX',
@@ -207,10 +207,10 @@ class FeeCalculationService:
             return FeeCalculationResult(
                 line_items=line_items,
                 fuel_subtotal=fuel_subtotal,
-                total_fees_amount=total_fees_amount,
-                total_waivers_amount=total_waivers_amount,
-                tax_amount=tax_amount,
-                grand_total_amount=grand_total_amount,
+                total_fees_amount=total_fees_amount, # type: ignore
+                total_waivers_amount=total_waivers_amount, # type: ignore
+                tax_amount=tax_amount, # type: ignore
+                grand_total_amount=grand_total_amount, # type: ignore
                 is_caa_applied=is_caa_member
             )
             
@@ -256,7 +256,7 @@ class FeeCalculationService:
         # Fetch all fee rules for this FBO
         fee_rules = FeeRule.query.filter_by(
             fbo_location_id=context.fbo_location_id
-        ).options(joinedload(FeeRule.fee_category)).all()
+        ).options(joinedload(FeeRule.fee_category)).all()  # type: ignore
         
         # Fetch all waiver tiers for this FBO
         waiver_tiers = WaiverTier.query.filter_by(

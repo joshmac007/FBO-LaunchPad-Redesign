@@ -94,6 +94,8 @@ export interface AddAircraftToFeeScheduleRequest {
   aircraft_type_name: string;
   fee_category_id: number;
   min_fuel_gallons: number;
+  initial_ramp_fee_rule_id?: number;
+  initial_ramp_fee_amount?: number;
 }
 
 export interface DeleteFeeRuleOverrideRequest {
@@ -212,6 +214,15 @@ export const deleteFeeCategory = async (fboId: number, categoryId: number): Prom
   });
   
   return handleApiResponse<void>(response);
+};
+
+export const getGeneralFeeCategory = async (fboId: number): Promise<FeeCategory> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-categories/general`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+  const result = await handleApiResponse<{ fee_category: FeeCategory }>(response);
+  return result.fee_category;
 };
 
 // Fee Rules Service
@@ -339,6 +350,15 @@ export const deleteWaiverTier = async (fboId: number, tierId: number): Promise<v
   return handleApiResponse<void>(response);
 };
 
+export const reorderWaiverTiers = async (fboId: number, tierUpdates: { tier_id: number; new_priority: number }[]): Promise<any> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/waiver-tiers/reorder`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ tier_updates: tierUpdates }),
+  });
+  return handleApiResponse(response);
+};
+
 // New API functions for Phase 2
 export const getConsolidatedFeeSchedule = async (fboId: number): Promise<ConsolidatedFeeSchedule> => {
   const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-schedule/consolidated`, {
@@ -360,12 +380,15 @@ export const upsertFeeRuleOverride = async (fboId: number, data: UpsertFeeRuleOv
 };
 
 export const deleteFeeRuleOverride = async (fboId: number, data: DeleteFeeRuleOverrideRequest): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-rule-overrides`, {
+  const params = new URLSearchParams();
+  params.append('aircraft_type_id', data.aircraft_type_id.toString());
+  params.append('fee_rule_id', data.fee_rule_id.toString());
+
+  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-rule-overrides?${params.toString()}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
-    body: JSON.stringify(data),
   });
-  
+
   return handleApiResponse<void>(response);
 };
 

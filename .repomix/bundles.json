@@ -3,12 +3,11 @@
     "CoreComponents-653": {
       "name": "CoreComponents",
       "created": "2025-06-02T19:43:32.419Z",
-      "lastUsed": "2025-06-24T23:18:59.282Z",
+      "lastUsed": "2025-06-25T05:30:02.036Z",
       "tags": [],
       "files": [
         "frontend/app",
         "frontend/components",
-        "frontend/hooks",
         "frontend/tailwind.config.ts",
         "frontend/next.config.mjs",
         "backend/src",

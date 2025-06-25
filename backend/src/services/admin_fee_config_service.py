@@ -70,11 +70,10 @@ class AdminFeeConfigService:
             if config:
                 config.base_min_fuel_gallons_for_waiver = base_min_fuel_gallons
             else:
-                config = FBOAircraftTypeConfig(
-                    fbo_location_id=fbo_location_id,
-                    aircraft_type_id=aircraft_type_id,
-                    base_min_fuel_gallons_for_waiver=base_min_fuel_gallons
-                )
+                config = FBOAircraftTypeConfig()
+                config.fbo_location_id = fbo_location_id
+                config.aircraft_type_id = aircraft_type_id
+                config.base_min_fuel_gallons_for_waiver = base_min_fuel_gallons
                 db.session.add(config)
             
             db.session.commit()
@@ -99,7 +98,7 @@ class AdminFeeConfigService:
             configs = FBOAircraftTypeConfig.query.filter_by(
                 fbo_location_id=fbo_location_id
             ).options(
-                joinedload(FBOAircraftTypeConfig.aircraft_type)
+                joinedload(FBOAircraftTypeConfig.aircraft_type)  # type: ignore
             ).all()
             
             return [dict(config.to_dict()) for config in configs]
@@ -159,10 +158,9 @@ class AdminFeeConfigService:
     def create_fee_category(fbo_location_id: int, name: str) -> Dict[str, Any]:
         """Create a new fee category for a specific FBO."""
         try:
-            category = FeeCategory(
-                fbo_location_id=fbo_location_id,
-                name=name
-            )
+            category = FeeCategory()
+            category.fbo_location_id = fbo_location_id
+            category.name = name
             db.session.add(category)
             db.session.commit()
             
@@ -245,6 +243,72 @@ class AdminFeeConfigService:
             current_app.logger.error(f"Error deleting fee category: {str(e)}")
             raise
 
+    @staticmethod
+    def get_or_create_general_fee_category(fbo_location_id: int) -> Dict[str, Any]:
+        """
+        Get or create a 'General' fee category for the specified FBO using race-condition-proof logic.
+        Uses optimistic-locking-with-fallback pattern: try SELECT, on miss try INSERT, on IntegrityError rollback and SELECT again.
+        """
+        category_name = "General"
+        
+        try:
+            # First attempt: try to find existing category
+            category = FeeCategory.query.filter_by(
+                fbo_location_id=fbo_location_id,
+                name=category_name
+            ).first()
+            
+            if category:
+                return {
+                    'id': category.id,
+                    'fbo_location_id': category.fbo_location_id,
+                    'name': category.name,
+                    'created_at': category.created_at.isoformat(),
+                    'updated_at': category.updated_at.isoformat()
+                }
+            
+            # Not found, try to create it
+            try:
+                category = FeeCategory()
+                category.fbo_location_id = fbo_location_id
+                category.name = category_name
+                db.session.add(category)
+                db.session.commit()
+                
+                return {
+                    'id': category.id,
+                    'fbo_location_id': category.fbo_location_id,
+                    'name': category.name,
+                    'created_at': category.created_at.isoformat(),
+                    'updated_at': category.updated_at.isoformat()
+                }
+                
+            except IntegrityError:
+                # Race condition occurred - another thread created it
+                db.session.rollback()
+                # Try SELECT again - this should now succeed
+                category = FeeCategory.query.filter_by(
+                    fbo_location_id=fbo_location_id,
+                    name=category_name
+                ).first()
+                
+                if not category:
+                    # This should not happen, but handle gracefully
+                    raise ValueError("Failed to create or retrieve General fee category after race condition")
+                
+                return {
+                    'id': category.id,
+                    'fbo_location_id': category.fbo_location_id,
+                    'name': category.name,
+                    'created_at': category.created_at.isoformat(),
+                    'updated_at': category.updated_at.isoformat()
+                }
+                
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error in get_or_create_general_fee_category: {str(e)}")
+            raise
+
     # Aircraft Type to Fee Category Mappings CRUD
     @staticmethod
     def get_aircraft_type_mappings(fbo_location_id: int, category_id: Optional[int] = None) -> List[Dict[str, Any]]:
@@ -259,8 +323,8 @@ class AdminFeeConfigService:
                 query = query.filter_by(fee_category_id=category_id)
             
             mappings = query.options(
-                joinedload(AircraftTypeToFeeCategoryMapping.aircraft_type),
-                joinedload(AircraftTypeToFeeCategoryMapping.fee_category)
+                joinedload(AircraftTypeToFeeCategoryMapping.aircraft_type),  # type: ignore
+                joinedload(AircraftTypeToFeeCategoryMapping.fee_category)  # type: ignore
             ).all()
             
             return [
@@ -297,11 +361,10 @@ class AdminFeeConfigService:
             if not aircraft_type:
                 raise ValueError("Aircraft type not found")
             
-            mapping = AircraftTypeToFeeCategoryMapping(
-                fbo_location_id=fbo_location_id,
-                aircraft_type_id=aircraft_type_id,
-                fee_category_id=fee_category_id
-            )
+            mapping = AircraftTypeToFeeCategoryMapping()
+            mapping.fbo_location_id = fbo_location_id
+            mapping.aircraft_type_id = aircraft_type_id
+            mapping.fee_category_id = fee_category_id
             db.session.add(mapping)
             db.session.commit()
             
@@ -350,9 +413,13 @@ class AdminFeeConfigService:
             
             # Reload to get updated relationships
             mapping = AircraftTypeToFeeCategoryMapping.query.options(
-                joinedload(AircraftTypeToFeeCategoryMapping.aircraft_type),
-                joinedload(AircraftTypeToFeeCategoryMapping.fee_category)
+                joinedload(AircraftTypeToFeeCategoryMapping.aircraft_type),  # type: ignore
+                joinedload(AircraftTypeToFeeCategoryMapping.fee_category)  # type: ignore
             ).get(mapping.id)
+            
+            if not mapping:
+                # This should not happen if we just updated it, but for type safety
+                return None
             
             return {
                 'id': mapping.id,
@@ -444,11 +511,10 @@ class AdminFeeConfigService:
                         results['updated'] += 1
                     else:
                         # Create new mapping
-                        new_mapping = AircraftTypeToFeeCategoryMapping(
-                            fbo_location_id=fbo_location_id,
-                            aircraft_type_id=aircraft_type.id,
-                            fee_category_id=fee_category.id
-                        )
+                        new_mapping = AircraftTypeToFeeCategoryMapping()
+                        new_mapping.fbo_location_id = fbo_location_id
+                        new_mapping.aircraft_type_id = aircraft_type.id
+                        new_mapping.fee_category_id = fee_category.id
                         db.session.add(new_mapping)
                         results['created'] += 1
                         
@@ -476,7 +542,7 @@ class AdminFeeConfigService:
             if category_id is not None:
                 query = query.filter_by(applies_to_fee_category_id=category_id)
             
-            rules = query.options(joinedload(FeeRule.fee_category)).all()
+            rules = query.options(joinedload(FeeRule.fee_category)).all()  # type: ignore
             
             return [
                 {
@@ -513,7 +579,7 @@ class AdminFeeConfigService:
             rule = FeeRule.query.filter_by(
                 id=rule_id, 
                 fbo_location_id=fbo_location_id
-            ).options(joinedload(FeeRule.fee_category)).first()
+            ).options(joinedload(FeeRule.fee_category)).first()  # type: ignore
             
             if not rule:
                 return None
@@ -555,23 +621,23 @@ class AdminFeeConfigService:
             if not fee_category:
                 raise ValueError("Fee category not found for this FBO")
             
-            rule = FeeRule(
-                fbo_location_id=fbo_location_id,
-                fee_name=rule_data['fee_name'],
-                fee_code=rule_data['fee_code'],
-                applies_to_fee_category_id=rule_data['applies_to_fee_category_id'],
-                amount=rule_data['amount'],
-                currency=rule_data.get('currency', 'USD'),
-                is_taxable=rule_data.get('is_taxable', False),
-                is_potentially_waivable_by_fuel_uplift=rule_data.get('is_potentially_waivable_by_fuel_uplift', False),
-                calculation_basis=CalculationBasis[rule_data.get('calculation_basis', 'NOT_APPLICABLE')],
-                waiver_strategy=WaiverStrategy[rule_data.get('waiver_strategy', 'NONE')],
-                simple_waiver_multiplier=rule_data.get('simple_waiver_multiplier'),
-                has_caa_override=rule_data.get('has_caa_override', False),
-                caa_override_amount=rule_data.get('caa_override_amount'),
-                caa_waiver_strategy_override=WaiverStrategy[rule_data['caa_waiver_strategy_override']] if rule_data.get('caa_waiver_strategy_override') else None,
-                caa_simple_waiver_multiplier_override=rule_data.get('caa_simple_waiver_multiplier_override')
-            )
+            rule = FeeRule()
+            rule.fbo_location_id = fbo_location_id
+            rule.fee_name = rule_data['fee_name']
+            rule.fee_code = rule_data['fee_code']
+            rule.applies_to_fee_category_id = rule_data['applies_to_fee_category_id']
+            rule.amount = rule_data['amount']
+            rule.currency = rule_data.get('currency', 'USD')
+            rule.is_taxable = rule_data.get('is_taxable', False)
+            rule.is_potentially_waivable_by_fuel_uplift = rule_data.get('is_potentially_waivable_by_fuel_uplift', False)
+            rule.calculation_basis = CalculationBasis[rule_data.get('calculation_basis', 'NOT_APPLICABLE')]
+            rule.waiver_strategy = WaiverStrategy[rule_data.get('waiver_strategy', 'NONE')]
+            rule.simple_waiver_multiplier = rule_data.get('simple_waiver_multiplier')
+            rule.has_caa_override = rule_data.get('has_caa_override', False)
+            rule.caa_override_amount = rule_data.get('caa_override_amount')
+            rule.caa_waiver_strategy_override = WaiverStrategy[rule_data['caa_waiver_strategy_override']] if rule_data.get('caa_waiver_strategy_override') else None
+            rule.caa_simple_waiver_multiplier_override = rule_data.get('caa_simple_waiver_multiplier_override')
+
             db.session.add(rule)
             db.session.commit()
             
@@ -715,14 +781,13 @@ class AdminFeeConfigService:
     def create_waiver_tier(fbo_location_id: int, tier_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new waiver tier for a specific FBO."""
         try:
-            tier = WaiverTier(
-                fbo_location_id=fbo_location_id,
-                name=tier_data['name'],
-                fuel_uplift_multiplier=tier_data['fuel_uplift_multiplier'],
-                fees_waived_codes=tier_data['fees_waived_codes'],
-                tier_priority=tier_data['tier_priority'],
-                is_caa_specific_tier=tier_data.get('is_caa_specific_tier', False)
-            )
+            tier = WaiverTier()
+            tier.fbo_location_id = fbo_location_id
+            tier.name = tier_data['name']
+            tier.fuel_uplift_multiplier = tier_data['fuel_uplift_multiplier']
+            tier.fees_waived_codes = tier_data['fees_waived_codes']
+            tier.tier_priority = tier_data['tier_priority']
+            tier.is_caa_specific_tier = tier_data.get('is_caa_specific_tier', False)
             db.session.add(tier)
             db.session.commit()
             
@@ -778,6 +843,53 @@ class AdminFeeConfigService:
         except SQLAlchemyError as e:
             db.session.rollback()
             current_app.logger.error(f"Error deleting waiver tier: {str(e)}")
+            raise
+
+    @staticmethod
+    def reorder_waiver_tiers(fbo_location_id: int, tier_updates: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Atomically reorder waiver tiers by updating their tier_priority values.
+        
+        Args:
+            fbo_location_id: FBO location ID
+            tier_updates: List of dicts with 'tier_id' and 'new_priority' keys
+            
+        Returns:
+            Dict with success status and updated tiers count
+            
+        Raises:
+            ValueError: If tier IDs don't exist or belong to different FBO
+        """
+        try:
+            # Validate that all tier IDs exist and belong to this FBO
+            tier_ids = [update['tier_id'] for update in tier_updates]
+            existing_tiers = db.session.query(WaiverTier).filter(
+                WaiverTier.id.in_(tier_ids),
+                WaiverTier.fbo_location_id == fbo_location_id
+            ).all()
+            
+            if len(existing_tiers) != len(tier_ids):
+                raise ValueError("Some tier IDs do not exist or belong to this FBO")
+            
+            # Perform all updates in a single transaction
+            for update in tier_updates:
+                db.session.query(WaiverTier).filter(
+                    WaiverTier.id == update['tier_id']
+                ).update({'tier_priority': update['new_priority']})
+            
+            db.session.commit()
+            
+            return {
+                'success': True,
+                'updated_count': len(tier_updates),
+                'message': f"Successfully reordered {len(tier_updates)} waiver tiers"
+            }
+            
+        except IntegrityError as e:
+            db.session.rollback()
+            raise ValueError(f"Waiver tier reordering failed: {str(e)}")
+        except Exception as e:
+            db.session.rollback()
             raise
 
     @staticmethod
@@ -866,21 +978,22 @@ class AdminFeeConfigService:
             raise
 
     @staticmethod
-    def create_aircraft_fee_setup(fbo_location_id: int, aircraft_type_name: str, fee_category_id: int, min_fuel_gallons: float) -> Dict[str, Any]:
+    def create_aircraft_fee_setup(fbo_location_id: int, aircraft_type_name: str, fee_category_id: int, min_fuel_gallons: float, initial_ramp_fee_rule_id: Optional[int] = None, initial_ramp_fee_amount: Optional[float] = None) -> Dict[str, Any]:
         """
         A comprehensive service method to:
         1. Find or create an AircraftType.
         2. Create a mapping to a FeeCategory for a specific FBO.
         3. Create an FBO-specific config for min fuel waiver.
+        4. Optionally, create an initial FeeRuleOverride for the aircraft.
+        All operations are performed in a single atomic transaction.
         """
         try:
             # 1. Find or create AircraftType
             aircraft_type = AircraftType.query.filter_by(name=aircraft_type_name).first()
             if not aircraft_type:
-                aircraft_type = AircraftType(
-                    name=aircraft_type_name,
-                    base_min_fuel_gallons_for_waiver=min_fuel_gallons # Satisfy NOT NULL constraint
-                )
+                aircraft_type = AircraftType()
+                aircraft_type.name = aircraft_type_name
+                aircraft_type.base_min_fuel_gallons_for_waiver = min_fuel_gallons # Satisfy NOT NULL constraint
                 db.session.add(aircraft_type)
                 # We need to flush to get the ID for the subsequent operations
                 db.session.flush()
@@ -901,11 +1014,10 @@ class AdminFeeConfigService:
                 mapping.fee_category_id = fee_category_id
             else:
                 # If no mapping for this FBO, create one
-                mapping = AircraftTypeToFeeCategoryMapping(
-                    fbo_location_id=fbo_location_id,
-                    aircraft_type_id=aircraft_type.id,
-                    fee_category_id=fee_category_id
-                )
+                mapping = AircraftTypeToFeeCategoryMapping()
+                mapping.fbo_location_id = fbo_location_id
+                mapping.aircraft_type_id = aircraft_type.id
+                mapping.fee_category_id = fee_category_id
                 db.session.add(mapping)
 
             # 4. Create or update FBOAircraftTypeConfig
@@ -917,12 +1029,20 @@ class AdminFeeConfigService:
             if config:
                 config.base_min_fuel_gallons_for_waiver = min_fuel_gallons
             else:
-                config = FBOAircraftTypeConfig(
-                    fbo_location_id=fbo_location_id,
-                    aircraft_type_id=aircraft_type.id,
-                    base_min_fuel_gallons_for_waiver=min_fuel_gallons
-                )
+                config = FBOAircraftTypeConfig()
+                config.fbo_location_id = fbo_location_id
+                config.aircraft_type_id = aircraft_type.id
+                config.base_min_fuel_gallons_for_waiver = min_fuel_gallons
                 db.session.add(config)
+
+            # 5. Create initial FeeRuleOverride if parameters are provided
+            if initial_ramp_fee_rule_id is not None and initial_ramp_fee_amount is not None:
+                override = FeeRuleOverride()
+                override.fbo_location_id = fbo_location_id
+                override.aircraft_type_id = aircraft_type.id
+                override.fee_rule_id = initial_ramp_fee_rule_id
+                override.override_amount = initial_ramp_fee_amount
+                db.session.add(override)
             
             db.session.commit()
 

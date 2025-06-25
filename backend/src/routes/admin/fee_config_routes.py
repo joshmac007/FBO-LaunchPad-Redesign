@@ -2,7 +2,7 @@
 
 from flask import Blueprint, request, jsonify, current_app
 from marshmallow import ValidationError
-from typing import Dict, Any
+from typing import Dict, Any, cast
 
 from ...services.admin_fee_config_service import AdminFeeConfigService
 from ...schemas.admin_fee_config_schemas import (
@@ -79,7 +79,8 @@ def update_aircraft_type_fuel_waiver(fbo_id, aircraft_type_id):
     try:
         if not request.json:
             return jsonify({'error': 'Invalid JSON in request body'}), 400
-        data = update_aircraft_type_fuel_waiver_schema.load(request.json)  # type: ignore
+        loaded_data = update_aircraft_type_fuel_waiver_schema.load(request.json)
+        data = cast(Dict[str, Any], loaded_data)
         result = AdminFeeConfigService.update_aircraft_type_fuel_waiver(
             fbo_id,
             aircraft_type_id, 
@@ -136,8 +137,9 @@ def create_fee_category(fbo_id):
             return jsonify({'error': 'Invalid JSON in request body'}), 400
         if json_data is None:
             return jsonify({'error': 'Invalid JSON in request body'}), 400
-        data = create_fee_category_schema.load(json_data)
-        category = AdminFeeConfigService.create_fee_category(fbo_id, data['name'])  # type: ignore
+        loaded_data = create_fee_category_schema.load(json_data)
+        data = cast(Dict[str, Any], loaded_data)
+        category = AdminFeeConfigService.create_fee_category(fbo_id, data['name'])
         return jsonify(category), 201
     except ValidationError as e:
         return jsonify({'error': 'Validation failed', 'messages': e.messages}), 400
@@ -155,7 +157,8 @@ def update_fee_category(fbo_id, category_id):
     try:
         if not request.json:
             return jsonify({'error': 'Invalid JSON in request body'}), 400
-        data = update_fee_category_schema.load(request.json)  # type: ignore
+        loaded_data = update_fee_category_schema.load(request.json)
+        data = cast(Dict[str, Any], loaded_data)
         category = AdminFeeConfigService.update_fee_category(fbo_id, category_id, data['name'])
         if not category:
             return jsonify({'error': 'Fee category not found'}), 404
@@ -185,6 +188,18 @@ def delete_fee_category(fbo_id, category_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 
+@admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/fee-categories/general', methods=['GET'])
+@require_permission_v2('manage_fbo_fee_schedules')
+def get_general_fee_category(fbo_id):
+    """Get or create the 'General' fee category for a specific FBO."""
+    try:
+        category = AdminFeeConfigService.get_or_create_general_fee_category(fbo_id)
+        return jsonify({'fee_category': category}), 200
+    except Exception as e:
+        current_app.logger.error(f"Error getting/creating general fee category: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
 # Aircraft Type to Fee Category Mapping Routes
 @admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/aircraft-type-mappings', methods=['GET'])
 @require_permission_v2('manage_fbo_fee_schedules')
@@ -206,7 +221,8 @@ def create_aircraft_type_mapping(fbo_id):
     try:
         if not request.json:
             return jsonify({'error': 'Invalid JSON in request body'}), 400
-        data = create_aircraft_type_mapping_schema.load(request.json)  # type: ignore
+        loaded_data = create_aircraft_type_mapping_schema.load(request.json)
+        data = cast(Dict[str, Any], loaded_data)
         mapping = AdminFeeConfigService.create_aircraft_type_mapping(
             fbo_id, 
             data['aircraft_type_id'], 
@@ -229,7 +245,8 @@ def update_aircraft_type_mapping(fbo_id, mapping_id):
     try:
         if not request.json:
             return jsonify({'error': 'Invalid JSON in request body'}), 400
-        data = update_aircraft_type_mapping_schema.load(request.json)  # type: ignore
+        loaded_data = update_aircraft_type_mapping_schema.load(request.json)
+        data = cast(Dict[str, Any], loaded_data)
         mapping = AdminFeeConfigService.update_aircraft_type_mapping(
             fbo_id, 
             mapping_id, 
@@ -307,7 +324,8 @@ def create_fee_rule(fbo_id):
     try:
         if not request.json:
             return jsonify({'error': 'Invalid JSON in request body'}), 400
-        data = create_fee_rule_schema.load(request.json)  # type: ignore
+        loaded_data = create_fee_rule_schema.load(request.json)
+        data = cast(Dict[str, Any], loaded_data)
         rule = AdminFeeConfigService.create_fee_rule(fbo_id, data)
         return jsonify({'fee_rule': rule}), 201
     except ValidationError as e:
@@ -340,7 +358,8 @@ def update_fee_rule(fbo_id, rule_id):
     try:
         if not request.json:
             return jsonify({'error': 'Invalid JSON in request body'}), 400
-        data = update_fee_rule_schema.load(request.json)  # type: ignore
+        loaded_data = update_fee_rule_schema.load(request.json)
+        data = cast(Dict[str, Any], loaded_data)
         rule = AdminFeeConfigService.update_fee_rule(fbo_id, rule_id, data)
         if not rule:
             return jsonify({'error': 'Fee rule not found'}), 404
@@ -388,7 +407,8 @@ def create_waiver_tier(fbo_id):
     try:
         if not request.json:
             return jsonify({'error': 'Invalid JSON in request body'}), 400
-        data = create_waiver_tier_schema.load(request.json)  # type: ignore
+        loaded_data = create_waiver_tier_schema.load(request.json)
+        data = cast(Dict[str, Any], loaded_data)
         tier = AdminFeeConfigService.create_waiver_tier(fbo_id, data)
         return jsonify({'waiver_tier': tier}), 201
     except ValidationError as e:
@@ -419,7 +439,8 @@ def update_waiver_tier(fbo_id, tier_id):
     try:
         if not request.json:
             return jsonify({'error': 'Invalid JSON in request body'}), 400
-        data = update_waiver_tier_schema.load(request.json)  # type: ignore
+        loaded_data = update_waiver_tier_schema.load(request.json)
+        data = cast(Dict[str, Any], loaded_data)
         tier = AdminFeeConfigService.update_waiver_tier(fbo_id, tier_id, data)
         if not tier:
             return jsonify({'error': 'Waiver tier not found'}), 404
@@ -446,6 +467,27 @@ def delete_waiver_tier(fbo_id, tier_id):
         return jsonify({'error': str(e)}), 400
     except Exception as e:
         current_app.logger.error(f"Error deleting waiver tier: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/waiver-tiers/reorder', methods=['PUT'])
+@require_permission_v2('manage_fbo_fee_schedules')
+def reorder_waiver_tiers(fbo_id):
+    """Atomically reorder waiver tiers by updating their tier_priority values."""
+    try:
+        if not request.json:
+            return jsonify({'error': 'Invalid JSON in request body'}), 400
+        
+        tier_updates = request.json.get('tier_updates')
+        if not tier_updates:
+            return jsonify({'error': 'Missing tier_updates in request body'}), 400
+        
+        result = AdminFeeConfigService.reorder_waiver_tiers(fbo_id, tier_updates)
+        return jsonify(result), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        current_app.logger.error(f"Error reordering waiver tiers: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
 
@@ -485,13 +527,23 @@ def upsert_fee_rule_override(fbo_id):
 @admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/fee-rule-overrides', methods=['DELETE'])
 @require_permission_v2('manage_fbo_fee_schedules')
 def delete_fee_rule_override(fbo_id):
-    """Delete a fee rule override."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Invalid JSON"}), 400
+    """Delete a fee rule override using query parameters."""
+    # Get required parameters from query string
+    aircraft_type_id = request.args.get('aircraft_type_id', type=int)
+    fee_rule_id = request.args.get('fee_rule_id', type=int)
+    
+    # Validate that both parameters are present
+    if aircraft_type_id is None:
+        return jsonify({"error": "Missing required parameter: aircraft_type_id"}), 400
+    if fee_rule_id is None:
+        return jsonify({"error": "Missing required parameter: fee_rule_id"}), 400
 
-    # Add fbo_id from URL to the data
-    data['fbo_location_id'] = fbo_id
+    # Construct data dictionary for service call
+    data = {
+        'fbo_location_id': fbo_id,
+        'aircraft_type_id': aircraft_type_id,
+        'fee_rule_id': fee_rule_id
+    }
 
     try:
         result = AdminFeeConfigService.delete_fee_rule_override(data)
@@ -511,13 +563,16 @@ def create_aircraft_fee_setup(fbo_id):
         if not request.json:
             return jsonify({'error': 'Invalid JSON in request body'}), 400
         
-        data = create_aircraft_fee_setup_schema.load(request.json)
+        loaded_data = create_aircraft_fee_setup_schema.load(request.json)
+        data = cast(Dict[str, Any], loaded_data)
         
         result = AdminFeeConfigService.create_aircraft_fee_setup(
             fbo_location_id=fbo_id,
             aircraft_type_name=data['aircraft_type_name'],
             fee_category_id=data['fee_category_id'],
-            min_fuel_gallons=data['min_fuel_gallons']
+            min_fuel_gallons=data['min_fuel_gallons'],
+            initial_ramp_fee_rule_id=data.get('initial_ramp_fee_rule_id'),
+            initial_ramp_fee_amount=data.get('initial_ramp_fee_amount')
         )
         return jsonify(result), 201
     except ValidationError as e:

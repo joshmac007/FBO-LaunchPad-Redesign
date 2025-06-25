@@ -21,9 +21,10 @@ import {
   unexpectedNavItems,
   permissionScenarios,
   sidebarAssertions,
-  SidebarTestWrapper,
   generateRoleTests,
 } from '../utils/sidebar-test-helpers'
+
+import { SidebarProvider } from '@/components/ui/sidebar'
 
 // Mock dependencies
 jest.mock('next/navigation', () => ({
@@ -81,9 +82,9 @@ describe('Sidebar Permission Integration Tests', () => {
         ;(usePermissions as jest.Mock).mockReturnValue(userMock)
 
         render(
-          <SidebarTestWrapper>
-            <AppSidebar userRole={role as any} />
-          </SidebarTestWrapper>
+          React.createElement(SidebarProvider, { defaultOpen: true },
+            React.createElement(AppSidebar, { userRole: role as any })
+          )
         )
 
         await waitFor(() => {
@@ -110,9 +111,9 @@ describe('Sidebar Permission Integration Tests', () => {
       ;(usePermissions as jest.Mock).mockReturnValue(permissionScenarios.adminWithLimitedPermissions)
 
       render(
-        <SidebarTestWrapper>
-          <AppSidebar userRole="admin" />
-        </SidebarTestWrapper>
+        React.createElement(SidebarProvider, { defaultOpen: true },
+          React.createElement(AppSidebar, { userRole: "admin" })
+        )
       )
 
       await waitFor(() => {
@@ -129,9 +130,9 @@ describe('Sidebar Permission Integration Tests', () => {
       ;(usePermissions as jest.Mock).mockReturnValue(permissionScenarios.csrWithoutOrders)
 
       render(
-        <SidebarTestWrapper>
-          <AppSidebar userRole="csr" />
-        </SidebarTestWrapper>
+        React.createElement(SidebarProvider, { defaultOpen: true },
+          React.createElement(AppSidebar, { userRole: "csr" })
+        )
       )
 
       await waitFor(() => {
@@ -148,9 +149,9 @@ describe('Sidebar Permission Integration Tests', () => {
       ;(usePermissions as jest.Mock).mockReturnValue(permissionScenarios.fuelerWithoutDashboard)
 
       render(
-        <SidebarTestWrapper>
-          <AppSidebar userRole="fueler" />
-        </SidebarTestWrapper>
+        React.createElement(SidebarProvider, { defaultOpen: true },
+          React.createElement(AppSidebar, { userRole: "fueler" })
+        )
       )
 
       await waitFor(() => {
@@ -180,8 +181,8 @@ describe('Sidebar Permission Integration Tests', () => {
 
       await waitFor(() => {
         // Should show access denied, not the content
-        expect(screen.getByText('Admin Dashboard')).toBeInTheDocument()
-        expect(screen.getByText('System Administrator dashboard')).toBeInTheDocument()
+        expect(screen.getByText('Access Denied')).toBeInTheDocument()
+        expect(screen.getByText("You don't have permission to access Admin Dashboard.")).toBeInTheDocument()
         expect(screen.queryByTestId('admin-content')).not.toBeInTheDocument()
       })
     })
@@ -202,7 +203,8 @@ describe('Sidebar Permission Integration Tests', () => {
 
       await waitFor(() => {
         // Should show access denied
-        expect(screen.getByText('CSR Module')).toBeInTheDocument()
+        expect(screen.getByText('Access Denied')).toBeInTheDocument()
+        expect(screen.getByText("You don't have permission to access CSR Module.")).toBeInTheDocument()
         expect(screen.queryByTestId('csr-content')).not.toBeInTheDocument()
       })
     })
@@ -223,8 +225,8 @@ describe('Sidebar Permission Integration Tests', () => {
 
       await waitFor(() => {
         // Should show access denied
-        expect(screen.getByText('Fueler Dashboard')).toBeInTheDocument()
-        expect(screen.getByText('Line Service Technician dashboard')).toBeInTheDocument()
+        expect(screen.getByText('Access Denied')).toBeInTheDocument()
+        expect(screen.getByText("You don't have permission to access Fueler Dashboard.")).toBeInTheDocument()
         expect(screen.queryByTestId('fueler-content')).not.toBeInTheDocument()
       })
     })
@@ -270,9 +272,9 @@ describe('Sidebar Permission Integration Tests', () => {
       })
 
       render(
-        <SidebarTestWrapper>
-          <AppSidebar userRole="admin" />
-        </SidebarTestWrapper>
+        React.createElement(SidebarProvider, { defaultOpen: true },
+          React.createElement(AppSidebar, { userRole: "admin" })
+        )
       )
 
       await waitFor(() => {
@@ -284,9 +286,9 @@ describe('Sidebar Permission Integration Tests', () => {
       ;(usePermissions as jest.Mock).mockReturnValue(mockUsers.loading)
 
       render(
-        <SidebarTestWrapper>
-          <AppSidebar userRole="admin" />
-        </SidebarTestWrapper>
+        React.createElement(SidebarProvider, { defaultOpen: true },
+          React.createElement(AppSidebar, { userRole: "admin" })
+        )
       )
 
       await waitFor(() => {
@@ -305,9 +307,9 @@ describe('Sidebar Permission Integration Tests', () => {
       ;(usePermissions as jest.Mock).mockReturnValue(fullAdminUser)
 
       render(
-        <SidebarTestWrapper>
-          <AppSidebar userRole="admin" />
-        </SidebarTestWrapper>
+        React.createElement(SidebarProvider, { defaultOpen: true },
+          React.createElement(AppSidebar, { userRole: "admin" })
+        )
       )
 
       await waitFor(() => {
@@ -332,9 +334,9 @@ describe('Sidebar Permission Integration Tests', () => {
       ;(usePermissions as jest.Mock).mockReturnValue(multiRoleUser)
 
       render(
-        <SidebarTestWrapper>
-          <AppSidebar userRole="admin" />
-        </SidebarTestWrapper>
+        React.createElement(SidebarProvider, { defaultOpen: true },
+          React.createElement(AppSidebar, { userRole: "admin" })
+        )
       )
 
       await waitFor(() => {
@@ -357,9 +359,9 @@ describe('Sidebar Permission Integration Tests', () => {
       // Should not crash when permission hook throws
       expect(() => {
         render(
-          <SidebarTestWrapper>
-            <AppSidebar userRole="admin" />
-          </SidebarTestWrapper>
+          React.createElement(SidebarProvider, { defaultOpen: true },
+            React.createElement(AppSidebar, { userRole: "admin" })
+          )
         )
       }).toThrow()
     })
@@ -376,9 +378,9 @@ describe('Sidebar Permission Integration Tests', () => {
       })
 
       render(
-        <SidebarTestWrapper>
-          <AppSidebar userRole="admin" />
-        </SidebarTestWrapper>
+        React.createElement(SidebarProvider, { defaultOpen: true },
+          React.createElement(AppSidebar, { userRole: "admin" })
+        )
       )
 
       await waitFor(() => {
@@ -396,9 +398,9 @@ describe('Sidebar Permission Integration Tests', () => {
       })
 
       render(
-        <SidebarTestWrapper>
-          <AppSidebar userRole="admin" />
-        </SidebarTestWrapper>
+        React.createElement(SidebarProvider, { defaultOpen: true },
+          React.createElement(AppSidebar, { userRole: "admin" })
+        )
       )
 
       await waitFor(() => {

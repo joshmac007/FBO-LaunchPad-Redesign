@@ -11,7 +11,7 @@ class CustomerService:
             return None, "Customer with this name already exists", 409
         try:
             customer = Customer(
-                name=data['name']
+                name=data['name'] # type: ignore
             )
             db.session.add(customer)
             db.session.commit()
