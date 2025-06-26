@@ -1,49 +1,28 @@
 "use client"
 
-import { useState, useEffect, useCallback, Suspense, useMemo } from "react"
-import { useSearchParams, useRouter } from 'next/navigation'
-import Link from "next/link"
+import { useState, useEffect, useCallback, Suspense } from "react"
+import { useRouter } from 'next/navigation'
 import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { useSearchDebounce } from "@/hooks/useDebounce"
 import { ReceiptTableRow } from "@/app/components/ReceiptTableRow"
 import { 
-  Plus, Search, Download, Eye, Edit, Trash2, MoreHorizontal, 
-  Filter, RefreshCw, Clock, Users, TrendingUp, Calendar,
-  CheckSquare, Square, Settings, Bell, AlertTriangle, Loader2,
-  Receipt as ReceiptIcon, CheckCircle, FileText, DollarSign
+  Search, Download, Filter, RefreshCw, AlertTriangle, Loader2,
+  CheckSquare, Square, Receipt as ReceiptIcon, CheckCircle, 
+  FileText, Edit
 } from "lucide-react"
 import { 
   getReceipts,
   type Receipt,
-  type ReceiptListFilters,
-  type ReceiptListResponse
+  type ReceiptListFilters
 } from "@/app/services/receipt-service"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
-import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 
 // Types for receipt stats (calculated from server response)
@@ -56,7 +35,6 @@ interface ReceiptStats {
 }
 
 function ReceiptsPageInternal() {
-  const searchParams = useSearchParams()
   const router = useRouter()
 
   // State management
@@ -125,12 +103,12 @@ function ReceiptsPageInternal() {
         generated_count: response.receipts.filter(r => r.status === 'GENERATED').length,
         paid_today_count: response.receipts.filter(r => {
           const today = new Date().toDateString()
-          const receiptDate = new Date(r.paidAt || '').toDateString()
+          const receiptDate = new Date(r.paid_at || '').toDateString()
           return r.status === 'PAID' && receiptDate === today
         }).length,
         total_revenue: response.receipts
           .filter(r => r.status === 'PAID')
-          .reduce((sum, r) => sum + (r.grandTotalAmount || r.amount), 0)
+          .reduce((sum, r) => sum + parseFloat(r.grand_total_amount), 0)
       }
       
       return { 
@@ -198,23 +176,7 @@ function ReceiptsPageInternal() {
     }
   }, [selectedReceipts.length, displayedReceipts])
 
-  // Badge helpers following fuel-orders pattern
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "PAID":
-        return <Badge variant="secondary" className="bg-green-100 text-green-800">Paid</Badge>
-      case "GENERATED":
-        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Generated</Badge>
-      case "DRAFT":
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Draft</Badge>
-      case "VOID":
-        return <Badge variant="secondary" className="bg-gray-200 text-gray-700">Void</Badge>
-      case "PENDING":
-        return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">Pending</Badge>
-      default:
-        return <Badge variant="outline">{status}</Badge>
-    }
-  }
+
 
   // Export functionality
   const exportToCSV = () => {
@@ -236,15 +198,15 @@ function ReceiptsPageInternal() {
         headers.join(","),
         ...displayedReceipts.map((receipt) =>
           [
-            receipt.receiptNumber,
-            receipt.generatedAt || "",
-            receipt.paidAt || "",
+            receipt.receipt_number,
+            receipt.generated_at || "",
+            receipt.paid_at || "",
             receipt.status,
-            receipt.tailNumber,
-            receipt.customer,
-            receipt.fuelType,
-            receipt.quantity,
-            receipt.grandTotalAmount || receipt.amount
+            receipt.fuel_order_tail_number || "N/A",
+            `Customer ${receipt.customer_id}`,
+            receipt.fuel_type_at_receipt_time || "N/A",
+            receipt.fuel_quantity_gallons_at_receipt_time || "N/A",
+            receipt.grand_total_amount
           ].join(","),
         ),
       ].join("\n")
@@ -552,7 +514,7 @@ function ReceiptsPageInternal() {
             </Button>
             <div className="flex items-center gap-1">
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum
+                let pageNum: number
                 if (totalPages <= 5) {
                   pageNum = i + 1
                 } else if (currentPage <= 3) {

@@ -287,4 +287,39 @@ class CreateAircraftFeeSetupSchema(Schema):
     fee_category_id = fields.Int(required=True)
     min_fuel_gallons = fields.Float(required=True, validate=validate.Range(min=0))
     initial_ramp_fee_rule_id = fields.Int(allow_none=True)
-    initial_ramp_fee_amount = fields.Float(allow_none=True, validate=validate.Range(min=0)) 
+    initial_ramp_fee_amount = fields.Float(allow_none=True, validate=validate.Range(min=0))
+
+
+class FBOAircraftTypeConfigSchema(Schema):
+    """Schema for FBO-specific aircraft type configuration."""
+    id = fields.Integer(dump_only=True)
+    fbo_location_id = fields.Integer(required=True)
+    aircraft_type_id = fields.Integer(required=True)
+    aircraft_type_name = fields.String(dump_only=True)
+    base_min_fuel_gallons_for_waiver = fields.Decimal(
+        required=True,
+        validate=validate.Range(min=0),
+        as_string=True
+    )
+    created_at = fields.DateTime(dump_only=True)
+    updated_at = fields.DateTime(dump_only=True)
+
+
+class FeeRuleOverrideSchema(Schema):
+    """Schema for fee rule override."""
+    id = fields.Integer(dump_only=True)
+    fbo_location_id = fields.Integer(required=True)
+    aircraft_type_id = fields.Integer(required=True)
+    fee_rule_id = fields.Integer(required=True)
+    override_amount = fields.Decimal(
+        allow_none=True,
+        validate=validate.Range(min=0),
+        as_string=True
+    )
+    override_caa_amount = fields.Decimal(
+        allow_none=True,
+        validate=validate.Range(min=0),
+        as_string=True
+    )
+    created_at = fields.DateTime(dump_only=True)
+    updated_at = fields.DateTime(dump_only=True) 

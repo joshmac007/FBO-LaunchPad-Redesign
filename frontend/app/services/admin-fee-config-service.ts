@@ -80,7 +80,7 @@ export interface ConsolidatedFeeSchedule {
   rules: FeeRule[];
   mappings: AircraftMapping[];
   overrides: FeeRuleOverride[];
-  fbo_aircraft_configs: FBOAircraftTypeConfig[];
+  fbo_aircraft_config: FBOAircraftTypeConfig[];
 }
 
 export interface UpsertFeeRuleOverrideRequest {
@@ -96,6 +96,27 @@ export interface AddAircraftToFeeScheduleRequest {
   min_fuel_gallons: number;
   initial_ramp_fee_rule_id?: number;
   initial_ramp_fee_amount?: number;
+}
+
+// Fuel Price types
+export interface FuelPrice {
+  fuel_type: string;
+  price: number | null;
+  currency: string;
+  effective_date: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface FuelPricesResponse {
+  fuel_prices: FuelPrice[];
+}
+
+export interface SetFuelPricesRequest {
+  fuel_prices: Array<{
+    fuel_type: string;
+    price: number;
+  }>;
 }
 
 export interface DeleteFeeRuleOverrideRequest {
@@ -223,6 +244,38 @@ export const getGeneralFeeCategory = async (fboId: number): Promise<FeeCategory>
   });
   const result = await handleApiResponse<{ fee_category: FeeCategory }>(response);
   return result.fee_category;
+};
+
+// Get all aircraft types (for autocomplete in Add Aircraft dialog)
+export const getAircraftTypes = async (fboId: number): Promise<{ id: number; name: string }[]> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/aircraft-types`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+  const result = await handleApiResponse<{ aircraft_types: any[] }>(response);
+  return result.aircraft_types.map(type => ({ id: type.id, name: type.name }));
+};
+
+// Get aircraft configurations for copying fees
+export const getAircraftConfigurations = async (fboId: number): Promise<{
+  id: number;
+  aircraft_type_name: string;
+  fee_category_id: number;
+  fee_category_name: string;
+  min_fuel_gallons: number;
+  fee_overrides: Array<{
+    fee_rule_id: number;
+    fee_name: string;
+    override_amount?: number;
+    override_caa_amount?: number;
+  }>;
+}[]> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/aircraft-configurations`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+  const result = await handleApiResponse<{ aircraft_configurations: any[] }>(response);
+  return result.aircraft_configurations;
 };
 
 // Fee Rules Service
@@ -444,6 +497,26 @@ export const addAircraftToFeeSchedule = async (fboId: number, data: AddAircraftT
   return handleApiResponse(response);
 }
 
+// Fuel Price Management
+export const getFuelPrices = async (fboId: number): Promise<FuelPricesResponse> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fuel-prices`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+  
+  return handleApiResponse<FuelPricesResponse>(response);
+};
+
+export const setFuelPrices = async (fboId: number, data: SetFuelPricesRequest): Promise<{ success: boolean; updated_count: number; message: string }> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fuel-prices`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  
+  return handleApiResponse<{ success: boolean; updated_count: number; message: string }>(response);
+};
+
 // Export all functions for easy importing
 export const AdminFeeConfigService = {
   // Fee Categories
@@ -481,6 +554,10 @@ export const AdminFeeConfigService = {
   
   // New API functions for Phase 2
   addAircraftToFeeSchedule,
+  
+  // Fuel Price Management
+  getFuelPrices,
+  setFuelPrices,
 };
 
 export default AdminFeeConfigService; 

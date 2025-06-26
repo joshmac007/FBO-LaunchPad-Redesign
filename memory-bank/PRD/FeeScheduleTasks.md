@@ -144,7 +144,7 @@ Follow these steps sequentially.
         *   Queries all `AircraftTypeToFeeCategoryMapping` for the `fbo_location_id`.
         *   Queries all `FBOAircraftTypeConfig` (for Min Fuel) for the `fbo_location_id`.
         *   Queries all `FeeRuleOverride` for the `fbo_location_id`.
-        *   Returns: `{ "categories": [...], "rules": [...], "mappings": [...], "overrides": [...], "fbo_aircraft_configs": [...] }`
+        *   Returns: `{ "categories": [...], "rules": [...], "mappings": [...], "overrides": [...], "fbo_aircraft_config": [...] }`
     *   ✅ **Created `upsert_fee_rule_override(data)`:** This method handles creating and updating overrides.
         *   Finds an existing `FeeRuleOverride` based on `fbo_location_id`, `aircraft_type_id` and `fee_rule_id`.
         *   If found, it updates the `override_amount` or `override_caa_amount`.

@@ -144,6 +144,7 @@ export default function AppSidebar() {
             { title: "Customer Management", href: "/admin/customers", icon: <Users className="h-5 w-5" />, permissions: ['manage_customers'], requiredRoles: ['System Administrator'] },
             { title: "Aircraft Management", href: "/admin/aircraft", icon: <Plane className="h-5 w-5" />, permissions: ['manage_aircraft'], requiredRoles: ['System Administrator'] },
             { title: "Fee Management", href: "/admin/fbo-config/fee-management", icon: <Settings className="h-5 w-5" />, permissions: ['manage_fbo_fee_schedules'], requiredRoles: ['System Administrator'] },
+            { title: "Fuel Pricing", href: "/admin/fbo-config/fuel-pricing", icon: <Droplet className="h-5 w-5" />, permissions: ['manage_fuel_prices'], requiredRoles: ['System Administrator'] },
           ]
         },
         { title: "CSR Dashboard", href: "/csr/dashboard", icon: <Home className="h-5 w-5" />, permissions: ['access_csr_dashboard'], requiredRoles: ['Customer Service Representative', 'System Administrator'], description: "Main dashboard for CSRs" },

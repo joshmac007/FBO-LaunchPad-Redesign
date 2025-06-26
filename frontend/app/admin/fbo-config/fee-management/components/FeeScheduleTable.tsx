@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import {
   useReactTable,
   getCoreRowModel,
@@ -8,27 +8,25 @@ import {
   getFilteredRowModel,
   createColumnHelper,
   flexRender,
-  SortingState,
-  ColumnFiltersState,
 } from "@tanstack/react-table"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Trash2, Edit } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Trash2, Plus } from "lucide-react"
 import { EditableFeeCell } from "./EditableFeeCell"
 import { EditableMinFuelCell } from "./EditableMinFuelCell"
 import { EditCategoryDefaultsDialog } from "./EditCategoryDefaultsDialog"
+import { NewAircraftTableRow } from "./NewAircraftTableRow"
+import { CreateClassificationDialog } from "./CreateClassificationDialog"
 import {
   ConsolidatedFeeSchedule,
-  FeeRule,
-  AircraftMapping,
-  FeeRuleOverride,
-  FBOAircraftTypeConfig,
   upsertFeeRuleOverride,
   deleteFeeRuleOverride,
   updateMinFuelForAircraft,
+  getConsolidatedFeeSchedule,
 } from "@/app/services/admin-fee-config-service"
 import React from "react"
 
@@ -50,26 +48,38 @@ interface AircraftRowData {
 }
 
 interface FeeScheduleTableProps {
-  data: ConsolidatedFeeSchedule
   fboId: number
   viewMode: 'standard' | 'caa'
-  groupBy: 'classification' | 'manufacturer' | 'none'
   searchTerm: string
 }
 
 const columnHelper = createColumnHelper<AircraftRowData>()
 
 export function FeeScheduleTable({
-  data,
   fboId,
   viewMode,
-  groupBy,
   searchTerm
 }: FeeScheduleTableProps) {
   const queryClient = useQueryClient()
+  const [addingToCategory, setAddingToCategory] = useState<number | null>(null)
+  const [showCreateClassificationDialog, setShowCreateClassificationDialog] = useState(false)
+
+  // Fetch consolidated fee schedule data
+  const {
+    data,
+    isLoading,
+    error,
+    refetch
+  } = useQuery({
+    queryKey: ['consolidated-fee-schedule', fboId],
+    queryFn: () => getConsolidatedFeeSchedule(fboId),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
 
   // Transform and group data for table consumption
   const groupedData = useMemo(() => {
+    if (!data) return []
+    
     const aircraftData: AircraftRowData[] = []
 
     data.mappings.forEach((mapping) => {
@@ -77,7 +87,15 @@ export function FeeScheduleTable({
         config => config.aircraft_type_id === mapping.aircraft_type_id
       )
 
-      const fees: Record<string, any> = {}
+      const fees: Record<string, {
+        fee_rule_id: number
+        inherited_value: number
+        override_value?: number
+        caa_inherited_value?: number
+        caa_override_value?: number
+        is_override: boolean
+        is_caa_override: boolean
+      }> = {}
       
       const categoryRules = data.rules.filter(
         rule => rule.applies_to_fee_category_id === mapping.fee_category_id
@@ -109,21 +127,25 @@ export function FeeScheduleTable({
       })
     })
     
-    // Now, group the data if groupBy is 'classification'
-    if (groupBy === 'classification') {
-      const groups: { [key: string]: AircraftRowData[] } = {}
-      aircraftData.forEach(row => {
-        const key = row.fee_category_name
-        if (!groups[key]) {
-          groups[key] = []
-        }
+    // Group the data by classification (fee category)
+    // Start with all categories, even if they have no aircraft
+    const groups: { [key: string]: AircraftRowData[] } = {}
+    
+    // Initialize groups for all categories
+    data.categories.forEach(category => {
+      groups[category.name] = []
+    })
+    
+    // Add aircraft data to their respective groups
+    aircraftData.forEach(row => {
+      const key = row.fee_category_name
+      if (groups[key]) {
         groups[key].push(row)
-      })
-      return groups
-    }
-
-    return aircraftData // Return flat list if not grouping
-  }, [data, groupBy])
+      }
+    })
+    
+    return groups
+  }, [data])
 
   // Mutations for optimistic updates
   const upsertOverrideMutation = useMutation({
@@ -198,13 +220,17 @@ export function FeeScheduleTable({
 
   // Get unique fee codes for columns
   const feeColumns = useMemo(() => {
+    if (!data || !data.rules) return []
     const feeCodesSet = new Set<string>()
     data.rules.forEach(rule => feeCodesSet.add(rule.fee_code))
     return Array.from(feeCodesSet).sort()
-  }, [data.rules])
+  }, [data])
 
   // Define columns
-  const columns = useMemo(() => [
+  const columns = useMemo(() => {
+    if (!data) return []
+    
+    return [
     columnHelper.accessor('aircraft_type_name', {
       header: 'Aircraft Type',
       cell: ({ getValue, row }) => (
@@ -284,15 +310,87 @@ export function FeeScheduleTable({
         </Button>
       ),
     }),
-  ], [feeColumns, viewMode, upsertOverrideMutation, deleteOverrideMutation, updateMinFuelMutation])
+  ]}, [data, feeColumns, viewMode, upsertOverrideMutation, deleteOverrideMutation, updateMinFuelMutation])
 
   const table = useReactTable({
-    data: Array.isArray(groupedData) ? groupedData : [],
+    data: [],  // We'll handle rendering differently for grouped data
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
   })
+
+  // Filter grouped data based on search term
+  const filteredGroupedData = useMemo(() => {
+    const filtered: { [key: string]: AircraftRowData[] } = {}
+    
+    Object.entries(groupedData).forEach(([categoryName, rows]) => {
+      const filteredRows = rows.filter(row => 
+        row.aircraft_type_name.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+      
+      if (filteredRows.length > 0 || !searchTerm) {
+        filtered[categoryName] = filteredRows
+      }
+    })
+    
+    return filtered
+  }, [groupedData, searchTerm])
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="border rounded-lg p-8">
+        <div className="text-center space-y-2">
+          <div className="text-muted-foreground">Loading fee schedule...</div>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="border rounded-lg p-8">
+        <div className="text-center space-y-4">
+          <div className="text-destructive">Failed to load fee schedule</div>
+          <Button onClick={() => refetch()} variant="outline">
+            Try Again
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // Handle empty state
+  if (Object.keys(filteredGroupedData).length === 0) {
+    return (
+      <>
+        <Card>
+          <CardContent className="pt-6 text-center">
+            <p>No fee classifications found.</p>
+            <Button 
+              className="mt-4"
+              onClick={() => setShowCreateClassificationDialog(true)}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Your First Classification
+            </Button>
+          </CardContent>
+        </Card>
+        
+        <CreateClassificationDialog
+          fboId={fboId}
+          open={showCreateClassificationDialog}
+          onOpenChange={setShowCreateClassificationDialog}
+          onSuccess={(newCategoryId) => {
+            // After creating a classification, invalidate queries to refresh the table
+            queryClient.invalidateQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
+          }}
+        />
+      </>
+    );
+  }
 
   return (
     <div className="border rounded-lg">
@@ -314,16 +412,9 @@ export function FeeScheduleTable({
           ))}
         </TableHeader>
         <TableBody>
-          {groupBy === 'classification' && !Array.isArray(groupedData) ? (
-            Object.entries(groupedData).map(([categoryName, rows]) => {
-              const category = data.categories.find(c => c.name === categoryName)
-              const categoryRules = category ? data.rules.filter(r => r.applies_to_fee_category_id === category.id) : []
-              
-              const categoryTable = useReactTable({
-                  data: rows,
-                  columns,
-                  getCoreRowModel: getCoreRowModel(),
-              })
+          {Object.entries(filteredGroupedData).map(([categoryName, filteredRows]) => {
+              const category = data!.categories.find(c => c.name === categoryName)
+              const categoryRules = category ? data!.rules.filter(r => r.applies_to_fee_category_id === category.id) : []
 
               return (
                 <React.Fragment key={categoryName}>
@@ -331,47 +422,60 @@ export function FeeScheduleTable({
                     <TableCell colSpan={columns.length} className="font-semibold">
                       <div className="flex justify-between items-center py-2">
                         <span>{categoryName}</span>
-                        {category && (
-                          <EditCategoryDefaultsDialog
-                            fboId={fboId}
-                            categoryId={category.id}
-                            categoryName={category.name}
-                            categoryRules={categoryRules}
-                            viewMode={viewMode}
-                          />
-                        )}
+                        <div className="flex items-center gap-2">
+                          {category && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setAddingToCategory(category.id)}
+                              disabled={addingToCategory !== null}
+                              className="h-8"
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Add Aircraft
+                            </Button>
+                          )}
+                          {category && (
+                            <EditCategoryDefaultsDialog
+                              fboId={fboId}
+                              categoryId={category.id}
+                              categoryName={category.name}
+                              categoryRules={categoryRules}
+                              viewMode={viewMode}
+                            />
+                          )}
+                        </div>
                       </div>
                     </TableCell>
                   </TableRow>
-                  {categoryTable.getRowModel().rows.map(row => (
-                    <TableRow key={row.id}>
-                      {row.getVisibleCells().map(cell => (
-                        <TableCell key={cell.id}>
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  {/* Render NewAircraftTableRow if adding to this category */}
+                  {category && addingToCategory === category.id && (
+                    <NewAircraftTableRow
+                      fboId={fboId}
+                      feeCategoryId={category.id}
+                      feeCategoryName={category.name}
+                      onSave={() => {
+                        setAddingToCategory(null)
+                        queryClient.invalidateQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
+                      }}
+                      onCancel={() => setAddingToCategory(null)}
+                    />
+                  )}
+                  {filteredRows.map((row, index) => (
+                    <TableRow key={`${categoryName}-${index}`}>
+                      {columns.map((column) => (
+                        <TableCell key={`${categoryName}-${index}-${column.id}`}>
+                          {column.id && typeof column.cell === 'function' 
+                            ? column.cell({ row: { original: row }, getValue: () => (row as any)[column.id as keyof typeof row] } as any)
+                            : (row as any)[column.id as keyof typeof row]
+                          }
                         </TableCell>
                       ))}
                     </TableRow>
                   ))}
                 </React.Fragment>
               )
-            })
-          ) : table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map(row => (
-              <TableRow key={row.id}>
-                {row.getVisibleCells().map(cell => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={columns.length} className="h-24 text-center">
-                No results.
-              </TableCell>
-            </TableRow>
-          )}
+            })}
         </TableBody>
       </Table>
     </div>

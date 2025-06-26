@@ -17,12 +17,13 @@ from typing import List, Dict, Any, Optional, Tuple
 from flask import current_app
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload
+from sqlalchemy import func
 
 from ..extensions import db
 from ..models import (
     AircraftType, FeeCategory, AircraftTypeToFeeCategoryMapping,
     FeeRule, WaiverTier, CalculationBasis, WaiverStrategy,
-    FBOAircraftTypeConfig, FeeRuleOverride
+    FBOAircraftTypeConfig, FeeRuleOverride, FuelPrice, FuelTypeEnum
 )
 from .aircraft_service import AircraftService
 
@@ -902,14 +903,14 @@ class AdminFeeConfigService:
             rules = FeeRule.query.filter_by(fbo_location_id=fbo_id).all()
             mappings = AircraftTypeToFeeCategoryMapping.query.filter_by(fbo_location_id=fbo_id).all()
             overrides = FeeRuleOverride.query.filter_by(fbo_location_id=fbo_id).all()
-            fbo_aircraft_configs = FBOAircraftTypeConfig.query.filter_by(fbo_location_id=fbo_id).all()
+            fbo_aircraft_config = FBOAircraftTypeConfig.query.filter_by(fbo_location_id=fbo_id).all()
 
             return {
                 "categories": [c.to_dict() for c in categories],
                 "rules": [r.to_dict() for r in rules],
                 "mappings": [m.to_dict() for m in mappings],
                 "overrides": [o.to_dict() for o in overrides],
-                "fbo_aircraft_configs": [ac.to_dict() for ac in fbo_aircraft_configs]
+                "fbo_aircraft_config": [ac.to_dict() for ac in fbo_aircraft_config]
             }
         except SQLAlchemyError as e:
             current_app.logger.error(f"Error fetching consolidated fee schedule: {str(e)}")
@@ -988,11 +989,15 @@ class AdminFeeConfigService:
         All operations are performed in a single atomic transaction.
         """
         try:
-            # 1. Find or create AircraftType
-            aircraft_type = AircraftType.query.filter_by(name=aircraft_type_name).first()
+            # 1. Normalize input and find or create AircraftType
+            normalized_name = aircraft_type_name.strip().title()
+            
+            # Case-insensitive find-or-create
+            aircraft_type = AircraftType.query.filter(func.lower(AircraftType.name) == func.lower(normalized_name)).first()
             if not aircraft_type:
+                # Use the normalized name for creation
                 aircraft_type = AircraftType()
-                aircraft_type.name = aircraft_type_name
+                aircraft_type.name = normalized_name
                 aircraft_type.base_min_fuel_gallons_for_waiver = min_fuel_gallons # Satisfy NOT NULL constraint
                 db.session.add(aircraft_type)
                 # We need to flush to get the ID for the subsequent operations
@@ -1003,7 +1008,18 @@ class AdminFeeConfigService:
             if not fee_category:
                 raise ValueError(f"Fee Category with ID {fee_category_id} not found for this FBO.")
 
-            # 3. Create AircraftTypeToFeeCategoryMapping if it doesn't exist for this FBO
+            # 3. Check for duplicate mapping before creating
+            existing_mapping = AircraftTypeToFeeCategoryMapping.query.filter_by(
+                fbo_location_id=fbo_location_id,
+                aircraft_type_id=aircraft_type.id,
+                fee_category_id=fee_category_id
+            ).first()
+
+            if existing_mapping:
+                # Use a "raise ValueError" to send a clean error to the frontend
+                raise ValueError(f"Aircraft '{normalized_name}' already exists in this classification.")
+
+            # 4. Create AircraftTypeToFeeCategoryMapping if it doesn't exist for this FBO
             mapping = AircraftTypeToFeeCategoryMapping.query.filter_by(
                 fbo_location_id=fbo_location_id,
                 aircraft_type_id=aircraft_type.id
@@ -1020,7 +1036,7 @@ class AdminFeeConfigService:
                 mapping.fee_category_id = fee_category_id
                 db.session.add(mapping)
 
-            # 4. Create or update FBOAircraftTypeConfig
+            # 5. Create or update FBOAircraftTypeConfig
             config = FBOAircraftTypeConfig.query.filter_by(
                 fbo_location_id=fbo_location_id,
                 aircraft_type_id=aircraft_type.id
@@ -1035,7 +1051,7 @@ class AdminFeeConfigService:
                 config.base_min_fuel_gallons_for_waiver = min_fuel_gallons
                 db.session.add(config)
 
-            # 5. Create initial FeeRuleOverride if parameters are provided
+            # 6. Create initial FeeRuleOverride if parameters are provided
             if initial_ramp_fee_rule_id is not None and initial_ramp_fee_amount is not None:
                 override = FeeRuleOverride()
                 override.fbo_location_id = fbo_location_id
@@ -1046,13 +1062,21 @@ class AdminFeeConfigService:
             
             db.session.commit()
 
-            # We need to get the IDs after the commit
-            return {
+            # Return objects and basic data for route processing
+            result = {
                 "message": "Aircraft fee setup completed successfully.",
                 "aircraft_type_id": aircraft_type.id,
+                "aircraft_type": aircraft_type,
                 "mapping_id": mapping.id,
-                "fbo_aircraft_config_id": config.id
+                "fbo_aircraft_config_id": config.id,
+                "fbo_aircraft_config": config
             }
+            
+            # Add override if it was created
+            if initial_ramp_fee_rule_id is not None and initial_ramp_fee_amount is not None:
+                result["fee_rule_override"] = override
+                
+            return result
 
         except IntegrityError as e:
             db.session.rollback()
@@ -1061,4 +1085,109 @@ class AdminFeeConfigService:
         except SQLAlchemyError as e:
             db.session.rollback()
             current_app.logger.error(f"Database error during aircraft fee setup: {str(e)}")
-            raise ValueError("A database error occurred while setting up the aircraft fee structure.") 
+            raise ValueError("A database error occurred while setting up the aircraft fee structure.")
+
+    # Fuel Price Management
+    @staticmethod
+    def get_current_fuel_prices(fbo_location_id: int) -> List[Dict[str, Any]]:
+        """
+        Get current fuel prices for a specific FBO.
+        
+        This method returns an entry for ALL distinct fuel_type Enum values.
+        If a price has never been set for a specific fuel type, its price field 
+        will be null. This ensures the frontend UI is always complete.
+        """
+        try:
+            # Get all fuel types from enum
+            all_fuel_types = list(FuelTypeEnum)
+            
+            # Get the latest price for each fuel type
+            result = []
+            for fuel_type in all_fuel_types:
+                latest_price = FuelPrice.query.filter_by(
+                    fbo_location_id=fbo_location_id,
+                    fuel_type=fuel_type
+                ).order_by(FuelPrice.effective_date.desc()).first()
+                
+                if latest_price:
+                    result.append({
+                        'fuel_type': fuel_type.value,
+                        'price': float(latest_price.price),
+                        'currency': latest_price.currency,
+                        'effective_date': latest_price.effective_date.isoformat(),
+                        'created_at': latest_price.created_at.isoformat(),
+                        'updated_at': latest_price.updated_at.isoformat()
+                    })
+                else:
+                    result.append({
+                        'fuel_type': fuel_type.value,
+                        'price': None,
+                        'currency': 'USD',
+                        'effective_date': None,
+                        'created_at': None,
+                        'updated_at': None
+                    })
+            
+            return result
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Error fetching current fuel prices: {str(e)}")
+            raise
+
+    @staticmethod
+    def set_current_fuel_prices(fbo_location_id: int, prices_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Set current fuel prices for a specific FBO.
+        
+        This method creates NEW FuelPrice records with the current effective_date.
+        It does not update existing rows to maintain an immutable price history.
+        
+        Args:
+            fbo_location_id: The FBO location ID
+            prices_data: List of dicts with 'fuel_type' and 'price' keys
+            
+        Returns:
+            Dict with success status and count of prices updated
+        """
+        try:
+            from datetime import datetime
+            
+            current_time = datetime.utcnow()
+            updated_count = 0
+            
+            for price_data in prices_data:
+                fuel_type_str = price_data['fuel_type']
+                price = price_data['price']
+                
+                # Validate fuel type exists in enum
+                try:
+                    fuel_type = FuelTypeEnum(fuel_type_str)
+                except ValueError:
+                    raise ValueError(f"Invalid fuel type: {fuel_type_str}")
+                
+                # Validate price is positive
+                if price <= 0:
+                    raise ValueError(f"Price must be positive for fuel type {fuel_type_str}")
+                
+                # Create new price record
+                new_price = FuelPrice()
+                new_price.fbo_location_id = fbo_location_id
+                new_price.fuel_type = fuel_type
+                new_price.price = price
+                new_price.currency = 'USD'
+                new_price.effective_date = current_time
+                
+                db.session.add(new_price)
+                updated_count += 1
+            
+            db.session.commit()
+            
+            return {
+                'success': True,
+                'updated_count': updated_count,
+                'message': f"Successfully updated {updated_count} fuel prices"
+            }
+            
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error setting fuel prices: {str(e)}")
+            raise 

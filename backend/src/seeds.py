@@ -56,6 +56,7 @@ all_permissions = [
     {'name': 'view_billing_info', 'description': 'Allows viewing billing information and fee calculations', 'category': 'billing'},
     {'name': 'calculate_fees', 'description': 'Allows calculating fees and charges', 'category': 'billing'},
     {'name': 'manage_fbo_fee_schedules', 'description': 'Allows managing FBO fee schedules, categories, rules, and waiver tiers', 'category': 'billing'},
+    {'name': 'manage_fuel_prices', 'description': 'Allows managing fuel prices for an FBO location', 'category': 'billing'},
     
     # Fuel Receipt System Permissions
     {'name': 'view_receipts', 'description': 'Allows viewing fuel receipts', 'category': 'receipts'},

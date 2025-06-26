@@ -10,7 +10,7 @@ class AircraftType(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True, index=True)
-    base_min_fuel_gallons_for_waiver = db.Column(db.Numeric(10, 2), nullable=False)
+    base_min_fuel_gallons_for_waiver = db.Column(db.Numeric(10, 2), nullable=False, server_default='0')
     default_fee_category_id = db.Column(db.Integer, nullable=True)  # Will be FK when FeeCategory exists
     default_max_gross_weight_lbs = db.Column(db.Numeric(10, 2), nullable=True)
     
