@@ -105,7 +105,7 @@ def create_system_permission_groups():
                 'parent': 'aircraft_management_basic',
                 'is_system_group': True,
                 'sort_order': 310,
-                'permissions': ['manage_aircraft']
+                'permissions': ['manage_aircraft', 'manage_aircraft_types']
             },
             {
                 'name': 'customer_management_basic',

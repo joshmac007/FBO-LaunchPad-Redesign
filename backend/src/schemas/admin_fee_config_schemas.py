@@ -131,6 +131,7 @@ class FeeRuleSchema(Schema):
         validate=validate.Range(min=0),
         as_string=True
     )
+    is_primary_fee = fields.Boolean(missing=False)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
 
@@ -191,6 +192,7 @@ class CreateFeeRuleSchema(Schema):
         validate=validate.Range(min=0),
         as_string=True
     )
+    is_primary_fee = fields.Boolean(missing=False)
 
 
 class UpdateFeeRuleSchema(Schema):
@@ -231,6 +233,7 @@ class UpdateFeeRuleSchema(Schema):
         validate=validate.Range(min=0),
         as_string=True
     )
+    is_primary_fee = fields.Boolean()
 
 
 # Waiver Tiers Schemas

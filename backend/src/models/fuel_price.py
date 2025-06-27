@@ -6,8 +6,9 @@ from ..extensions import db
 
 class FuelTypeEnum(enum.Enum):
     """
-    Enumeration of fuel types available for pricing.
-    This ensures type safety and prevents data inconsistencies from string typos.
+    Legacy enumeration of fuel types - DEPRECATED.
+    Use FuelType model instead for dynamic fuel type management.
+    This enum is kept for backward compatibility during migration.
     """
     JET_A = "JET_A"
     AVGAS_100LL = "AVGAS_100LL"
@@ -29,10 +30,13 @@ class FuelPrice(db.Model):
 
     # Core Fields
     fbo_location_id = db.Column(db.Integer, nullable=False, index=True)
-    fuel_type = db.Column(db.Enum(FuelTypeEnum), nullable=False, index=True)
+    fuel_type_id = db.Column(db.Integer, db.ForeignKey('fuel_types.id'), nullable=False, index=True)
     price = db.Column(db.Numeric(10, 4), nullable=False)
     currency = db.Column(db.String(3), nullable=False, default='USD')
     effective_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    # Relationships
+    fuel_type = db.relationship('FuelType', backref=db.backref('fuel_prices', lazy='dynamic'))
 
     # Timestamps
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
@@ -40,7 +44,7 @@ class FuelPrice(db.Model):
 
     # Constraints
     __table_args__ = (
-        UniqueConstraint('fbo_location_id', 'fuel_type', 'effective_date', 
+        UniqueConstraint('fbo_location_id', 'fuel_type_id', 'effective_date', 
                         name='uq_fuel_price_fbo_fuel_date'),
     )
 
@@ -49,7 +53,9 @@ class FuelPrice(db.Model):
         return {
             'id': self.id,
             'fbo_location_id': self.fbo_location_id,
-            'fuel_type': self.fuel_type.value,
+            'fuel_type_id': self.fuel_type_id,
+            'fuel_type_name': self.fuel_type.name if self.fuel_type else None,
+            'fuel_type_code': self.fuel_type.code if self.fuel_type else None,
             'price': str(self.price),
             'currency': self.currency,
             'effective_date': self.effective_date.isoformat(),
@@ -58,4 +64,5 @@ class FuelPrice(db.Model):
         }
 
     def __repr__(self):
-        return f'<FuelPrice {self.fuel_type.value} @ {self.price} for FBO {self.fbo_location_id}>'
+        fuel_type_name = self.fuel_type.name if self.fuel_type else f'ID:{self.fuel_type_id}'
+        return f'<FuelPrice {fuel_type_name} @ {self.price} for FBO {self.fbo_location_id}>'

@@ -46,7 +46,7 @@ const CSRLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     <QueryProvider>
       <SidebarProvider>
         <Sidebar>
-          <AppSidebar userRole="csr" />
+          <AppSidebar />
           <SidebarRail />
         </Sidebar>
         <SidebarInset>

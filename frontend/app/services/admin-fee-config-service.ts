@@ -27,6 +27,7 @@ export interface FeeRule {
   caa_override_amount?: number;
   caa_waiver_strategy_override?: 'NONE' | 'SIMPLE_MULTIPLIER' | 'TIERED_MULTIPLIER';
   caa_simple_waiver_multiplier_override?: number;
+  is_primary_fee: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -70,7 +71,8 @@ export interface FBOAircraftTypeConfig {
   id: number;
   fbo_location_id: number;
   aircraft_type_id: number;
-  base_min_fuel_gallons_for_waiver: number;
+  aircraft_type_name: string;
+  base_min_fuel_gallons_for_waiver: string | number;
   created_at: string;
   updated_at: string;
 }
@@ -98,9 +100,22 @@ export interface AddAircraftToFeeScheduleRequest {
   initial_ramp_fee_amount?: number;
 }
 
-// Fuel Price types
+// Fuel Type interface for new dynamic system
+export interface FuelType {
+  id: number;
+  name: string;
+  code: string;
+  description?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Updated Fuel Price interface for new system
 export interface FuelPrice {
-  fuel_type: string;
+  fuel_type_id: number;
+  fuel_type_name: string;
+  fuel_type_code: string;
   price: number | null;
   currency: string;
   effective_date: string | null;
@@ -114,9 +129,13 @@ export interface FuelPricesResponse {
 
 export interface SetFuelPricesRequest {
   fuel_prices: Array<{
-    fuel_type: string;
+    fuel_type_id: number;
     price: number;
   }>;
+}
+
+export interface FuelTypesResponse {
+  fuel_types: FuelType[];
 }
 
 export interface DeleteFeeRuleOverrideRequest {
@@ -147,6 +166,7 @@ export interface CreateFeeRuleRequest {
   caa_override_amount?: number;
   caa_waiver_strategy_override?: 'NONE' | 'SIMPLE_MULTIPLIER' | 'TIERED_MULTIPLIER';
   caa_simple_waiver_multiplier_override?: number;
+  is_primary_fee?: boolean;
 }
 
 export interface UpdateFeeRuleRequest {
@@ -164,6 +184,7 @@ export interface UpdateFeeRuleRequest {
   caa_override_amount?: number;
   caa_waiver_strategy_override?: 'NONE' | 'SIMPLE_MULTIPLIER' | 'TIERED_MULTIPLIER';
   caa_simple_waiver_multiplier_override?: number;
+  is_primary_fee?: boolean;
 }
 
 export interface CreateWaiverTierRequest {
@@ -497,6 +518,16 @@ export const addAircraftToFeeSchedule = async (fboId: number, data: AddAircraftT
   return handleApiResponse(response);
 }
 
+// Fuel Type Management
+export const getFuelTypes = async (fboId: number): Promise<FuelTypesResponse> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fuel-types`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+  
+  return handleApiResponse<FuelTypesResponse>(response);
+};
+
 // Fuel Price Management
 export const getFuelPrices = async (fboId: number): Promise<FuelPricesResponse> => {
   const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fuel-prices`, {
@@ -554,6 +585,9 @@ export const AdminFeeConfigService = {
   
   // New API functions for Phase 2
   addAircraftToFeeSchedule,
+  
+  // Fuel Type Management
+  getFuelTypes,
   
   // Fuel Price Management
   getFuelPrices,

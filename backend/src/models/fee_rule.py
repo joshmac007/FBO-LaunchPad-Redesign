@@ -47,6 +47,9 @@ class FeeRule(db.Model):
     caa_waiver_strategy_override = db.Column(db.Enum(WaiverStrategy), nullable=True)
     caa_simple_waiver_multiplier_override = db.Column(db.Numeric(5, 2), nullable=True)
     
+    # Primary fee flag for UI display
+    is_primary_fee = db.Column(db.Boolean, nullable=False, default=False, server_default='f')
+    
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -71,6 +74,7 @@ class FeeRule(db.Model):
             'caa_override_amount': str(self.caa_override_amount) if self.caa_override_amount else None,
             'caa_waiver_strategy_override': self.caa_waiver_strategy_override.value if self.caa_waiver_strategy_override else None,
             'caa_simple_waiver_multiplier_override': str(self.caa_simple_waiver_multiplier_override) if self.caa_simple_waiver_multiplier_override else None,
+            'is_primary_fee': self.is_primary_fee,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

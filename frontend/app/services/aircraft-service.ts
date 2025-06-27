@@ -4,6 +4,18 @@ import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config"
 export interface AircraftType {
   id: number
   name: string
+  base_min_fuel_gallons_for_waiver: number
+}
+
+// Request payload interfaces for Aircraft Types
+export interface AircraftTypeCreateRequest {
+  name: string
+  base_min_fuel_gallons_for_waiver: number
+}
+
+export interface AircraftTypeUpdateRequest {
+  name?: string
+  base_min_fuel_gallons_for_waiver?: number
 }
 
 // Frontend Aircraft model - accurately reflecting backend structure
@@ -231,4 +243,32 @@ export async function getAircraftTypes(): Promise<AircraftType[]> {
     headers: getAuthHeaders(),
   })
   return await handleApiResponse<AircraftType[]>(response)
+}
+
+export async function createAircraftType(data: AircraftTypeCreateRequest): Promise<AircraftType> {
+  const response = await fetch(`${API_BASE_URL}/aircraft/types`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  })
+  const result = await handleApiResponse<{ message: string; aircraft_type: AircraftType }>(response)
+  return result.aircraft_type
+}
+
+export async function updateAircraftType(typeId: number, data: AircraftTypeUpdateRequest): Promise<AircraftType> {
+  const response = await fetch(`${API_BASE_URL}/aircraft/types/${typeId}`, {
+    method: "PUT",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  })
+  const result = await handleApiResponse<{ message: string; aircraft_type: AircraftType }>(response)
+  return result.aircraft_type
+}
+
+export async function deleteAircraftType(typeId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/aircraft/types/${typeId}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  })
+  await handleApiResponse<unknown>(response) // Expecting 204 No Content
 }

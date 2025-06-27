@@ -557,7 +557,7 @@ def delete_fee_rule_override(fbo_id):
 
 
 @admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/aircraft-fee-setup', methods=['POST'])
-@require_permission_v2('CREATE_FBO_AIRCRAFT_FEE_SETUP')
+@require_permission_v2('manage_fbo_fee_schedules')
 def create_aircraft_fee_setup(fbo_id):
     """Create a new aircraft fee setup for an FBO."""
     try:
@@ -601,6 +601,19 @@ def create_aircraft_fee_setup(fbo_id):
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
+# Fuel Type Management Routes
+@admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/fuel-types', methods=['GET'])
+@require_permission_v2('manage_fbo_fee_schedules')
+def get_fuel_types(fbo_id: int):
+    """Get all active fuel types."""
+    try:
+        fuel_types = AdminFeeConfigService.get_all_active_fuel_types()
+        return jsonify({'fuel_types': fuel_types}), 200
+    except Exception as e:
+        current_app.logger.error(f"Error fetching fuel types: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
 # Fuel Price Management Routes
 @admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/fuel-prices', methods=['GET'])
 @require_permission_v2('manage_fuel_prices')
@@ -634,15 +647,21 @@ def set_fuel_prices(fbo_id):
             if not isinstance(price_entry, dict):
                 return jsonify({'error': 'Each fuel price entry must be an object'}), 400
             
-            if 'fuel_type' not in price_entry or 'price' not in price_entry:
-                return jsonify({'error': 'Each fuel price entry must have fuel_type and price fields'}), 400
+            if 'fuel_type_id' not in price_entry or 'price' not in price_entry:
+                return jsonify({'error': 'Each fuel price entry must have fuel_type_id and price fields'}), 400
+            
+            # Validate fuel_type_id is an integer
+            try:
+                int(price_entry['fuel_type_id'])
+            except (ValueError, TypeError):
+                return jsonify({'error': 'fuel_type_id must be a valid integer'}), 400
             
             # Validate price is a number
             try:
                 float(price_entry['price'])
             except (ValueError, TypeError):
-                fuel_type = price_entry.get('fuel_type', 'unknown')
-                return jsonify({'error': f"Invalid price value for fuel type {fuel_type}"}), 400
+                fuel_type_id = price_entry.get('fuel_type_id', 'unknown')
+                return jsonify({'error': f"Invalid price value for fuel type ID {fuel_type_id}"}), 400
         
         result = AdminFeeConfigService.set_current_fuel_prices(fbo_id, prices_data)
         return jsonify(result), 200

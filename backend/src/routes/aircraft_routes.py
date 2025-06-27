@@ -10,7 +10,7 @@ from ..schemas import (
     AircraftListResponseSchema,
     ErrorResponseSchema
 )
-from ..schemas.aircraft_schemas import AircraftTypeResponseSchema
+from ..schemas.aircraft_schemas import AircraftTypeResponseSchema, CreateAircraftTypeSchema, UpdateAircraftTypeSchema
 
 # Create blueprint for aircraft routes
 aircraft_bp = Blueprint('aircraft_bp', __name__, url_prefix='/api/aircraft')
@@ -433,7 +433,7 @@ def create_aircraft_quick():
         return jsonify({"error": "Server error"}), 500
 
 @aircraft_bp.route('/types', methods=['GET', 'OPTIONS'])
-@require_permission_v2('manage_aircraft')
+@require_permission_v2('view_aircraft')
 def get_aircraft_types():
     """Get all available aircraft types.
     Requires manage_aircraft permission.
@@ -483,4 +483,234 @@ def get_aircraft_types():
     except Exception as e:
         from flask import current_app
         current_app.logger.error(f"Error fetching aircraft types: {e}")
+        return jsonify({"error": "Server error"}), 500
+
+@aircraft_bp.route('/types', methods=['POST', 'OPTIONS'])
+@require_permission_v2('manage_aircraft_types')
+def create_aircraft_type():
+    """Create a new aircraft type.
+    Requires manage_aircraft_types permission.
+    ---
+    tags:
+      - Aircraft Types
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: CreateAircraftTypeSchema
+    responses:
+      201:
+        description: Aircraft type created successfully
+        content:
+          application/json:
+            schema: AircraftTypeResponseSchema
+      400:
+        description: Bad Request (e.g., validation error)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      401:
+        description: Unauthorized
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      403:
+        description: Forbidden (missing permission)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      409:
+        description: Conflict (e.g., aircraft type already exists)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      500:
+        description: Server error
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+    """
+    if request.method == 'OPTIONS':
+        return jsonify({'message': 'OPTIONS request successful'}), 200
+    
+    try:
+        schema = CreateAircraftTypeSchema()
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        try:
+            data = schema.load(data)
+        except ValidationError as e:
+            return jsonify({
+                "error": "Validation error",
+                "details": e.messages
+            }), 400
+
+        aircraft_type, message, status_code = AircraftService.create_aircraft_type(data)
+        
+        if aircraft_type is not None:
+            response_schema = AircraftTypeResponseSchema()
+            return jsonify({"message": message, "aircraft_type": response_schema.dump(aircraft_type)}), status_code
+        else:
+            return jsonify({"error": message}), status_code
+            
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error creating aircraft type: {e}")
+        return jsonify({"error": "Server error"}), 500
+
+@aircraft_bp.route('/types/<int:type_id>', methods=['PUT', 'OPTIONS'])
+@require_permission_v2('manage_aircraft_types')
+def update_aircraft_type(type_id):
+    """Update an aircraft type.
+    Requires manage_aircraft_types permission.
+    ---
+    tags:
+      - Aircraft Types
+    security:
+      - bearerAuth: []
+    parameters:
+      - in: path
+        name: type_id
+        schema:
+          type: integer
+        required: true
+        description: ID of the aircraft type to update
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: UpdateAircraftTypeSchema
+    responses:
+      200:
+        description: Aircraft type updated successfully
+        content:
+          application/json:
+            schema: AircraftTypeResponseSchema
+      400:
+        description: Bad Request (e.g., validation error)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      401:
+        description: Unauthorized
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      403:
+        description: Forbidden (missing permission)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      404:
+        description: Aircraft type not found
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      409:
+        description: Conflict (e.g., aircraft type name already exists)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      500:
+        description: Server error
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+    """
+    if request.method == 'OPTIONS':
+        return jsonify({'message': 'OPTIONS request successful'}), 200
+    
+    try:
+        schema = UpdateAircraftTypeSchema()
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        try:
+            data = schema.load(data)
+        except ValidationError as e:
+            return jsonify({
+                "error": "Validation error",
+                "details": e.messages
+            }), 400
+
+        aircraft_type, message, status_code = AircraftService.update_aircraft_type(type_id, data)
+        
+        if aircraft_type is not None:
+            response_schema = AircraftTypeResponseSchema()
+            return jsonify({"message": message, "aircraft_type": response_schema.dump(aircraft_type)}), status_code
+        else:
+            return jsonify({"error": message}), status_code
+            
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error updating aircraft type {type_id}: {e}")
+        return jsonify({"error": "Server error"}), 500
+
+@aircraft_bp.route('/types/<int:type_id>', methods=['DELETE', 'OPTIONS'])
+@require_permission_v2('manage_aircraft_types')
+def delete_aircraft_type(type_id):
+    """Delete an aircraft type.
+    Requires manage_aircraft_types permission.
+    ---
+    tags:
+      - Aircraft Types
+    security:
+      - bearerAuth: []
+    parameters:
+      - in: path
+        name: type_id
+        schema:
+          type: integer
+        required: true
+        description: ID of the aircraft type to delete
+    responses:
+      204:
+        description: Aircraft type deleted successfully
+      401:
+        description: Unauthorized
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      403:
+        description: Forbidden (missing permission)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      404:
+        description: Aircraft type not found
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      409:
+        description: Conflict (e.g., aircraft type is in use)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      500:
+        description: Server error
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+    """
+    if request.method == 'OPTIONS':
+        return jsonify({'message': 'OPTIONS request successful'}), 200
+    
+    try:
+        deleted, message, status_code = AircraftService.delete_aircraft_type(type_id)
+        
+        if deleted:
+            return '', 204
+        else:
+            return jsonify({"error": message}), status_code
+            
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error deleting aircraft type {type_id}: {e}")
         return jsonify({"error": "Server error"}), 500

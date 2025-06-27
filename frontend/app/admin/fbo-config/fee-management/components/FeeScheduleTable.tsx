@@ -23,6 +23,7 @@ import { NewAircraftTableRow } from "./NewAircraftTableRow"
 import { CreateClassificationDialog } from "./CreateClassificationDialog"
 import {
   ConsolidatedFeeSchedule,
+  FeeRule,
   upsertFeeRuleOverride,
   deleteFeeRuleOverride,
   updateMinFuelForAircraft,
@@ -51,6 +52,7 @@ interface FeeScheduleTableProps {
   fboId: number
   viewMode: 'standard' | 'caa'
   searchTerm: string
+  primaryFeeRules: FeeRule[]
 }
 
 const columnHelper = createColumnHelper<AircraftRowData>()
@@ -58,7 +60,8 @@ const columnHelper = createColumnHelper<AircraftRowData>()
 export function FeeScheduleTable({
   fboId,
   viewMode,
-  searchTerm
+  searchTerm,
+  primaryFeeRules
 }: FeeScheduleTableProps) {
   const queryClient = useQueryClient()
   const [addingToCategory, setAddingToCategory] = useState<number | null>(null)
@@ -78,12 +81,15 @@ export function FeeScheduleTable({
 
   // Transform and group data for table consumption
   const groupedData = useMemo(() => {
-    if (!data) return []
+    console.log('Raw data from API:', data)
+    console.log('Primary fee rules passed to component:', primaryFeeRules)
+    
+    if (!data || !data.mappings || !data.categories) return []
     
     const aircraftData: AircraftRowData[] = []
 
     data.mappings.forEach((mapping) => {
-      const minFuelConfig = data.fbo_aircraft_configs.find(
+      const minFuelConfig = data.fbo_aircraft_config?.find(
         config => config.aircraft_type_id === mapping.aircraft_type_id
       )
 
@@ -97,12 +103,14 @@ export function FeeScheduleTable({
         is_caa_override: boolean
       }> = {}
       
-      const categoryRules = data.rules.filter(
+      const categoryRules = primaryFeeRules?.filter(
         rule => rule.applies_to_fee_category_id === mapping.fee_category_id
-      )
+      ) || []
+
+      console.log(`Aircraft ${mapping.aircraft_type_name}: categoryRules =`, categoryRules)
 
       categoryRules.forEach((rule) => {
-        const override = data.overrides.find(
+        const override = data.overrides?.find(
           o => o.aircraft_type_id === mapping.aircraft_type_id && o.fee_rule_id === rule.id
         )
 
@@ -122,10 +130,14 @@ export function FeeScheduleTable({
         aircraft_type_name: mapping.aircraft_type_name,
         fee_category_id: mapping.fee_category_id,
         fee_category_name: mapping.fee_category_name,
-        min_fuel_gallons: minFuelConfig?.base_min_fuel_gallons_for_waiver || null,
+        min_fuel_gallons: minFuelConfig?.base_min_fuel_gallons_for_waiver 
+          ? parseFloat(minFuelConfig.base_min_fuel_gallons_for_waiver.toString()) 
+          : null,
         fees
       })
     })
+    
+    console.log('Transformed aircraft data:', aircraftData)
     
     // Group the data by classification (fee category)
     // Start with all categories, even if they have no aircraft
@@ -144,8 +156,9 @@ export function FeeScheduleTable({
       }
     })
     
+    console.log('Final grouped data:', groups)
     return groups
-  }, [data])
+  }, [data, primaryFeeRules])
 
   // Mutations for optimistic updates
   const upsertOverrideMutation = useMutation({
@@ -162,7 +175,7 @@ export function FeeScheduleTable({
       // Return context for rollback
       return { variables }
     },
-    onError: (error, variables, context) => {
+    onError: (_error, _variables, _context) => {
       // Rollback optimistic update
       queryClient.invalidateQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
       toast.error("Failed to update fee override")
@@ -193,7 +206,7 @@ export function FeeScheduleTable({
   const updateMinFuelMutation = useMutation({
     mutationFn: ({ aircraftTypeId, minFuel }: { aircraftTypeId: number; minFuel: number }) =>
       updateMinFuelForAircraft(fboId, aircraftTypeId, { base_min_fuel_gallons_for_waiver: minFuel }),
-    onMutate: async ({ aircraftTypeId, minFuel }) => {
+    onMutate: async () => {
       // Optimistically update the UI
       await queryClient.cancelQueries({ queryKey: ["consolidated-fee-schedule", fboId] });
       const previousData = queryClient.getQueryData<ConsolidatedFeeSchedule>(["consolidated-fee-schedule", fboId]);
@@ -218,45 +231,48 @@ export function FeeScheduleTable({
     },
   });
 
-  // Get unique fee codes for columns
+  // Get unique fee codes for columns (from passed primary fee rules)
   const feeColumns = useMemo(() => {
-    if (!data || !data.rules) return []
     const feeCodesSet = new Set<string>()
-    data.rules.forEach(rule => feeCodesSet.add(rule.fee_code))
+    primaryFeeRules.forEach(rule => feeCodesSet.add(rule.fee_code))
+    console.log('Primary fee rules:', primaryFeeRules)
+    console.log('Fee columns will be:', Array.from(feeCodesSet))
     return Array.from(feeCodesSet).sort()
-  }, [data])
+  }, [primaryFeeRules])
 
   // Define columns
   const columns = useMemo(() => {
     if (!data) return []
     
-    return [
-    columnHelper.accessor('aircraft_type_name', {
-      header: 'Aircraft Type',
-      cell: ({ getValue, row }) => (
-        <div className="flex flex-col">
-          <span className="font-medium">{getValue()}</span>
-          <Badge variant="outline" className="text-xs w-fit">
-            {row.original.fee_category_name}
-          </Badge>
-        </div>
-      ),
-    }),
-    columnHelper.accessor('min_fuel_gallons', {
-      header: 'Min Fuel',
-      cell: ({ row }) => (
-        <EditableMinFuelCell
-          value={row.original.min_fuel_gallons}
-          onSave={(newValue) => {
-            updateMinFuelMutation.mutate({
-              aircraftTypeId: row.original.aircraft_type_id,
-              minFuel: newValue,
-            });
-          }}
-        />
-      ),
-    }),
-    ...feeColumns.map(feeCode => 
+    const baseColumns = [
+      columnHelper.accessor('aircraft_type_name', {
+        header: 'Aircraft Type',
+        cell: ({ getValue, row }) => (
+          <div className="flex flex-col">
+            <span className="font-medium">{getValue()}</span>
+            <Badge variant="outline" className="text-xs w-fit">
+              {row.original.fee_category_name}
+            </Badge>
+          </div>
+        ),
+      }),
+      columnHelper.accessor('min_fuel_gallons', {
+        header: 'Min Fuel',
+        cell: ({ row }) => (
+          <EditableMinFuelCell
+            value={row.original.min_fuel_gallons}
+            onSave={(newValue) => {
+              updateMinFuelMutation.mutate({
+                aircraftTypeId: row.original.aircraft_type_id,
+                minFuel: newValue,
+              });
+            }}
+          />
+        ),
+      }),
+    ]
+
+    const feeColumnDefinitions = feeColumns.map(feeCode => 
       columnHelper.display({
         id: feeCode,
         header: feeCode.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
@@ -292,8 +308,9 @@ export function FeeScheduleTable({
           )
         },
       })
-    ),
-    columnHelper.display({
+    )
+    
+    const actionColumn = columnHelper.display({
       id: 'actions',
       header: 'Actions',
       cell: ({ row }) => (
@@ -309,8 +326,10 @@ export function FeeScheduleTable({
           <Trash2 className="h-4 w-4" />
         </Button>
       ),
-    }),
-  ]}, [data, feeColumns, viewMode, upsertOverrideMutation, deleteOverrideMutation, updateMinFuelMutation])
+    })
+
+    return [...baseColumns, ...feeColumnDefinitions, actionColumn]
+  }, [data, feeColumns, viewMode, upsertOverrideMutation, deleteOverrideMutation, updateMinFuelMutation])
 
   const table = useReactTable({
     data: [],  // We'll handle rendering differently for grouped data

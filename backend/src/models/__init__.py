@@ -11,6 +11,7 @@ from .customer import Customer
 from .fuel_truck import FuelTruck
 from .fuel_order import FuelOrder, FuelOrderStatus
 from .fuel_price import FuelPrice, FuelTypeEnum
+from .fuel_type import FuelType
 
 # Receipt system models
 from .aircraft_type import AircraftType
@@ -43,6 +44,7 @@ __all__ = [
     'FuelOrderStatus',
     'FuelPrice',
     'FuelTypeEnum',
+    'FuelType',
     # Receipt system exports
     'AircraftType',
     'FeeCategory',

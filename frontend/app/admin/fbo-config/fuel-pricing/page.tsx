@@ -13,36 +13,44 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Save, DollarSign, AlertCircle } from "lucide-react"
-import { getFuelPrices, setFuelPrices, FuelPricesResponse } from "@/app/services/admin-fee-config-service"
+import { getFuelPrices, setFuelPrices, getFuelTypes, FuelPricesResponse, FuelTypesResponse, FuelType } from "@/app/services/admin-fee-config-service"
 import { Toaster } from "sonner"
 
-// Form schema for price inputs
-const FuelPriceFormSchema = z.object({
-  JET_A: z.string().min(1, "Price is required").refine(
-    (val) => !isNaN(Number(val)) && Number(val) > 0, 
-    "Must be a positive number"
-  ),
-  AVGAS_100LL: z.string().min(1, "Price is required").refine(
-    (val) => !isNaN(Number(val)) && Number(val) > 0, 
-    "Must be a positive number"
-  ),
-  SAF_JET_A: z.string().min(1, "Price is required").refine(
-    (val) => !isNaN(Number(val)) && Number(val) > 0, 
-    "Must be a positive number"
-  )
-})
+// Dynamic form schema generator for price inputs
+const createFuelPriceFormSchema = (fuelTypes: FuelType[]) => {
+  const schemaFields: Record<string, z.ZodString> = {}
+  
+  fuelTypes.forEach(fuelType => {
+    schemaFields[`fuel_${fuelType.id}`] = z.string().min(1, "Price is required").refine(
+      (val) => !isNaN(Number(val)) && Number(val) > 0, 
+      "Must be a positive number"
+    )
+  })
+  
+  return z.object(schemaFields)
+}
 
-type FuelPriceFormData = z.infer<typeof FuelPriceFormSchema>
+type FuelPriceFormData = Record<string, string>
 
 export default function FuelPricingPage() {
   const fboId = 1 // TODO: Get this from context/params
   const queryClient = useQueryClient()
 
+  // Fetch fuel types
+  const { 
+    data: fuelTypesData, 
+    isLoading: fuelTypesLoading, 
+    isError: fuelTypesError 
+  } = useQuery({
+    queryKey: ['fuel-types', fboId],
+    queryFn: () => getFuelTypes(fboId),
+  })
+
   // Fetch current fuel prices
   const { 
     data: fuelPricesData, 
-    isLoading, 
-    isError, 
+    isLoading: fuelPricesLoading, 
+    isError: fuelPricesError, 
     error,
     refetch 
   } = useQuery({
@@ -50,35 +58,45 @@ export default function FuelPricingPage() {
     queryFn: () => getFuelPrices(fboId),
   })
 
+  const isLoading = fuelTypesLoading || fuelPricesLoading
+  const isError = fuelTypesError || fuelPricesError
+  const fuelTypes = fuelTypesData?.fuel_types || []
+
   // Convert price data to form-friendly format
-  const getPriceByFuelType = (fuelType: string): string => {
+  const getPriceByFuelTypeId = (fuelTypeId: number): string => {
     if (!fuelPricesData?.fuel_prices) return ""
-    const priceEntry = fuelPricesData.fuel_prices.find(p => p.fuel_type === fuelType)
+    const priceEntry = fuelPricesData.fuel_prices.find(p => p.fuel_type_id === fuelTypeId)
     return priceEntry?.price ? priceEntry.price.toString() : ""
   }
 
+  // Create form default values
+  const getFormDefaultValues = (): FuelPriceFormData => {
+    const values: FuelPriceFormData = {}
+    fuelTypes.forEach(fuelType => {
+      values[`fuel_${fuelType.id}`] = getPriceByFuelTypeId(fuelType.id)
+    })
+    return values
+  }
+
+  const formSchema = fuelTypes.length > 0 ? createFuelPriceFormSchema(fuelTypes) : z.object({})
+  
   const {
     register,
     handleSubmit,
     formState: { errors, isDirty },
     reset
   } = useForm<FuelPriceFormData>({
-    resolver: zodResolver(FuelPriceFormSchema),
-    values: {
-      JET_A: getPriceByFuelType("JET_A"),
-      AVGAS_100LL: getPriceByFuelType("AVGAS_100LL"),
-      SAF_JET_A: getPriceByFuelType("SAF_JET_A")
-    }
+    resolver: zodResolver(formSchema),
+    values: getFormDefaultValues()
   })
 
   // Save prices mutation
   const savePricesMutation = useMutation({
     mutationFn: (formData: FuelPriceFormData) => {
-      const prices = [
-        { fuel_type: "JET_A", price: Number(formData.JET_A) },
-        { fuel_type: "AVGAS_100LL", price: Number(formData.AVGAS_100LL) },
-        { fuel_type: "SAF_JET_A", price: Number(formData.SAF_JET_A) }
-      ]
+      const prices = fuelTypes.map(fuelType => ({
+        fuel_type_id: fuelType.id,
+        price: Number(formData[`fuel_${fuelType.id}`])
+      }))
       return setFuelPrices(fboId, { fuel_prices: prices })
     },
     onSuccess: () => {
@@ -175,64 +193,49 @@ export default function FuelPricingPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            {/* Jet A Price */}
-            <div className="space-y-2">
-              <Label htmlFor="JET_A">Jet A (per gallon)</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                <Input
-                  id="JET_A"
-                  type="text"
-                  placeholder="0.00"
-                  className="pl-8"
-                  {...register("JET_A")}
-                />
-              </div>
-              {errors.JET_A && (
-                <p className="text-sm text-destructive">{errors.JET_A.message}</p>
-              )}
-            </div>
+            {/* Dynamic fuel type price inputs */}
+            {fuelTypes.map(fuelType => {
+              const fieldName = `fuel_${fuelType.id}`
+              return (
+                <div key={fuelType.id} className="space-y-2">
+                  <Label htmlFor={fieldName}>
+                    {fuelType.name} (per gallon)
+                    {fuelType.description && (
+                      <span className="text-sm text-muted-foreground ml-2">
+                        - {fuelType.description}
+                      </span>
+                    )}
+                  </Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                    <Input
+                      id={fieldName}
+                      type="text"
+                      placeholder="0.00"
+                      className="pl-8"
+                      {...register(fieldName)}
+                    />
+                  </div>
+                  {errors[fieldName] && (
+                    <p className="text-sm text-destructive">{errors[fieldName]?.message}</p>
+                  )}
+                </div>
+              )
+            })}
 
-            {/* Avgas 100LL Price */}
-            <div className="space-y-2">
-              <Label htmlFor="AVGAS_100LL">Avgas 100LL (per gallon)</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                <Input
-                  id="AVGAS_100LL"
-                  type="text"
-                  placeholder="0.00"
-                  className="pl-8"
-                  {...register("AVGAS_100LL")}
-                />
-              </div>
-              {errors.AVGAS_100LL && (
-                <p className="text-sm text-destructive">{errors.AVGAS_100LL.message}</p>
-              )}
-            </div>
-
-            {/* SAF Jet A Price */}
-            <div className="space-y-2">
-              <Label htmlFor="SAF_JET_A">SAF Jet A (per gallon)</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                <Input
-                  id="SAF_JET_A"
-                  type="text"
-                  placeholder="0.00"
-                  className="pl-8"
-                  {...register("SAF_JET_A")}
-                />
-              </div>
-              {errors.SAF_JET_A && (
-                <p className="text-sm text-destructive">{errors.SAF_JET_A.message}</p>
-              )}
-            </div>
+            {fuelTypes.length === 0 && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  No active fuel types found. Please contact system administrator.
+                </AlertDescription>
+              </Alert>
+            )}
 
             {/* Save Button */}
             <Button 
               type="submit" 
-              disabled={!isDirty || savePricesMutation.isPending}
+              disabled={!isDirty || savePricesMutation.isPending || fuelTypes.length === 0}
               className="w-full sm:w-auto"
             >
               <Save className="h-4 w-4 mr-2" />

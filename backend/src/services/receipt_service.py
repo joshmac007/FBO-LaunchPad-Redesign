@@ -11,6 +11,7 @@ from datetime import datetime
 from flask import current_app
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy import func
 
 from ..extensions import db
 from ..models.receipt import Receipt, ReceiptStatus
@@ -20,6 +21,7 @@ from ..models.customer import Customer
 from ..models.aircraft import Aircraft
 from ..models.aircraft_type import AircraftType
 from ..models.audit_log import AuditLog
+from ..models.fuel_price import FuelPrice, FuelTypeEnum
 from .fee_calculation_service import FeeCalculationService, FeeCalculationContext
 
 
@@ -370,31 +372,73 @@ class ReceiptService:
     
     def _get_fuel_price(self, fbo_id: int, fuel_type: str) -> Decimal:
         """
-        Get fuel price for given FBO and fuel type.
+        Get the current fuel price for a given FBO and fuel type from the database.
         
         Args:
             fbo_id: FBO location ID
-            fuel_type: Type of fuel (e.g., 'Jet A', 'Avgas 100LL')
+            fuel_type: Type of fuel (e.g., 'JET_A', 'AVGAS_100LL', 'SAF_JET_A')
             
         Returns:
             Price per gallon as Decimal
             
-        Note: This is a temporary implementation. In the full system, this would
-                  query an FBO fuel pricing configuration table.
+        Note: This queries the fuel_prices table for the most recent price effective
+              as of the current date for the specified FBO and fuel type.
         """
-        # Temporary implementation with hardcoded prices per FBO
-        fuel_prices = {
-            1: {  # FBO ID 1
-                'Jet A': Decimal('5.50'),
-                'Avgas 100LL': Decimal('6.25'),
-                'Jet A-1': Decimal('5.50'),
-                'default': Decimal('5.50')
-            },
-            # Future FBOs can be added here
-        }
-        
-        fbo_prices = fuel_prices.get(fbo_id, fuel_prices[1])  # Default to FBO 1 prices
-        return fbo_prices.get(fuel_type, fbo_prices['default'])
+        try:
+            # Normalize fuel type string to match enum values
+            # Handle variations in fuel type naming
+            fuel_type_normalized = fuel_type.upper().replace(' ', '_').replace('-', '_')
+            
+            # Map common variations to the correct enum values
+            fuel_type_mapping = {
+                'JET_A': 'JET_A',
+                'JET_A_1': 'JET_A',  # Treat Jet A-1 as JET_A
+                'AVGAS_100LL': 'AVGAS_100LL',
+                'SAF_JET_A': 'SAF_JET_A',
+                'JET': 'JET_A',  # Common shorthand
+                'AVGAS': 'AVGAS_100LL'  # Common shorthand
+            }
+            
+            mapped_fuel_type = fuel_type_mapping.get(fuel_type_normalized, fuel_type_normalized)
+            
+            # Validate that the fuel type string is a valid enum member
+            try:
+                fuel_type_enum = FuelTypeEnum[mapped_fuel_type]
+            except KeyError:
+                current_app.logger.warning(f"Unknown fuel type '{fuel_type}' (normalized: '{fuel_type_normalized}'). Defaulting to JET_A.")
+                fuel_type_enum = FuelTypeEnum.JET_A
+
+            # Find the most recent price for this fuel type and FBO
+            # that is effective as of now
+            latest_price_record = (FuelPrice.query
+                                 .filter(
+                                     FuelPrice.fbo_location_id == fbo_id,
+                                     FuelPrice.fuel_type == fuel_type_enum,
+                                     FuelPrice.effective_date <= func.now()
+                                 )
+                                 .order_by(FuelPrice.effective_date.desc())
+                                 .first())
+
+            if latest_price_record:
+                current_app.logger.info(f"Found fuel price {latest_price_record.price} for {fuel_type_enum.value} at FBO {fbo_id}")
+                return latest_price_record.price
+            else:
+                # Fallback: log warning and return a default price
+                current_app.logger.warning(f"No fuel price found for FBO {fbo_id} and fuel type {fuel_type_enum.value}. Using fallback price.")
+                
+                # Provide reasonable fallback prices based on fuel type
+                fallback_prices = {
+                    FuelTypeEnum.JET_A: Decimal('5.75'),
+                    FuelTypeEnum.AVGAS_100LL: Decimal('6.25'),
+                    FuelTypeEnum.SAF_JET_A: Decimal('7.50')
+                }
+                
+                return fallback_prices.get(fuel_type_enum, Decimal('5.75'))
+                
+        except Exception as e:
+            current_app.logger.error(f"Error fetching fuel price for FBO {fbo_id}, fuel type {fuel_type}: {str(e)}")
+            # Return a safe fallback price in case of any error
+            return Decimal('5.75')
     
     def generate_receipt(self, receipt_id: int, fbo_location_id: int) -> Receipt:
         """

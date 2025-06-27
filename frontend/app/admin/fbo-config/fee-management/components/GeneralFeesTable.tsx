@@ -16,7 +16,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Plus, Check, X, Edit, Trash2 } from "lucide-react"
 import {
   getGeneralFeeCategory,
-  getFeeRules,
   createFeeRule,
   updateFeeRule,
   deleteFeeRule,
@@ -24,9 +23,11 @@ import {
   CreateFeeRuleRequest,
   UpdateFeeRuleRequest,
 } from "@/app/services/admin-fee-config-service"
+import { FeeRuleDialog } from "./FeeRuleDialog"
 
 interface GeneralFeesTableProps {
   fboId: number
+  generalServiceRules: FeeRule[]
 }
 
 interface EditableRow extends Partial<FeeRule> {
@@ -37,9 +38,11 @@ interface EditableRow extends Partial<FeeRule> {
 
 const columnHelper = createColumnHelper<EditableRow>()
 
-export function GeneralFeesTable({ fboId }: GeneralFeesTableProps) {
+export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTableProps) {
   const [editingRows, setEditingRows] = useState<Set<string>>(new Set())
   const [newRows, setNewRows] = useState<EditableRow[]>([])
+  const [editedValues, setEditedValues] = useState<Record<string, Partial<EditableRow>>>({})
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
   const queryClient = useQueryClient()
 
   // Fetch general fee category
@@ -48,12 +51,8 @@ export function GeneralFeesTable({ fboId }: GeneralFeesTableProps) {
     queryFn: () => getGeneralFeeCategory(fboId),
   })
 
-  // Fetch fee rules for the general category
-  const { data: feeRules = [], isLoading, error } = useQuery({
-    queryKey: ['general-fee-rules', fboId, generalCategory?.id],
-    queryFn: () => getFeeRules(fboId, generalCategory?.id),
-    enabled: !!generalCategory?.id,
-  })
+  // Use the passed general service rules (already filtered by parent)
+  const feeRules = generalServiceRules
 
   // Create fee rule mutation
   const createFeeRuleMutation = useMutation({
@@ -137,6 +136,44 @@ export function GeneralFeesTable({ fboId }: GeneralFeesTableProps) {
     // If it's a new row, remove it
     if (id.startsWith('new-')) {
       setNewRows(prev => prev.filter(row => row.tempId !== id))
+    } else {
+      // Clear any edited values for existing rows
+      setEditedValues(prev => {
+        const newValues = { ...prev }
+        delete newValues[id]
+        return newValues
+      })
+    }
+  }
+
+  // Update row data
+  const updateRowData = (rowId: string, field: keyof EditableRow, value: any) => {
+    if (rowId.startsWith('new-')) {
+      setNewRows(prev => prev.map(row => 
+        row.tempId === rowId 
+          ? { ...row, [field]: value }
+          : row
+      ))
+    } else {
+      // For existing rows, track the edited values
+      setEditedValues(prev => ({
+        ...prev,
+        [rowId]: {
+          ...prev[rowId],
+          [field]: value
+        }
+      }))
+    }
+  }
+
+  // Get current value for a field (either edited value or original)
+  const getCurrentValue = (row: EditableRow, field: keyof EditableRow) => {
+    const rowId = row.isNew ? row.tempId! : row.id!.toString()
+    if (row.isNew) {
+      return row[field]
+    } else {
+      const editedValue = editedValues[rowId]?.[field]
+      return editedValue !== undefined ? editedValue : row[field]
     }
   }
 
@@ -150,14 +187,15 @@ export function GeneralFeesTable({ fboId }: GeneralFeesTableProps) {
       if (row.isNew) {
         // Create new fee rule
         const createData: CreateFeeRuleRequest = {
-          fee_name: row.fee_name!,
-          fee_code: row.fee_code!,
+          fee_name: getCurrentValue(row, 'fee_name') as string,
+          fee_code: getCurrentValue(row, 'fee_code') as string,
           applies_to_fee_category_id: generalCategory.id,
-          amount: row.amount!,
-          is_taxable: row.is_taxable || false,
+          amount: getCurrentValue(row, 'amount') as number,
+          is_taxable: getCurrentValue(row, 'is_taxable') as boolean || false,
           calculation_basis: 'FIXED_PRICE',
           waiver_strategy: 'NONE',
           has_caa_override: false,
+          is_primary_fee: false,
         }
         
         await createFeeRuleMutation.mutateAsync(createData)
@@ -165,15 +203,22 @@ export function GeneralFeesTable({ fboId }: GeneralFeesTableProps) {
         // Remove from new rows
         setNewRows(prev => prev.filter(r => r.tempId !== row.tempId))
       } else {
-        // Update existing fee rule
+        // Update existing fee rule with edited values
         const updateData: UpdateFeeRuleRequest = {
-          fee_name: row.fee_name,
-          fee_code: row.fee_code,
-          amount: row.amount,
-          is_taxable: row.is_taxable,
+          fee_name: getCurrentValue(row, 'fee_name') as string,
+          fee_code: getCurrentValue(row, 'fee_code') as string,
+          amount: getCurrentValue(row, 'amount') as number,
+          is_taxable: getCurrentValue(row, 'is_taxable') as boolean,
         }
         
         await updateFeeRuleMutation.mutateAsync({ id: row.id!, data: updateData })
+        
+        // Clear edited values for this row
+        setEditedValues(prev => {
+          const newValues = { ...prev }
+          delete newValues[rowId]
+          return newValues
+        })
       }
       
       // Stop editing
@@ -204,20 +249,6 @@ export function GeneralFeesTable({ fboId }: GeneralFeesTableProps) {
     }
   }
 
-  // Update row data
-  const updateRowData = (rowId: string, field: keyof EditableRow, value: any) => {
-    if (rowId.startsWith('new-')) {
-      setNewRows(prev => prev.map(row => 
-        row.tempId === rowId 
-          ? { ...row, [field]: value }
-          : row
-      ))
-    } else {
-      // For existing rows, we need to update in place
-      // This is handled by the form inputs directly
-    }
-  }
-
   const columns = useMemo(() => [
     columnHelper.accessor('fee_name', {
       header: 'Service Name',
@@ -228,8 +259,8 @@ export function GeneralFeesTable({ fboId }: GeneralFeesTableProps) {
         if (isEditing) {
           return (
             <Input
-              defaultValue={getValue() || ''}
-              onBlur={(e) => updateRowData(rowId, 'fee_name', e.target.value)}
+              value={String(getCurrentValue(row.original, 'fee_name') || '')}
+              onChange={(e) => updateRowData(rowId, 'fee_name', e.target.value)}
               placeholder="Enter service name"
               className="h-8"
             />
@@ -247,8 +278,8 @@ export function GeneralFeesTable({ fboId }: GeneralFeesTableProps) {
         if (isEditing) {
           return (
             <Input
-              defaultValue={getValue() || ''}
-              onBlur={(e) => updateRowData(rowId, 'fee_code', e.target.value)}
+              value={String(getCurrentValue(row.original, 'fee_code') || '')}
+              onChange={(e) => updateRowData(rowId, 'fee_code', e.target.value)}
               placeholder="Enter code"
               className="h-8"
             />
@@ -267,8 +298,8 @@ export function GeneralFeesTable({ fboId }: GeneralFeesTableProps) {
           return (
             <Input
               type="number"
-              defaultValue={getValue()?.toString() || ''}
-              onBlur={(e) => updateRowData(rowId, 'amount', parseFloat(e.target.value))}
+              value={String(getCurrentValue(row.original, 'amount') || '')}
+              onChange={(e) => updateRowData(rowId, 'amount', parseFloat(e.target.value) || 0)}
               placeholder="0"
               className="h-8"
             />
@@ -286,7 +317,7 @@ export function GeneralFeesTable({ fboId }: GeneralFeesTableProps) {
         if (isEditing) {
           return (
             <Checkbox
-              checked={getValue() || false}
+              checked={getCurrentValue(row.original, 'is_taxable') as boolean || false}
               onCheckedChange={(checked) => updateRowData(rowId, 'is_taxable', checked)}
             />
           )
@@ -348,7 +379,7 @@ export function GeneralFeesTable({ fboId }: GeneralFeesTableProps) {
         )
       },
     }),
-  ], [createFeeRuleMutation.isPending, updateFeeRuleMutation.isPending, deleteFeeRuleMutation.isPending])
+  ], [createFeeRuleMutation.isPending, updateFeeRuleMutation.isPending, deleteFeeRuleMutation.isPending, editedValues])
 
   const table = useReactTable({
     data: tableData,
@@ -356,21 +387,6 @@ export function GeneralFeesTable({ fboId }: GeneralFeesTableProps) {
     getCoreRowModel: getCoreRowModel(),
   })
 
-  if (isLoading) {
-    return (
-      <div className="border rounded-lg p-8">
-        <div className="text-center text-muted-foreground">Loading general service fees...</div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="border rounded-lg p-8">
-        <div className="text-center text-destructive">Failed to load general service fees</div>
-      </div>
-    )
-  }
 
   return (
     <div className="border rounded-lg">
@@ -413,8 +429,9 @@ export function GeneralFeesTable({ fboId }: GeneralFeesTableProps) {
             <TableCell colSpan={columns.length} className="h-12">
               <Button
                 variant="ghost"
-                onClick={addNewRow}
+                onClick={() => setShowCreateDialog(true)}
                 className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+                disabled={!generalCategory}
               >
                 <Plus className="h-4 w-4" />
                 Add Service
@@ -423,6 +440,21 @@ export function GeneralFeesTable({ fboId }: GeneralFeesTableProps) {
           </TableRow>
         </TableBody>
       </Table>
+
+      <FeeRuleDialog
+        isOpen={showCreateDialog}
+        onClose={() => setShowCreateDialog(false)}
+        fboId={fboId}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['general-fee-rules', fboId, generalCategory?.id] })
+          toast.success("Service fee created successfully")
+        }}
+        defaultValues={{
+          is_primary_fee: false, // Default to general fee for this table
+          applies_to_fee_category_id: generalCategory?.id,
+        }}
+        availableCategories={generalCategory ? [generalCategory] : []}
+      />
     </div>
   )
 }

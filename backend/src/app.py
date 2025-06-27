@@ -77,9 +77,18 @@ def create_app(config_name=None):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    # Move request and current_app imports inside the factory
-    from flask import request, current_app
-    socketio.init_app(app)
+
+    # Initialize SocketIO here, inside the factory
+    socketio.init_app(
+        app,
+        cors_allowed_origins="*",
+        async_mode='eventlet',
+        message_queue=os.getenv('REDIS_URL', 'redis://redis:6379/0'),
+        logger=False,
+        engineio_logger=False,
+        max_http_buffer_size=100000000
+    )
+    
     init_cli(app)
 
     # JWT User Lookup Loader - sets g.current_user automatically when JWT is present

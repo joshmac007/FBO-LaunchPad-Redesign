@@ -1,9 +1,16 @@
 from src.extensions import db
 from src.models import Permission, Role, User
 from src.models.fuel_truck import FuelTruck
+from src.models.fuel_type import FuelType
 from src.models.aircraft_type import AircraftType
+from src.models.fee_category import FeeCategory
+from src.models.fee_rule import FeeRule
+from src.models.aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
+from src.models.fbo_aircraft_type_config import FBOAircraftTypeConfig
 from datetime import datetime
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
+import click
 
 # --- Data Definitions ---
 all_permissions = [
@@ -32,6 +39,7 @@ all_permissions = [
     # Aircraft
     {'name': 'view_aircraft', 'description': 'Allows viewing aircraft list', 'category': 'aircraft'},
     {'name': 'manage_aircraft', 'description': 'Allows creating, updating, deleting aircraft', 'category': 'aircraft'},
+    {'name': 'manage_aircraft_types', 'description': 'Allows user to create, update, and delete master aircraft types.', 'category': 'aircraft'},
     
     # Customers
     {'name': 'view_customers', 'description': 'Allows viewing customer list', 'category': 'customers'},
@@ -108,72 +116,127 @@ default_aircraft_types = [
     {"name": "Beechcraft Bonanza", "base_min_fuel_gallons_for_waiver": 40.00},
 ]
 
+default_fuel_types = [
+    {
+        "name": "Jet A",
+        "code": "JET_A",
+        "description": "Standard aviation turbine fuel",
+        "is_active": True
+    },
+    {
+        "name": "Avgas 100LL",
+        "code": "AVGAS_100LL",
+        "description": "Aviation gasoline for piston engines",
+        "is_active": True
+    },
+    {
+        "name": "Sustainable Aviation Fuel (Jet A)",
+        "code": "SAF_JET_A",
+        "description": "Sustainable aviation fuel, Jet A specification",
+        "is_active": True
+    }
+]
+
 def seed_data():
     """Seeds the database with initial permissions, roles, and default users.
     
     Note: Direct role-permission assignments have been removed. Roles will receive 
     permissions via permission groups managed by permission_groups_schema.py.
     """
-    print("Starting database seeding...")
+    click.echo("Starting database seeding...")
     try:
         # Clear existing data respecting FK constraints (in correct order)
-        print("Clearing existing PBAC data (if any)...")
+        click.echo("Clearing existing data...")
         
-        # Clear all dependent tables first (in order of dependencies)
-        # Only delete from tables that definitely exist
+        # **CORRECTED DELETION ORDER**
+        # Clear junction/dependent tables FIRST, then primary tables.
         tables_to_clear = [
+            # Junction tables for many-to-many relationships
+            'user_roles',
+            'role_permissions',  # Legacy, may not exist
+            'user_permissions',
             'user_permission_group_assignments',
             'permission_group_memberships',
             'role_permission_groups',
-            'user_permissions',
-            'user_roles',
+
+            # Tables with foreign keys to primary tables
+            'audit_logs',
+            'receipt_line_items',
+            'receipts',
             'fuel_orders',
+            'fee_rule_overrides',
+            'fbo_aircraft_type_configs',
+            'aircraft_type_fee_category_mappings',
+            'fee_rules',
             'aircraft',
+
+            # Primary tables (fewest dependencies)
             'customers',
             'fuel_trucks',
-            'users',
             'permission_groups',
-            'roles',
             'permissions',
+            'roles',
+            'users',
+
+            # Fee system primary tables
+            'aircraft_types',
+            'fee_categories',
+            'fuel_types'  # Add fuel_types table
         ]
         
+        # Use TRUNCATE CASCADE for more reliable table clearing
+        # This approach handles foreign key constraints automatically
         for table in tables_to_clear:
             try:
-                db.session.execute(text(f'DELETE FROM {table}'))
-                print(f"Cleared table: {table}")
+                # Use TRUNCATE CASCADE for complete table clearing
+                db.session.execute(text(f'TRUNCATE TABLE {table} RESTART IDENTITY CASCADE;'))
+                click.echo(f"Truncated table: {table}")
+            except ProgrammingError as e:
+                db.session.rollback()
+                # If TRUNCATE fails, table probably doesn't exist
+                if "does not exist" in str(e):
+                    click.echo(f"Table {table} not found, skipping.")
+                else:
+                    click.echo(f"Error truncating table {table}: {e}")
             except Exception as e:
-                print(f"Table {table} doesn't exist or couldn't be cleared, skipping... ({e})")
-                db.session.rollback()  # Rollback and continue
+                db.session.rollback()
+                click.echo(f"Error truncating table {table}: {e}")
         
-        db.session.commit()
+        try:
+            db.session.commit()
+            click.echo("Successfully cleared all existing data.")
+        except Exception as e:
+            db.session.rollback()
+            click.echo(f"Error committing table clearing: {e}")
+            raise
 
         # Seed Permissions
-        print("Seeding Permissions...")
+        click.echo("Seeding permissions...")
         # Ensure all_permissions uses snake_case
         for p_def in all_permissions:
             if not p_def['name'].islower() or '_' not in p_def['name']:
-                print(f"Warning: Permission name '{p_def['name']}' might not be snake_case.")
+                click.echo(f"Warning: Permission name '{p_def['name']}' might not be snake_case.")
 
         permission_objects = [Permission(name=p['name'], description=p.get('description')) for p in all_permissions]
         db.session.bulk_save_objects(permission_objects)
         db.session.commit()
-        print(f"Seeded {len(permission_objects)} permissions.")
+        click.echo(f"Seeded {len(permission_objects)} permissions.")
 
         # Seed Roles
-        print("Seeding Roles...")
+        click.echo("Seeding roles...")
         role_objects = [Role(name=r['name'], description=r.get('description')) for r in default_roles]
         db.session.add_all(role_objects)
         db.session.commit()
-        print(f"Seeded {len(role_objects)} roles.")
+        click.echo(f"Seeded {len(role_objects)} roles.")
 
         # --- Role-Permission Assignment Section Removed ---
         # Direct role-permission assignments have been removed.
         # Roles will receive permissions via permission groups defined in permission_groups_schema.py.
         # This must be run after seeds.py via the 'flask create-permission-groups run' command.
-        print("Role-permission assignments will be handled by permission_groups_schema.py.")
+        click.echo("Role-permission assignments will be handled by permission_groups_schema.py.")
 
         # Create Default Users
-        print("Creating Default Users...")
+        click.echo("Creating default users...")
         default_users = [
             {
                 'email': 'admin@fbolaunchpad.com',
@@ -223,18 +286,18 @@ def seed_data():
                     user.roles.append(user_role)
                     db.session.add(user)
                     users_created += 1
-                    print(f"Default User '{user_data['email']}' with role '{user_data['role']}' created.")
+                    click.echo(f"Default User '{user_data['email']}' with role '{user_data['role']}' created.")
                 else:
-                    print(f"ERROR: '{user_data['role']}' role not found. Cannot create user '{user_data['email']}'.")
+                    click.echo(f"ERROR: '{user_data['role']}' role not found. Cannot create user '{user_data['email']}'.")
             else:
-                print(f"User '{user_data['email']}' already exists.")
+                click.echo(f"User '{user_data['email']}' already exists.")
 
         if users_created > 0:
             db.session.commit()
-            print(f"Successfully assigned roles to {users_created} default users.")
+            click.echo(f"Successfully assigned roles to {users_created} default users.")
 
         # Create Default Fuel Trucks
-        print("Creating Default Fuel Trucks...")
+        click.echo("Creating default fuel trucks...")
         trucks_created = 0
         for truck_data in default_fuel_trucks:
             if not FuelTruck.query.filter_by(truck_number=truck_data['truck_number']).first():
@@ -248,16 +311,16 @@ def seed_data():
                 db.session.add(truck)
                 trucks_created += 1
                 status = "active" if truck_data['is_active'] else "inactive"
-                print(f"Default Fuel Truck '{truck_data['truck_number']}' ({truck_data['fuel_type']}, {truck_data['capacity']}L, {status}) created.")
+                click.echo(f"Default Fuel Truck '{truck_data['truck_number']}' ({truck_data['fuel_type']}, {truck_data['capacity']}L, {status}) created.")
             else:
-                print(f"Fuel Truck '{truck_data['truck_number']}' already exists.")
+                click.echo(f"Fuel Truck '{truck_data['truck_number']}' already exists.")
 
         if trucks_created > 0:
             db.session.commit()
-            print(f"Successfully created {trucks_created} default fuel trucks.")
+            click.echo(f"Successfully created {trucks_created} default fuel trucks.")
 
         # Create Default Aircraft Types
-        print("Creating Default Aircraft Types...")
+        click.echo("Creating default aircraft types...")
         aircraft_types_created = 0
         for aircraft_type_data in default_aircraft_types:
             existing_type = AircraftType.query.filter_by(name=aircraft_type_data['name']).first()
@@ -268,17 +331,113 @@ def seed_data():
                 )
                 db.session.add(aircraft_type)
                 aircraft_types_created += 1
-                print(f"Default Aircraft Type '{aircraft_type_data['name']}' created.")
+                click.echo(f"Default Aircraft Type '{aircraft_type_data['name']}' created.")
             else:
-                print(f"Aircraft Type '{aircraft_type_data['name']}' already exists.")
+                click.echo(f"Aircraft Type '{aircraft_type_data['name']}' already exists.")
 
         if aircraft_types_created > 0:
             db.session.commit()
-            print(f"Successfully created {aircraft_types_created} default aircraft types.")
+            click.echo(f"Successfully created {aircraft_types_created} default aircraft types.")
 
-        print("Database seeding completed successfully.")
-        print("Next step: Run 'flask create-permission-groups run' to configure permission groups and role assignments.")
+        # Create Default Fuel Types
+        click.echo("Creating default fuel types...")
+        fuel_types_created = 0
+        for fuel_type_data in default_fuel_types:
+            existing_fuel_type = FuelType.query.filter_by(name=fuel_type_data['name']).first()
+            if not existing_fuel_type:
+                fuel_type = FuelType(
+                    name=fuel_type_data['name'],
+                    code=fuel_type_data['code'],
+                    description=fuel_type_data['description'],
+                    is_active=fuel_type_data['is_active']
+                )
+                db.session.add(fuel_type)
+                fuel_types_created += 1
+                click.echo(f"Default Fuel Type '{fuel_type_data['name']}' created.")
+            else:
+                click.echo(f"Fuel Type '{fuel_type_data['name']}' already exists.")
+
+        if fuel_types_created > 0:
+            db.session.commit()
+            click.echo(f"Successfully created {fuel_types_created} default fuel types.")
+
+        # Seed Default Fee Categories, Rules, and Mappings for FBO 1
+        click.echo("Seeding default fee setup for FBO 1...")
+        try:
+            fbo_id = 1
+            # 1. Get/Create Default Fee Category
+            default_category = FeeCategory.query.filter_by(name="Default Aircraft Category", fbo_location_id=fbo_id).first()
+            if not default_category:
+                default_category = FeeCategory(name="Default Aircraft Category", fbo_location_id=fbo_id)
+                db.session.add(default_category)
+                db.session.flush()
+
+                # 2. Create Default Primary Fee Rules
+                default_rules = [
+                    {'fee_name': 'Hangar Overnight', 'fee_code': 'HGR-OVN', 'amount': 0.00, 'is_primary_fee': True},
+                    {'fee_name': 'Overnight', 'fee_code': 'OVN', 'amount': 0.00, 'is_primary_fee': True},
+                    {'fee_name': 'Ramp', 'fee_code': 'RAMP', 'amount': 0.00, 'is_primary_fee': True},
+                ]
+
+                rules_created = 0
+                for rule_data in default_rules:
+                    new_rule = FeeRule(
+                        fbo_location_id=fbo_id,
+                        applies_to_fee_category_id=default_category.id,
+                        fee_name=rule_data['fee_name'],
+                        fee_code=rule_data['fee_code'],
+                        amount=rule_data['amount'],
+                        is_primary_fee=rule_data['is_primary_fee']
+                    )
+                    db.session.add(new_rule)
+                    rules_created += 1
+                click.echo(f"Created 'Default Aircraft Category' and {rules_created} primary fee rules for FBO {fbo_id}.")
+
+                # 3. Create Mappings for all existing AircraftTypes to the Default Category
+                all_aircraft_types = AircraftType.query.all()
+                mappings_created = 0
+                for aircraft_type in all_aircraft_types:
+                    existing_mapping = AircraftTypeToFeeCategoryMapping.query.filter_by(
+                        fbo_location_id=fbo_id,
+                        aircraft_type_id=aircraft_type.id
+                    ).first()
+                    if not existing_mapping:
+                        mapping = AircraftTypeToFeeCategoryMapping(
+                            fbo_location_id=fbo_id,
+                            aircraft_type_id=aircraft_type.id,
+                            fee_category_id=default_category.id
+                        )
+                        db.session.add(mapping)
+                        mappings_created += 1
+
+                    # --- START: ADD THIS BLOCK ---
+                    # Also create the FBOAircraftTypeConfig to store the min fuel value,
+                    # making seeded data consistent with manually added data.
+                    fbo_config = FBOAircraftTypeConfig.query.filter_by(
+                        fbo_location_id=fbo_id,
+                        aircraft_type_id=aircraft_type.id
+                    ).first()
+                    if not fbo_config:
+                        # Use the default value from the aircraft type as the initial FBO-specific value
+                        config = FBOAircraftTypeConfig(
+                            fbo_location_id=fbo_id,
+                            aircraft_type_id=aircraft_type.id,
+                            base_min_fuel_gallons_for_waiver=aircraft_type.base_min_fuel_gallons_for_waiver
+                        )
+                        db.session.add(config)
+                    # --- END: ADD THIS BLOCK ---
+
+                click.echo(f"Created {mappings_created} mappings to 'Default Aircraft Category'.")
+            else:
+                click.echo(f"Default fee setup for FBO {fbo_id} already exists, skipping.")
+        except Exception as e:
+            db.session.rollback()
+            click.echo(f"Error seeding fee setup: {e}")
+
+        # Commit all changes
+        db.session.commit()
+        click.echo("Database seeding complete!")
     except Exception as e:
         db.session.rollback()
-        print(f"An error occurred during seeding: {str(e)}")
+        click.echo(f"An error occurred during seeding: {str(e)}")
         raise
