@@ -8,7 +8,7 @@ class FeeCategory(db.Model):
     
     __tablename__ = 'fee_categories'
     __table_args__ = (
-        db.UniqueConstraint('fbo_location_id', 'name', name='uq_fee_category_fbo_name'),
+        db.UniqueConstraint('fbo_location_id', 'name', name='_fbo_classification_name_uc'),
     )
 
     id = db.Column(db.Integer, primary_key=True)

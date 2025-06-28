@@ -8,7 +8,7 @@ export default function AdminAircraftPage() {
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">✈️ Aircraft Management</h1>
+        <h1 className="text-3xl font-bold">Aircraft Management</h1>
       </div>
       <div className="text-muted-foreground">
         Manage individual aircraft instances and the master list of aircraft types.

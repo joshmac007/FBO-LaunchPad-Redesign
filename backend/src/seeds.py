@@ -212,22 +212,69 @@ def seed_data():
 
         # Seed Permissions
         click.echo("Seeding permissions...")
-        # Ensure all_permissions uses snake_case
-        for p_def in all_permissions:
-            if not p_def['name'].islower() or '_' not in p_def['name']:
-                click.echo(f"Warning: Permission name '{p_def['name']}' might not be snake_case.")
+        
+        # --- START: REVISED IDEMPOTENT LOGIC ---
+        # Get all permission names that already exist in the database.
+        existing_permissions_query = db.session.query(Permission.name).all()
+        existing_permissions = {name for (name,) in existing_permissions_query}
+        
+        permissions_to_add = []
+        
+        # Create a set of names from the definitions to check for duplicates within the list itself
+        defined_permission_names = set()
 
-        permission_objects = [Permission(name=p['name'], description=p.get('description')) for p in all_permissions]
-        db.session.bulk_save_objects(permission_objects)
+        for p_def in all_permissions:
+            perm_name = p_def['name']
+            
+            # Internal check for duplicates in the all_permissions list
+            if perm_name in defined_permission_names:
+                click.echo(f"Warning: Duplicate permission name '{perm_name}' found in definitions. Skipping.")
+                continue
+            defined_permission_names.add(perm_name)
+
+            # Check if the permission already exists in the database
+            if perm_name not in existing_permissions:
+                permissions_to_add.append(
+                    Permission(name=perm_name, description=p_def.get('description'))
+                )
+        
+        if permissions_to_add:
+            db.session.bulk_save_objects(permissions_to_add)
+            click.echo(f"Seeded {len(permissions_to_add)} new permissions.")
+        else:
+            click.echo("All permissions already exist in the database. No new permissions were added.")
+        # --- END: REVISED IDEMPOTENT LOGIC ---
+
+        # Commit the changes before proceeding
         db.session.commit()
-        click.echo(f"Seeded {len(permission_objects)} permissions.")
 
         # Seed Roles
         click.echo("Seeding roles...")
-        role_objects = [Role(name=r['name'], description=r.get('description')) for r in default_roles]
-        db.session.add_all(role_objects)
+        
+        # Get all role names that already exist in the database
+        existing_roles_query = db.session.query(Role.name).all()
+        existing_roles = {name for (name,) in existing_roles_query}
+        
+        roles_to_add = []
+        
+        for role_def in default_roles:
+            role_name = role_def['name']
+            
+            # Check if the role already exists in the database
+            if role_name not in existing_roles:
+                roles_to_add.append(
+                    Role(name=role_name, description=role_def.get('description'))
+                )
+        
+        if roles_to_add:
+            db.session.add_all(roles_to_add)
+            db.session.commit()
+            click.echo(f"Seeded {len(roles_to_add)} new roles.")
+        else:
+            click.echo("All roles already exist in the database. No new roles were added.")
+        
+        # Commit the changes before proceeding
         db.session.commit()
-        click.echo(f"Seeded {len(role_objects)} roles.")
 
         # --- Role-Permission Assignment Section Removed ---
         # Direct role-permission assignments have been removed.
@@ -374,7 +421,7 @@ def seed_data():
 
                 # 2. Create Default Primary Fee Rules
                 default_rules = [
-                    {'fee_name': 'Hangar Overnight', 'fee_code': 'HGR-OVN', 'amount': 0.00, 'is_primary_fee': True},
+                    {'fee_name': 'Hangar O/N', 'fee_code': 'HGR-OVN', 'amount': 0.00, 'is_primary_fee': True},
                     {'fee_name': 'Overnight', 'fee_code': 'OVN', 'amount': 0.00, 'is_primary_fee': True},
                     {'fee_name': 'Ramp', 'fee_code': 'RAMP', 'amount': 0.00, 'is_primary_fee': True},
                 ]

@@ -506,6 +506,15 @@ export const uploadFeeOverridesCSV = async (fboId: number, file: File): Promise<
   return handleApiResponse(response);
 };
 
+export const deleteAircraftMapping = async (fboId: number, mappingId: number): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/aircraft-type-mappings/${mappingId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  
+  return handleApiResponse<void>(response);
+};
+
 export const addAircraftToFeeSchedule = async (fboId: number, data: AddAircraftToFeeScheduleRequest): Promise<any> => {
   const response = await fetch(
     `${API_BASE_URL}/admin/fbo/${fboId}/aircraft-fee-setup`,
@@ -565,6 +574,7 @@ export const AdminFeeConfigService = {
   // Aircraft Mappings
   getAircraftMappings,
   uploadAircraftMappings,
+  deleteAircraftMapping,
   
   // Waiver Tiers
   getWaiverTiers,

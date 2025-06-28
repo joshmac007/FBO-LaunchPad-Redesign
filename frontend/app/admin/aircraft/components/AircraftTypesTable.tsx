@@ -384,7 +384,7 @@ export default function AircraftTypesTable() {
             {aircraftTypes.map((aircraftType) => (
               <TableRow key={aircraftType.id}>
                 <TableCell className="font-medium">{aircraftType.name}</TableCell>
-                <TableCell>{aircraftType.base_min_fuel_gallons_for_waiver.toFixed(2)}</TableCell>
+                <TableCell>{Math.round(aircraftType.base_min_fuel_gallons_for_waiver)}</TableCell>
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

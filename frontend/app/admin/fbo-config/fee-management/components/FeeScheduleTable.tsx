@@ -28,6 +28,7 @@ import {
   deleteFeeRuleOverride,
   updateMinFuelForAircraft,
   getConsolidatedFeeSchedule,
+  deleteAircraftMapping,
 } from "@/app/services/admin-fee-config-service"
 import React from "react"
 
@@ -81,51 +82,23 @@ export function FeeScheduleTable({
 
   // Transform and group data for table consumption
   const groupedData = useMemo(() => {
-    console.log('Raw data from API:', data)
-    console.log('Primary fee rules passed to component:', primaryFeeRules)
-    
-    if (!data || !data.mappings || !data.categories) return []
+    if (!data || !data.mappings || !data.categories) {
+      return {}
+    }
     
     const aircraftData: AircraftRowData[] = []
 
-    data.mappings.forEach((mapping) => {
+    data.mappings.forEach((mapping, index) => {
       const minFuelConfig = data.fbo_aircraft_config?.find(
         config => config.aircraft_type_id === mapping.aircraft_type_id
       )
 
-      const fees: Record<string, {
-        fee_rule_id: number
-        inherited_value: number
-        override_value?: number
-        caa_inherited_value?: number
-        caa_override_value?: number
-        is_override: boolean
-        is_caa_override: boolean
-      }> = {}
-      
-      const categoryRules = primaryFeeRules?.filter(
+      // Get fee category rules for this mapping's category
+      const categoryRules = data.rules.filter(
         rule => rule.applies_to_fee_category_id === mapping.fee_category_id
-      ) || []
+      )
 
-      console.log(`Aircraft ${mapping.aircraft_type_name}: categoryRules =`, categoryRules)
-
-      categoryRules.forEach((rule) => {
-        const override = data.overrides?.find(
-          o => o.aircraft_type_id === mapping.aircraft_type_id && o.fee_rule_id === rule.id
-        )
-
-        fees[rule.fee_code] = {
-          fee_rule_id: rule.id,
-          inherited_value: rule.amount,
-          override_value: override?.override_amount,
-          caa_inherited_value: rule.caa_override_amount,
-          caa_override_value: override?.override_caa_amount,
-          is_override: override?.override_amount !== undefined,
-          is_caa_override: override?.override_caa_amount !== undefined,
-        }
-      })
-
-      aircraftData.push({
+      const aircraftRow: AircraftRowData = {
         aircraft_type_id: mapping.aircraft_type_id,
         aircraft_type_name: mapping.aircraft_type_name,
         fee_category_id: mapping.fee_category_id,
@@ -133,32 +106,41 @@ export function FeeScheduleTable({
         min_fuel_gallons: minFuelConfig?.base_min_fuel_gallons_for_waiver 
           ? parseFloat(minFuelConfig.base_min_fuel_gallons_for_waiver.toString()) 
           : null,
-        fees
-      })
-    })
-    
-    console.log('Transformed aircraft data:', aircraftData)
-    
-    // Group the data by classification (fee category)
-    // Start with all categories, even if they have no aircraft
-    const groups: { [key: string]: AircraftRowData[] } = {}
-    
-    // Initialize groups for all categories
-    data.categories.forEach(category => {
-      groups[category.name] = []
-    })
-    
-    // Add aircraft data to their respective groups
-    aircraftData.forEach(row => {
-      const key = row.fee_category_name
-      if (groups[key]) {
-        groups[key].push(row)
+        fees: {}
       }
+
+      // Build fees object for this aircraft
+      categoryRules.forEach(rule => {
+        const override = data.overrides?.find(
+          o => o.aircraft_type_id === mapping.aircraft_type_id && o.fee_rule_id === rule.id
+        )
+
+        const feeData = {
+          fee_rule_id: rule.id,
+          inherited_value: typeof rule.amount === 'string' ? parseFloat(rule.amount) : rule.amount,
+          override_value: override?.override_amount ? (typeof override.override_amount === 'string' ? parseFloat(override.override_amount) : override.override_amount) : undefined,
+          caa_inherited_value: rule.caa_override_amount ? (typeof rule.caa_override_amount === 'string' ? parseFloat(rule.caa_override_amount) : rule.caa_override_amount) : undefined,
+          caa_override_value: override?.override_caa_amount ? (typeof override.override_caa_amount === 'string' ? parseFloat(override.override_caa_amount) : override.override_caa_amount) : undefined,
+          is_override: !!override?.override_amount,
+          is_caa_override: !!override?.override_caa_amount
+        }
+        
+        aircraftRow.fees[rule.fee_code] = feeData
+      })
+
+      aircraftData.push(aircraftRow)
     })
-    
-    console.log('Final grouped data:', groups)
-    return groups
-  }, [data, primaryFeeRules])
+
+    // Group by fee category name
+    return aircraftData.reduce((acc, aircraft) => {
+      const categoryName = aircraft.fee_category_name
+      if (!acc[categoryName]) {
+        acc[categoryName] = []
+      }
+      acc[categoryName].push(aircraft)
+      return acc
+    }, {} as { [key: string]: AircraftRowData[] })
+  }, [data])
 
   // Mutations for optimistic updates
   const upsertOverrideMutation = useMutation({
@@ -231,12 +213,25 @@ export function FeeScheduleTable({
     },
   });
 
+  const deleteAircraftMappingMutation = useMutation({
+    mutationFn: (mappingId: number) => deleteAircraftMapping(fboId, mappingId),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
+      toast.error("Failed to remove aircraft from fee schedule")
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
+      toast.success("Aircraft removed from fee schedule successfully")
+    }
+  });
+
   // Get unique fee codes for columns (from passed primary fee rules)
   const feeColumns = useMemo(() => {
     const feeCodesSet = new Set<string>()
     primaryFeeRules.forEach(rule => feeCodesSet.add(rule.fee_code))
-    console.log('Primary fee rules:', primaryFeeRules)
-    console.log('Fee columns will be:', Array.from(feeCodesSet))
     return Array.from(feeCodesSet).sort()
   }, [primaryFeeRules])
 
@@ -247,13 +242,8 @@ export function FeeScheduleTable({
     const baseColumns = [
       columnHelper.accessor('aircraft_type_name', {
         header: 'Aircraft Type',
-        cell: ({ getValue, row }) => (
-          <div className="flex flex-col">
-            <span className="font-medium">{getValue()}</span>
-            <Badge variant="outline" className="text-xs w-fit">
-              {row.original.fee_category_name}
-            </Badge>
-          </div>
+        cell: ({ getValue }) => (
+          <span className="font-medium">{getValue()}</span>
         ),
       }),
       columnHelper.accessor('min_fuel_gallons', {
@@ -272,10 +262,14 @@ export function FeeScheduleTable({
       }),
     ]
 
-    const feeColumnDefinitions = feeColumns.map(feeCode => 
-      columnHelper.display({
+    const feeColumnDefinitions = feeColumns.map(feeCode => {
+      // Find the corresponding fee rule to get the fee name
+      const feeRule = primaryFeeRules.find(rule => rule.fee_code === feeCode)
+      const headerName = feeRule ? feeRule.fee_name : feeCode.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      
+      return columnHelper.display({
         id: feeCode,
-        header: feeCode.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        header: headerName,
         cell: ({ row }) => {
           const feeData = row.original.fees[feeCode]
           if (!feeData) return <span className="text-muted-foreground">N/A</span>
@@ -308,28 +302,47 @@ export function FeeScheduleTable({
           )
         },
       })
-    )
+    })
     
     const actionColumn = columnHelper.display({
       id: 'actions',
       header: 'Actions',
-      cell: ({ row }) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0"
-          onClick={() => {
-            // Handle delete aircraft
-            console.log('Delete aircraft:', row.original.aircraft_type_id)
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      ),
+      cell: ({ row }) => {
+        const handleDeleteAircraft = () => {
+          // Find the mapping ID for this aircraft
+          const mapping = data?.mappings.find(
+            m => m.aircraft_type_id === row.original.aircraft_type_id
+          )
+          
+          if (!mapping) {
+            toast.error("Could not find mapping for this aircraft")
+            return
+          }
+
+          // Confirm deletion
+          if (window.confirm(
+            `Are you sure you want to remove "${row.original.aircraft_type_name}" from the fee schedule?`
+          )) {
+            deleteAircraftMappingMutation.mutate(mapping.id)
+          }
+        }
+
+        return (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={handleDeleteAircraft}
+            disabled={deleteAircraftMappingMutation.isPending}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )
+      },
     })
 
     return [...baseColumns, ...feeColumnDefinitions, actionColumn]
-  }, [data, feeColumns, viewMode, upsertOverrideMutation, deleteOverrideMutation, updateMinFuelMutation])
+  }, [data, feeColumns, viewMode, upsertOverrideMutation, deleteOverrideMutation, updateMinFuelMutation, deleteAircraftMappingMutation])
 
   const table = useReactTable({
     data: [],  // We'll handle rendering differently for grouped data
@@ -481,15 +494,42 @@ export function FeeScheduleTable({
                     />
                   )}
                   {filteredRows.map((row, index) => (
-                    <TableRow key={`${categoryName}-${index}`}>
-                      {columns.map((column) => (
-                        <TableCell key={`${categoryName}-${index}-${column.id}`}>
-                          {column.id && typeof column.cell === 'function' 
-                            ? column.cell({ row: { original: row }, getValue: () => (row as any)[column.id as keyof typeof row] } as any)
-                            : (row as any)[column.id as keyof typeof row]
+                    <TableRow key={`${categoryName}-${row.aircraft_type_id || `empty-${index}`}`}>
+                      {columns.map((column, columnIndex) => {
+                        const columnId = column.id || `column-${columnIndex}`
+                        let cellContent = null
+
+                        // Handle different column types
+                        if (column.cell && typeof column.cell === 'function') {
+                          // For display columns and columns with custom cell renderers
+                          const cellContext = {
+                            getValue: () => {
+                              // For accessor columns, use the exact accessor key
+                              const accessorKey = (column as any).accessorKey
+                              if (accessorKey) {
+                                return (row as any)[accessorKey as keyof typeof row]
+                              }
+                              // For display columns, use the column id
+                              return (row as any)[columnId as keyof typeof row]
+                            },
+                            row: { original: row },
+                            column: { columnDef: column },
+                            table: table,
                           }
-                        </TableCell>
-                      ))}
+                          cellContent = column.cell(cellContext as any)
+                        } else {
+                          // For accessor columns without custom cell renderer
+                          const accessorKey = (column as any).accessorKey
+                          const valueKey = accessorKey || columnId
+                          cellContent = (row as any)[valueKey as keyof typeof row]
+                        }
+
+                        return (
+                          <TableCell key={`${categoryName}-${row.aircraft_type_id || `empty-${index}`}-${columnId}`}>
+                            {cellContent}
+                          </TableCell>
+                        )
+                      })}
                     </TableRow>
                   ))}
                 </React.Fragment>

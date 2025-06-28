@@ -22,9 +22,7 @@ def upgrade():
     op.execute("ALTER TYPE fuelorderpriority ADD VALUE IF NOT EXISTS 'HIGH'")
     op.execute("ALTER TYPE fuelorderpriority ADD VALUE IF NOT EXISTS 'LOW'")
     
-    # Manually commit the transaction to make new enum values available
-    bind = op.get_bind()
-    bind.commit()
+    # Note: Alembic handles transaction management, no manual commit needed
 
     # --- From migration 59eff068d8af ---
     op.add_column('fuel_orders', sa.Column('service_type', sa.String(length=50), nullable=False, server_default='Full Service'))

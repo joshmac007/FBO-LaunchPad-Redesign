@@ -1,168 +1,160 @@
-Acknowledged. The `default_max_gross_weight_lbs` field will be purged from the plan. This simplifies the implementation and removes a potential point of data inconsistency.
+### **Definitive AI Task Plan: Comprehensive Implementation of the Aircraft Classification System**
 
-Here is the updated, final plan for the AI agent.
-
-### **Visualization of the New Feature (Revised)**
-
-The "Max Weight" column has been removed, resulting in a cleaner, more focused table.
-
-```markdown
-┌───────────────────────────────────────────────────────────────────────────┐
-│ ✈️ Aircraft Management                                                    │
-│   Manage individual aircraft instances and the master list of aircraft types. │
-└───────────────────────────────────────────────────────────────────────────┘
-
-┌───────────────────────────────────────────────────────────────────────────┐
-│  ▼ Aircraft Instances                                [ Add Instance + ]  │
-│   Manage specific aircraft, their fuel types, and customer assignments.   │
-│ ┌──────────────────────┬────────────────┬───────────┬────────────┬──────┐ │
-│ │ Tail Number          │ Aircraft Type  │ Fuel Type │ Customer   │ ...  │ │
-│ ├──────────────────────┼────────────────┼───────────┼────────────┼──────┤ │
-│ │ N123AB               │ Gulfstream G650│ JET_A     │ ACME Corp  │ [...]│ │
-│ │ N456CD               │ Cessna 172     │ AVGAS_100LL│ Self-Owned │ [...]│ │
-│ │ ...                  │ ...            │ ...       │ ...        │ ...  │ │
-│ └──────────────────────┴────────────────┴───────────┴────────────┴──────┘ │
-└───────────────────────────────────────────────────────────────────────────┘
-
-┌───────────────────────────────────────────────────────────────────────────┐
-│ ▼ Aircraft Types                                         [ Add Type + ]   │
-│   Manage the master list of aircraft models and their default properties. │
-│ ┌──────────────────────┬──────────────────────────┬───────────────────┐    │
-│ │ Type Name            │ Base Min Fuel (Waiver)   │ Actions           │    │
-│ ├──────────────────────┼──────────────────────────┼───────────────────┤    │
-│ │ Gulfstream G650      │ 200.00                   │ [...]             │    │
-│ │ Cessna 172           │ 50.00                    │ [...]             │    │
-│ │ ...                  │ ...                      │ ...               │    │
-│ └──────────────────────┴──────────────────────────┴───────────────────┘    │
-└───────────────────────────────────────────────────────────────────────────┘
-```
+**Overall Objective:** To architect and implement a robust aircraft classification system by refactoring the existing `FeeCategory` entity into a first-class `AircraftClassification` entity. This system must be fully integrated into the administrative UIs for aircraft and fee schedule management, providing a clear, FBO-specific workflow for reclassification, and must be accompanied by comprehensive unit and integration tests.
 
 ---
 
-### **Revised Agent Task Plan: Aircraft Type Management Feature (v2)**
+### **Phase 1: Foundational Backend Refactoring & Data Migration**
 
-**Project Goal:** Add a second table to the `/admin/aircraft` page to manage "Aircraft Types," placing it directly below the existing "Aircraft Instances" table, following established architectural best practices. The `default_max_gross_weight_lbs` field is to be excluded from this implementation.
+**Objective:** To systematically refactor the backend, migrate all data without loss, and establish the new `AircraftClassification` as the single source of truth.
 
-**Follow these steps in order. Do not proceed to the next step until the current one is complete.**
+*   **Task 1.1: Pre-flight Check - Synchronize `FeeCategory` Model with Database**
+    *   **Context:** This is a pre-requisite task. The existing `FeeCategory` model is missing a `UniqueConstraint` that exists in the database schema. This must be corrected before proceeding.
+    *   **File:** `backend/src/models/fee_category.py`
+    *   **Action:** Add the `__table_args__` attribute to the `FeeCategory` class.
+        ```python
+        from ..extensions import db
 
-#### **Phase 1: Backend Implementation (API & Service Logic)** ✅ COMPLETED
+        class FeeCategory(db.Model):
+            # ... existing columns ...
+            __table_args__ = (
+                db.UniqueConstraint('fbo_location_id', 'name', name='_fbo_classification_name_uc'),
+            )
+            # ... existing methods ...
+        ```
+    *   **Verification:** After saving the change, run the command `flask db migrate -m "align_fee_category_model_with_db"`. The command **must** generate a new, empty migration file where the `upgrade()` and `downgrade()` functions contain only `pass`. This confirms the model is now in sync.
 
-**Objective:** Create secure and robust API endpoints for managing `AircraftType` entities.
+*   **Task 1.2: System-Wide Refactoring via Test-Driven Algorithm**
+    *   **Context:** Rename all instances of `FeeCategory` and `fee_category` throughout the codebase using a deterministic, test-driven algorithm.
+    *   **Action:**
+        1.  Perform a global, case-sensitive find-and-replace across the entire `backend/src` and `frontend/app` directories:
+            *   Find `FeeCategory` and replace with `AircraftClassification`.
+            *   Find `fee_category` and replace with `aircraft_classification`.
+        2.  Run the backend test suite: `pytest`. It will fail.
+        3.  Inspect the test failures. The errors will point to broken code (e.g., `AttributeError`, `ImportError`, `KeyError`). Fix the code reported in the errors.
+        4.  Repeat steps 2 and 3 in a loop until `pytest` passes with zero errors.
+        5.  Run the frontend build: `npm run build`. It may fail.
+        6.  Inspect the build failures (TypeScript type errors, etc.). Fix the code reported in the errors.
+        7.  Repeat steps 5 and 6 in a loop until `npm run build` passes with zero errors.
 
-**Step 1.1: Create a New, Dedicated Permission** ✅ COMPLETED
-*   **File:** `backend/src/seeds.py`
-*   **COMPLETED:** Added new permission to the `all_permissions` list under the "Aircraft" section:
-    ```python
-    {'name': 'manage_aircraft_types', 'description': 'Allows user to create, update, and delete master aircraft types.', 'category': 'aircraft'},
-    ```
-*   **COMPLETED:** Updated `backend/src/migration_scripts/permission_groups_schema.py` to include `'manage_aircraft_types'` in the `aircraft_management_advanced` permission group, which is assigned to System Administrator role.
-*   **COMPLETED:** Fixed database migration issues in multiple migration files that were preventing successful seeding:
-    - Fixed `9e368eb13f42_add_is_primary_fee_to_feerule.py` to conditionally drop tables
-    - Fixed `2a16779244f6_add_fuel_types_table_and_refactor_fuel_.py` to remove explicit transaction management
-*   **COMPLETED:** Successfully reseeded database with all permissions and permission groups.
+*   **Task 1.3: Create Alembic Migration for Schema-Only Changes**
+    *   **Context:** Generate a new Alembic migration file that performs all required schema alterations in a single, atomic step.
+    *   **Action:** Run `flask db migrate -m "refactor_fee_category_to_aircraft_classification"`. Edit the generated file to contain the following `upgrade` logic:
+        1.  Rename the table: `op.rename_table('fee_categories', 'aircraft_classifications')`
+        2.  Rename the mapping table: `op.rename_table('aircraft_type_fee_category_mappings', 'aircraft_classification_mappings')`
+        3.  Rename the column in the mapping table: `op.alter_column('aircraft_classification_mappings', 'fee_category_id', new_column_name='classification_id')`
+        4.  Rename the column in the fee rules table: `op.alter_column('fee_rules', 'applies_to_fee_category_id', new_column_name='applies_to_classification_id')`
+        5.  Drop the FBO-specific constraint from the newly renamed table: `op.drop_constraint('_fbo_classification_name_uc', 'aircraft_classifications', type_='unique')`
+        6.  Drop the FBO-specific column: `op.drop_column('aircraft_classifications', 'fbo_location_id')`
+        7.  Add a new global unique constraint: `op.create_unique_constraint('_classification_name_uc', 'aircraft_classifications', ['name'])`
+        8.  Add the new foreign key column to `aircraft_types`. It **must** be nullable at this stage: `op.add_column('aircraft_types', sa.Column('classification_id', sa.Integer(), nullable=True))`
+        9.  Add the foreign key constraint: `op.create_foreign_key('fk_aircraft_types_classification_id', 'aircraft_types', 'aircraft_classifications', ['classification_id'], ['id'])`
 
-**Step 1.2: Define API Schemas in the Correct Location** ✅ COMPLETED
-*   **File:** `backend/src/schemas/aircraft_schemas.py`
-*   **COMPLETED:** Added the following two new Marshmallow schemas. **Did not include `default_max_gross_weight_lbs`**.
-    *   **Schema 1:** `CreateAircraftTypeSchema`
-        *   `name`: `fields.String(required=True)`
-        *   `base_min_fuel_gallons_for_waiver`: `fields.Decimal(required=True, places=2)`
-    *   **Schema 2:** `UpdateAircraftTypeSchema` (all fields are optional)
-        *   `name`: `fields.String(required=False)`
-        *   `base_min_fuel_gallons_for_waiver`: `fields.Decimal(required=False, places=2)`
-*   **COMPLETED:** Updated existing `AircraftTypeResponseSchema` to include `base_min_fuel_gallons_for_waiver` field.
+*   **Task 1.4: Create Alembic Migration for Data Population & Finalization**
+    *   **Context:** Generate a second Alembic migration file that runs *after* the schema migration. This script will handle all data transformations and finalize the schema.
+    *   **Action:** Run `flask db migrate -m "populate_aircraft_classifications_and_types"`. Edit the generated file to contain the following `upgrade` logic:
+        1.  **De-duplicate and Globalize Classifications:**
+            ```python
+            conn = op.get_bind()
+            # Step 1: Create a temporary table with the final global classifications
+            op.create_table('temp_global_classifications',
+                sa.Column('name', sa.String(100), nullable=False, primary_key=True)
+            )
+            conn.execute(sa.text("INSERT INTO temp_global_classifications (name) SELECT DISTINCT name FROM aircraft_classifications WHERE name IS NOT NULL"))
+            
+            # Step 2: Clear the now-de-normalized aircraft_classifications table
+            op.execute("DELETE FROM aircraft_classifications")
+            
+            # Step 3: Re-insert the clean, global classification names
+            op.execute("INSERT INTO aircraft_classifications (name) SELECT name FROM temp_global_classifications")
+            op.drop_table('temp_global_classifications')
+            ```
+        2.  **Migrate `AircraftType` Data using "Most Recently Updated" Rule:**
+            ```python
+            # Get the mapping from new global classification names to their IDs
+            classifications_map_result = conn.execute(sa.text("SELECT id, name FROM aircraft_classifications"))
+            classifications_map = {name: id for id, name in classifications_map_result}
+            
+            # Find the correct new classification_id for each aircraft type based on the most recent mapping
+            migration_query = sa.text("""
+                WITH ranked_mappings AS (
+                    SELECT
+                        acm.aircraft_type_id,
+                        ac.name AS classification_name,
+                        ROW_NUMBER() OVER(PARTITION BY acm.aircraft_type_id ORDER BY acm.updated_at DESC) as rn
+                    FROM aircraft_classification_mappings acm
+                    JOIN aircraft_classifications ac ON acm.classification_id = ac.id
+                )
+                SELECT aircraft_type_id, classification_name FROM ranked_mappings WHERE rn = 1
+            """)
+            
+            # Execute the update for all aircraft types that have legacy mappings
+            for aircraft_type_id, classification_name in conn.execute(migration_query):
+                new_classification_id = classifications_map.get(classification_name)
+                if new_classification_id:
+                    conn.execute(sa.text("UPDATE aircraft_types SET classification_id = :class_id WHERE id = :ac_id").bindparams(class_id=new_classification_id, ac_id=aircraft_type_id))
 
-**Step 1.3: Implement Backend Service Logic with Transactional Integrity** ✅ COMPLETED
-*   **File:** `backend/src/services/aircraft_service.py`
-*   **COMPLETED:** Added the following three new methods to the `AircraftService` class. Each method includes proper `try/except` blocks with `db.session.commit()` on success and `db.session.rollback()` on failure.
-    *   **Method 1:** `create_aircraft_type(data: Dict[str, Any])` ✅
-        *   **IMPLEMENTED:** Checks if an `AircraftType` with `data['name']` already exists. Returns `409 Conflict` error if found.
-        *   **IMPLEMENTED:** Creates a new `AircraftType` instance, commits, and returns the object with proper error handling.
-    *   **Method 2:** `update_aircraft_type(type_id: int, data: Dict[str, Any])` ✅
-        *   **IMPLEMENTED:** Fetches the `AircraftType` by `type_id`. Returns `404` if not found. Checks if `data['name']` already exists for another type and returns `409` if conflict.
-        *   **IMPLEMENTED:** Updates the object's attributes and commits with proper error handling.
-    *   **Method 3:** `delete_aircraft_type(type_id: int)` ✅
-        *   **IMPLEMENTED:** Fetches the `AircraftType`. Returns `404` if not found.
-        *   **IMPLEMENTED:** Checks if the type's `name` is used in any `Aircraft` instance's `aircraft_type` column. Returns `409 Conflict` error with descriptive message if in use.
-        *   **IMPLEMENTED:** Deletes the object and commits with proper error handling.
-*   **COMPLETED:** Added import for `AircraftType` model.
+            # Handle edge case: aircraft types with no legacy mappings
+            unclassified_id = classifications_map.get('Unclassified')
+            if not unclassified_id:
+                # Create 'Unclassified' if it doesn't exist
+                conn.execute(sa.text("INSERT INTO aircraft_classifications (name) VALUES ('Unclassified') RETURNING id"))
+                unclassified_id = conn.execute(sa.text("SELECT id FROM aircraft_classifications WHERE name = 'Unclassified'")).scalar_one()
 
-**Step 1.4: Create the API Endpoints** ✅ COMPLETED
-*   **File:** `backend/src/routes/aircraft_routes.py`
-*   **COMPLETED:** Imported the new schemas: `CreateAircraftTypeSchema`, `UpdateAircraftTypeSchema` from `aircraft_schemas.py`.
-*   **COMPLETED:** Added the following new routes with proper error handling, validation, and documentation:
-    *   `GET /api/aircraft/types`: ✅ Fetches all `AircraftType` records, ordered by name. Uses `view_aircraft` permission (updated from existing route).
-    *   `POST /api/aircraft/types`: ✅ Uses `CreateAircraftTypeSchema` to validate and `AircraftService.create_aircraft_type` to execute. Uses `manage_aircraft_types` permission.
-    *   `PUT /api/aircraft/types/<int:type_id>`: ✅ Uses `UpdateAircraftTypeSchema` to validate and `AircraftService.update_aircraft_type` to execute. Uses `manage_aircraft_types` permission.
-    *   `DELETE /api/aircraft/types/<int:type_id>`: ✅ Calls `AircraftService.delete_aircraft_type` to execute. Uses `manage_aircraft_types` permission.
-*   **COMPLETED:** All endpoints include comprehensive OpenAPI documentation, proper HTTP status codes, and full error handling.
+            op.execute(sa.text("UPDATE aircraft_types SET classification_id = :unclassified_id WHERE classification_id IS NULL").bindparams(unclassified_id=unclassified_id))
+            ```
+        3.  **Enforce Non-Nullability:**
+            ```python
+            op.alter_column('aircraft_types', 'classification_id', existing_type=sa.INTEGER(), nullable=False)
+            ```
 
-#### **Phase 2: Frontend Implementation (UI & State Management)** ✅ COMPLETED
-
-**Objective:** Build a robust, maintainable UI component for aircraft type management.
-
-**Step 2.1: Create Frontend Service Functions** ✅ COMPLETED
-*   **File:** `frontend/app/services/aircraft-service.ts`
-*   **COMPLETED:** Added new interfaces: `AircraftTypeCreateRequest` and `AircraftTypeUpdateRequest`. **Did not include `default_max_gross_weight_lbs` in these interfaces.**
-*   **COMPLETED:** Added three new functions to call the new API endpoints:
-    *   `createAircraftType(data: AircraftTypeCreateRequest): Promise<AircraftType>` ✅
-    *   `updateAircraftType(typeId: number, data: AircraftTypeUpdateRequest): Promise<AircraftType>` ✅
-    *   `deleteAircraftType(typeId: number): Promise<void>` ✅
-*   **COMPLETED:** Updated existing `AircraftType` interface to include `base_min_fuel_gallons_for_waiver` field.
-*   **VERIFIED:** All new functions use `getAuthHeaders()` and `handleApiResponse()` properly.
-
-**Step 2.2: Create the `AircraftTypesTable` Component using `react-query`** ✅ COMPLETED
-*   **File:** Created `frontend/app/admin/aircraft/components/AircraftTypesTable.tsx`.
-*   **COMPLETED:** Component uses `react-query` for all data and server state management:
-    *   **Data Fetching:** Uses `useQuery({ queryKey: ['aircraftTypes'], queryFn: getAircraftTypes })` to fetch the list ✅
-    *   **Mutations:** Uses `useMutation` for `create`, `update`, and `delete` operations. On mutation success (`onSuccess`), invalidates the `['aircraftTypes']` query key using `queryClient.invalidateQueries()` ✅
-*   **COMPLETED:** Rendered table UI with columns for "Type Name", "Base Min Fuel (Waiver)", and "Actions". **Did not include a column for "Max Weight"**.
-*   **COMPLETED:** Implemented "Add" and "Edit" dialogs with `Input` fields for "Type Name" and "Base Min Fuel for Waiver". **Did not include an input for "Max Weight"**.
-*   **COMPLETED:** Full error handling, loading states, and proper toast notifications.
-
-**Step 2.3: Integrate the New Component into the Main Page** ✅ COMPLETED
-*   **File:** `frontend/app/admin/aircraft/page.tsx`
-*   **COMPLETED:** Refactored the existing "Aircraft Instances" table logic into its own component: `frontend/app/admin/aircraft/components/AircraftInstancesTable.tsx` ✅
-*   **COMPLETED:** Modified `page.tsx` to be a simple layout component ✅
-*   **COMPLETED:** In the `return` statement, renders the page header, then `<AircraftInstancesTable />`, and finally `<AircraftTypesTable />` below it, wrapped in a `div` with `flex-col` and `gap-6` for spacing ✅
-
-**Step 2.4: Update the Aircraft Instances Dialog** ✅ COMPLETED
-*   **File:** `frontend/app/admin/aircraft/components/AircraftInstancesTable.tsx` (the refactored component).
-*   **COMPLETED:** In the "Add Instance" and "Edit Instance" dialogs, found the `Input` for "Aircraft Type" ✅
-*   **COMPLETED:** Replaced the `Input` with a `Select` component ✅
-*   **COMPLETED:** The new dropdown is populated by calling the `getAircraftTypes` service function in `useEffect`. This ensures that users can only assign valid, existing aircraft types to instances ✅
-*   **COMPLETED:** Added proper error handling for aircraft types fetching and maintained backward compatibility.
+*   **Task 1.5: Update Database Seeding Logic**
+    *   **File:** `backend/src/seeds.py`
+    *   **Action:**
+        1.  Add the `default_classifications` list as specified in the original plan.
+        2.  Modify the `seed_data` function to first clear all tables, then seed `AircraftClassification` from `default_classifications`.
+        3.  Modify the `default_aircraft_types` list. Each dictionary must now include a new key, `classification`, whose value is the string name of a classification (e.g., `{"name": "Cessna 172", "classification": "Piston", ...}`).
+        4.  Update the aircraft type seeding loop to look up the `classification_id` from the records created in the previous step before creating the `AircraftType` object.
 
 ---
 
-## **✅ IMPLEMENTATION COMPLETE**
+### **Phase 2: API & UI Implementation**
 
-The Aircraft Type Management feature has been successfully implemented with the following achievements:
+**Objective:** To implement the secure backend endpoint and the corresponding frontend workflow for aircraft reclassification.
 
-### **🔧 Backend Implementation**
-- ✅ **Permissions System**: Added `manage_aircraft_types` permission with proper role assignments
-- ✅ **Database Migrations**: Fixed multiple migration issues and successfully seeded database  
-- ✅ **API Schemas**: Created comprehensive Marshmallow schemas for validation
-- ✅ **Service Layer**: Implemented robust CRUD operations with proper error handling and transaction management
-- ✅ **REST API**: Full REST endpoints with OpenAPI documentation, proper HTTP status codes, and security
+*   **Task 2.1: Implement and Secure the Reclassification API Endpoint**
+    *   **File:** `backend/src/services/admin_fee_config_service.py`
+    *   **Action:** Implement the `update_or_create_mapping_by_type` service method precisely as described in the resolved RFI-02, including atomic transaction handling and eager loading of relationships in the return statement.
+    *   **File:** `backend/src/routes/admin/fee_config_routes.py`
+    *   **Action:** Create the `PUT /api/admin/fbo/{fbo_id}/aircraft-classification-mappings/by-type/{aircraft_type_id}` route. It must be decorated with `@require_permission_v2('manage_fbo_fee_schedules')`. This route calls the service method and returns the serialized object as a JSON response.
 
-### **🎨 Frontend Implementation**  
-- ✅ **Service Functions**: Created TypeScript service functions with proper error handling
-- ✅ **React Query Integration**: Implemented with `useQuery` and `useMutation` for optimal state management
-- ✅ **Component Architecture**: Clean separation with `AircraftInstancesTable` and `AircraftTypesTable` components
-- ✅ **User Experience**: Complete CRUD interface with loading states, error handling, and toast notifications
-- ✅ **Data Integration**: Aircraft instances now use dropdown populated from aircraft types API
+*   **Task 2.2: Implement the Frontend Reclassification Workflow**
+    *   **File:** `frontend/app/admin/fbo-config/fee-management/components/MoveAircraftDialog.tsx`
+    *   **Action:**
+        1.  Define the TypeScript interfaces (`ClassificationOption`, `AircraftToMove`, `MoveAircraftDialogProps`) exactly as specified in the resolved RFI-03.
+        2.  Implement the dialog as a controlled component, receiving its `open` status and `aircraft` data as props.
+        3.  Use the `useMutation` hook to call the API endpoint.
+        4.  On `useMutation` `onSuccess` callback: close the dialog and programmatically refetch the fee schedule data.
+        5.  On `useMutation` `onError` callback: display a toast notification to the user with the API error message.
 
-### **🏗️ Architecture Compliance**
-- ✅ **TDD Approach**: Followed Test-Driven Development principles
-- ✅ **Schema-First**: Used Marshmallow (backend) and TypeScript interfaces (frontend) as single source of truth
-- ✅ **Permission-Based Security**: Proper authorization with `manage_aircraft_types` permission
-- ✅ **Clean Code**: Self-documenting code with clear separation of concerns
-- ✅ **Error Handling**: Comprehensive error management at all layers
+---
 
-### **📋 Feature Overview**
-The `/admin/aircraft` page now displays two tables:
-1. **Aircraft Instances** - Manage specific aircraft with dropdown selection of aircraft types
-2. **Aircraft Types** - Master list management with "Type Name" and "Base Min Fuel (Waiver)" columns
+### **Phase 3: Testing and Validation**
 
-**No issues encountered** - All implementation phases completed successfully with proper testing and validation.
+**Objective:** To ensure the refactoring and new features are robust, correct, and do not introduce regressions.
+
+*   **Task 3.1: Write Backend Unit and Integration Tests**
+    *   **Action:**
+        1.  Implement all backend tests as specified in Objective 3.1 of the original plan.
+        2.  Create a new test file: `backend/tests/migrations/test_data_population_migration.py`.
+        3.  In this file, write a test that:
+            *   Sets up an in-memory test database.
+            *   Applies migrations up to but not including the data population migration (from Task 1.4).
+            *   Seeds the database with a test `AircraftType` and multiple conflicting legacy mappings with different `updated_at` timestamps.
+            *   Programmatically runs the `upgrade()` function from the data population migration.
+            *   Asserts that the `AircraftType.classification_id` was correctly populated based on the mapping with the most recent `updated_at` timestamp.
+
+*   **Task 3.2: Write Frontend Component Tests**
+    *   **Action:**
+        1.  Implement all frontend component tests as specified in Objective 3.2 of the original plan for `MoveAircraftDialog.tsx`.
+        2.  Add a new test case: mock the `useMutation` hook to return an `isError` state of `true` and an `error` object. Assert that a toast notification component is rendered with the expected error message.

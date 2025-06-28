@@ -1,6 +1,13 @@
 import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config"
 
 // Aircraft Type interface for the types endpoint
+// Backend might return base_min_fuel_gallons_for_waiver as string or number
+interface BackendAircraftType {
+  id: number
+  name: string
+  base_min_fuel_gallons_for_waiver: number | string
+}
+
 export interface AircraftType {
   id: number
   name: string
@@ -242,7 +249,14 @@ export async function getAircraftTypes(): Promise<AircraftType[]> {
     method: "GET",
     headers: getAuthHeaders(),
   })
-  return await handleApiResponse<AircraftType[]>(response)
+  const data = await handleApiResponse<BackendAircraftType[]>(response)
+  // Ensure base_min_fuel_gallons_for_waiver is always a number
+  return data.map(type => ({
+    ...type,
+    base_min_fuel_gallons_for_waiver: typeof type.base_min_fuel_gallons_for_waiver === 'string' 
+      ? parseFloat(type.base_min_fuel_gallons_for_waiver) 
+      : type.base_min_fuel_gallons_for_waiver
+  }))
 }
 
 export async function createAircraftType(data: AircraftTypeCreateRequest): Promise<AircraftType> {
@@ -251,8 +265,13 @@ export async function createAircraftType(data: AircraftTypeCreateRequest): Promi
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   })
-  const result = await handleApiResponse<{ message: string; aircraft_type: AircraftType }>(response)
-  return result.aircraft_type
+  const result = await handleApiResponse<{ message: string; aircraft_type: BackendAircraftType }>(response)
+  return {
+    ...result.aircraft_type,
+    base_min_fuel_gallons_for_waiver: typeof result.aircraft_type.base_min_fuel_gallons_for_waiver === 'string' 
+      ? parseFloat(result.aircraft_type.base_min_fuel_gallons_for_waiver) 
+      : result.aircraft_type.base_min_fuel_gallons_for_waiver
+  }
 }
 
 export async function updateAircraftType(typeId: number, data: AircraftTypeUpdateRequest): Promise<AircraftType> {
@@ -261,8 +280,13 @@ export async function updateAircraftType(typeId: number, data: AircraftTypeUpdat
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   })
-  const result = await handleApiResponse<{ message: string; aircraft_type: AircraftType }>(response)
-  return result.aircraft_type
+  const result = await handleApiResponse<{ message: string; aircraft_type: BackendAircraftType }>(response)
+  return {
+    ...result.aircraft_type,
+    base_min_fuel_gallons_for_waiver: typeof result.aircraft_type.base_min_fuel_gallons_for_waiver === 'string' 
+      ? parseFloat(result.aircraft_type.base_min_fuel_gallons_for_waiver) 
+      : result.aircraft_type.base_min_fuel_gallons_for_waiver
+  }
 }
 
 export async function deleteAircraftType(typeId: number): Promise<void> {
