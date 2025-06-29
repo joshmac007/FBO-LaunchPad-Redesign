@@ -6,12 +6,14 @@ interface BackendAircraftType {
   id: number
   name: string
   base_min_fuel_gallons_for_waiver: number | string
+  classification_id: number
 }
 
 export interface AircraftType {
   id: number
   name: string
   base_min_fuel_gallons_for_waiver: number
+  classification_id: number
 }
 
 // Request payload interfaces for Aircraft Types

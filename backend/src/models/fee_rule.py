@@ -28,7 +28,7 @@ class FeeRule(db.Model):
     fbo_location_id = db.Column(db.Integer, nullable=False, index=True)
     fee_name = db.Column(db.String(100), nullable=False)
     fee_code = db.Column(db.String(50), nullable=False, index=True)
-    applies_to_fee_category_id = db.Column(db.Integer, db.ForeignKey('fee_categories.id'), nullable=False)
+    applies_to_classification_id = db.Column(db.Integer, db.ForeignKey('aircraft_classifications.id'), nullable=False)
     
     # Fee amount and calculation
     amount = db.Column(db.Numeric(10, 2), nullable=False)
@@ -54,7 +54,7 @@ class FeeRule(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
-    fee_category = db.relationship('FeeCategory', backref='fee_rules')
+    classification = db.relationship('AircraftClassification', backref='fee_rules')
 
     def to_dict(self):
         return {
@@ -62,7 +62,7 @@ class FeeRule(db.Model):
             'fbo_location_id': self.fbo_location_id,
             'fee_name': self.fee_name,
             'fee_code': self.fee_code,
-            'applies_to_fee_category_id': self.applies_to_fee_category_id,
+            'applies_to_aircraft_classification_id': self.applies_to_classification_id,
             'amount': str(self.amount),
             'currency': self.currency,
             'is_taxable': self.is_taxable,

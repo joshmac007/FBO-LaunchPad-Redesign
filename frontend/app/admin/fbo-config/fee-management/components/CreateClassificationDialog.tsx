@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { createFeeCategory } from "@/app/services/admin-fee-config-service"
+import { createAircraftClassification } from "@/app/services/admin-fee-config-service"
 
 const createClassificationSchema = z.object({
   name: z.string().min(1, "Classification name is required").max(100, "Name must be 100 characters or less"),
@@ -56,7 +56,7 @@ export function CreateClassificationDialog({
 
   const createClassificationMutation = useMutation({
     mutationFn: async (data: CreateClassificationForm) => {
-      return createFeeCategory(fboId, data)
+      return createAircraftClassification(fboId, data)
     },
     onSuccess: (newCategory) => {
       // Invalidate both fee categories and consolidated fee schedule queries

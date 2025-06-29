@@ -12,8 +12,8 @@ from datetime import datetime
 from src.extensions import db
 from src.models.customer import Customer
 from src.models.aircraft_type import AircraftType
-from src.models.fee_category import FeeCategory
-from src.models.aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
+from src.models.aircraft_classification import AircraftClassification
+from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
 from src.models.fee_rule import FeeRule, CalculationBasis, WaiverStrategy
 from src.models.waiver_tier import WaiverTier
 from src.models.fbo_aircraft_type_config import FBOAircraftTypeConfig
@@ -33,8 +33,8 @@ def setup_fbo_fee_configuration(app, db):
         # Clean up any existing data
         db.session.query(WaiverTier).delete()
         db.session.query(FeeRule).delete()
-        db.session.query(AircraftTypeToFeeCategoryMapping).delete()
-        db.session.query(FeeCategory).delete()
+        db.session.query(AircraftTypeToAircraftClassificationMapping).delete()
+        db.session.query(AircraftClassification).delete()
         db.session.query(AircraftType).delete()
         db.session.query(Customer).delete()
         db.session.query(FBOAircraftTypeConfig).delete()
@@ -44,13 +44,13 @@ def setup_fbo_fee_configuration(app, db):
         light_jet = AircraftType(
             name="Citation CJ3",
             base_min_fuel_gallons_for_waiver=Decimal('150.00'),
-            default_fee_category_id=None,
+            default_aircraft_classification_id=None,
             default_max_gross_weight_lbs=Decimal('13500.00')
         )
         piston_single = AircraftType(
             name="Cessna 172",
             base_min_fuel_gallons_for_waiver=Decimal('30.00'),
-            default_fee_category_id=None,
+            default_aircraft_classification_id=None,
             default_max_gross_weight_lbs=Decimal('2550.00')
         )
         
@@ -58,11 +58,11 @@ def setup_fbo_fee_configuration(app, db):
         db.session.commit()
         
         # Create Fee Categories
-        light_jet_category = FeeCategory(
+        light_jet_category = AircraftClassification(
             fbo_location_id=1,
             name="Light Jet"
         )
-        piston_category = FeeCategory(
+        piston_category = AircraftClassification(
             fbo_location_id=1,
             name="Piston Single"
         )
@@ -71,15 +71,15 @@ def setup_fbo_fee_configuration(app, db):
         db.session.commit()
         
         # Create Aircraft Type to Fee Category Mappings
-        light_jet_mapping = AircraftTypeToFeeCategoryMapping(
+        light_jet_mapping = AircraftTypeToAircraftClassificationMapping(
             fbo_location_id=1,
             aircraft_type_id=light_jet.id,
-            fee_category_id=light_jet_category.id
+            aircraft_classification_id=light_jet_category.id
         )
-        piston_mapping = AircraftTypeToFeeCategoryMapping(
+        piston_mapping = AircraftTypeToAircraftClassificationMapping(
             fbo_location_id=1,
             aircraft_type_id=piston_single.id,
-            fee_category_id=piston_category.id
+            aircraft_classification_id=piston_category.id
         )
         
         db.session.add_all([light_jet_mapping, piston_mapping])
@@ -90,7 +90,7 @@ def setup_fbo_fee_configuration(app, db):
             fbo_location_id=1,
             fee_name="Ramp Fee",
             fee_code="RAMP_LJ",
-            applies_to_fee_category_id=light_jet_category.id,
+            applies_to_aircraft_classification_id=light_jet_category.id,
             amount=Decimal('75.00'),
             currency="USD",
             is_taxable=True,
@@ -106,7 +106,7 @@ def setup_fbo_fee_configuration(app, db):
             fbo_location_id=1,
             fee_name="Overnight Fee",
             fee_code="OVN_LJ",
-            applies_to_fee_category_id=light_jet_category.id,
+            applies_to_aircraft_classification_id=light_jet_category.id,
             amount=Decimal('50.00'),
             currency="USD",
             is_taxable=True,
@@ -120,7 +120,7 @@ def setup_fbo_fee_configuration(app, db):
             fbo_location_id=1,
             fee_name="GPU Service",
             fee_code="GPU",
-            applies_to_fee_category_id=light_jet_category.id,
+            applies_to_aircraft_classification_id=light_jet_category.id,
             amount=Decimal('25.00'),
             currency="USD",
             is_taxable=True,
@@ -133,7 +133,7 @@ def setup_fbo_fee_configuration(app, db):
             fbo_location_id=1,
             fee_name="Lavatory Service",
             fee_code="LAV",
-            applies_to_fee_category_id=light_jet_category.id,
+            applies_to_aircraft_classification_id=light_jet_category.id,
             amount=Decimal('35.00'),
             currency="USD",
             is_taxable=True,
@@ -271,12 +271,12 @@ class TestFeeCalculationService:
             fee_rule.waiver_strategy = WaiverStrategy.SIMPLE_MULTIPLIER
             fee_rule.simple_waiver_multiplier = Decimal('1.5')
             fee_rule.has_caa_override = False
-            fee_rule.applies_to_fee_category_id = 1  # FIXED: Match the aircraft_fee_category_id
+            fee_rule.applies_to_aircraft_classification_id = 1  # FIXED: Match the aircraft_aircraft_classification_id
             
             mock_fetch_data.return_value = {
                 'customer': customer,
                 'aircraft_type': aircraft_type,
-                'aircraft_fee_category_id': 1,
+                'aircraft_aircraft_classification_id': 1,
                 'fee_rules': [fee_rule],
                 'waiver_tiers': [],
                 'fbo_aircraft_config': None  # No FBO-specific config
@@ -333,12 +333,12 @@ class TestFeeCalculationService:
             fee_rule.waiver_strategy = WaiverStrategy.SIMPLE_MULTIPLIER
             fee_rule.simple_waiver_multiplier = Decimal('1.5')
             fee_rule.has_caa_override = False
-            fee_rule.applies_to_fee_category_id = 1  # CRITICAL: Must match aircraft_fee_category_id
+            fee_rule.applies_to_aircraft_classification_id = 1  # CRITICAL: Must match aircraft_aircraft_classification_id
 
             mock_fetch_data.return_value = {
                 'customer': customer,
                 'aircraft_type': aircraft_type,
-                'aircraft_fee_category_id': 1,
+                'aircraft_aircraft_classification_id': 1,
                 'fee_rules': [fee_rule],
                 'waiver_tiers': [],
                 'fbo_aircraft_config': None  # No FBO-specific config
@@ -390,7 +390,7 @@ class TestFeeCalculationService:
             ramp_fee.is_potentially_waivable_by_fuel_uplift = True
             ramp_fee.waiver_strategy = WaiverStrategy.TIERED_MULTIPLIER
             ramp_fee.has_caa_override = False
-            ramp_fee.applies_to_fee_category_id = 1  # CRITICAL: Must match aircraft_fee_category_id
+            ramp_fee.applies_to_aircraft_classification_id = 1  # CRITICAL: Must match aircraft_aircraft_classification_id
 
             facility_fee = Mock(spec=FeeRule)
             facility_fee.id = 2
@@ -401,7 +401,7 @@ class TestFeeCalculationService:
             facility_fee.is_potentially_waivable_by_fuel_uplift = True
             facility_fee.waiver_strategy = WaiverStrategy.TIERED_MULTIPLIER
             facility_fee.has_caa_override = False
-            facility_fee.applies_to_fee_category_id = 1  # CRITICAL: Must match aircraft_fee_category_id
+            facility_fee.applies_to_aircraft_classification_id = 1  # CRITICAL: Must match aircraft_aircraft_classification_id
 
             # Waiver tier that waives these fees
             waiver_tier = Mock(spec=WaiverTier)
@@ -415,7 +415,7 @@ class TestFeeCalculationService:
             mock_fetch_data.return_value = {
                 'customer': customer,
                 'aircraft_type': aircraft_type,
-                'aircraft_fee_category_id': 1,
+                'aircraft_aircraft_classification_id': 1,
                 'fee_rules': [ramp_fee, facility_fee],
                 'waiver_tiers': [waiver_tier],
                 'fbo_aircraft_config': None  # No FBO-specific config
@@ -477,12 +477,12 @@ class TestFeeCalculationService:
             fee_rule.caa_override_amount = Decimal('75.00')  # Reduced amount for CAA
             fee_rule.caa_waiver_strategy_override = WaiverStrategy.SIMPLE_MULTIPLIER
             fee_rule.caa_simple_waiver_multiplier_override = Decimal('1.0')  # Easier waiver
-            fee_rule.applies_to_fee_category_id = 1  # CRITICAL: Must match aircraft_fee_category_id
+            fee_rule.applies_to_aircraft_classification_id = 1  # CRITICAL: Must match aircraft_aircraft_classification_id
 
             mock_fetch_data.return_value = {
                 'customer': customer,
                 'aircraft_type': aircraft_type,
-                'aircraft_fee_category_id': 1,
+                'aircraft_aircraft_classification_id': 1,
                 'fee_rules': [fee_rule],
                 'waiver_tiers': [],
                 'fbo_aircraft_config': None  # No FBO-specific config
@@ -1063,13 +1063,13 @@ class TestFeeCalculationService:
         # FBO 2 has 100 gallons minimum (from fixture)
         # We need to create fee categories and rules for FBO 2 to make the test work
         
-        from src.models.fee_category import FeeCategory
+        from src.models.aircraft_classification import AircraftClassification
         from src.models.fee_rule import FeeRule, CalculationBasis, WaiverStrategy
         from src.models.waiver_tier import WaiverTier
-        from src.models.aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
+        from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
         
         # Create fee category for FBO 2
-        light_jet_category_fbo2 = FeeCategory(
+        light_jet_category_fbo2 = AircraftClassification(
             fbo_location_id=2,
             name="Light Jet FBO2"
         )
@@ -1077,10 +1077,10 @@ class TestFeeCalculationService:
         db.session.commit()
         
         # Create aircraft type mapping for FBO 2
-        light_jet_mapping_fbo2 = AircraftTypeToFeeCategoryMapping(
+        light_jet_mapping_fbo2 = AircraftTypeToAircraftClassificationMapping(
             fbo_location_id=2,
             aircraft_type_id=light_jet_id,
-            fee_category_id=light_jet_category_fbo2.id
+            aircraft_classification_id=light_jet_category_fbo2.id
         )
         db.session.add(light_jet_mapping_fbo2)
         db.session.commit()
@@ -1090,7 +1090,7 @@ class TestFeeCalculationService:
             fbo_location_id=2,
             fee_name="Ramp Fee",
             fee_code="RAMP_FBO2",
-            applies_to_fee_category_id=light_jet_category_fbo2.id,
+            applies_to_aircraft_classification_id=light_jet_category_fbo2.id,
             amount=Decimal('50.00'),
             currency="USD",
             is_taxable=True,

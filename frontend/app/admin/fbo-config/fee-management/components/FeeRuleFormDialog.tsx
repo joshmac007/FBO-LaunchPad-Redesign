@@ -107,7 +107,7 @@ export function FeeRuleFormDialog({ isOpen, onClose, onSubmit, rule, categoryId 
     setIsSubmitting(true);
     const submissionData: CreateFeeRuleRequest | UpdateFeeRuleRequest = { 
       ...values, 
-      applies_to_fee_category_id: categoryId 
+      applies_to_aircraft_classification_id: categoryId 
     };
     await onSubmit(submissionData);
     setIsSubmitting(false);

@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type FeeCategory, type CreateFeeCategoryRequest, type UpdateFeeCategoryRequest } from "@/app/services/admin-fee-config-service";
+import { type AircraftClassification, type CreateAircraftClassificationRequest, type UpdateAircraftClassificationRequest } from "@/app/services/admin-fee-config-service";
 
 const formSchema = z.object({
   name: z.string().min(2, {
@@ -23,14 +23,14 @@ const formSchema = z.object({
   }),
 });
 
-interface FeeCategoryFormDialogProps {
+interface AircraftClassificationFormDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: CreateFeeCategoryRequest | UpdateFeeCategoryRequest) => Promise<void>;
-  category: FeeCategory | null;
+  onSubmit: (data: CreateAircraftClassificationRequest | UpdateAircraftClassificationRequest) => Promise<void>;
+  category: AircraftClassification | null;
 }
 
-export function FeeCategoryFormDialog({ isOpen, onClose, onSubmit, category }: FeeCategoryFormDialogProps) {
+export function AircraftClassificationFormDialog({ isOpen, onClose, onSubmit, category }: AircraftClassificationFormDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),

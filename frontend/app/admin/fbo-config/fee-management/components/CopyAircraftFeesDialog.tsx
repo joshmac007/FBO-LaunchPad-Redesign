@@ -37,7 +37,7 @@ interface CopyAircraftFeesDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess: (aircraftConfig: {
-    fee_category_id: string
+    aircraft_classification_id: string
     min_fuel_gallons: string
     fee_overrides: Array<{
       fee_rule_id: number
@@ -80,7 +80,7 @@ export function CopyAircraftFeesDialog({
 
     // Map the selected aircraft's configuration to the expected format
     const configToApply = {
-      fee_category_id: selectedAircraft.fee_category_id.toString(),
+      aircraft_classification_id: selectedAircraft.aircraft_classification_id.toString(),
       min_fuel_gallons: selectedAircraft.min_fuel_gallons.toString(),
       fee_overrides: selectedAircraft.fee_overrides || []
     }
@@ -100,7 +100,7 @@ export function CopyAircraftFeesDialog({
 
   const aircraftOptions = aircraftConfigs.map(config => ({
     value: config.id.toString(),
-    label: `${config.aircraft_type_name} (${config.fee_category_name})`
+    label: `${config.aircraft_type_name} (${config.aircraft_classification_name})`
   }))
 
   return (

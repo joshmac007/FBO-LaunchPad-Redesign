@@ -17,29 +17,11 @@ depends_on = None
 
 
 def upgrade():
-    # --- From migration 9d574a547557 ---
-    op.execute("ALTER TYPE fuelorderpriority ADD VALUE IF NOT EXISTS 'NORMAL'")
-    op.execute("ALTER TYPE fuelorderpriority ADD VALUE IF NOT EXISTS 'HIGH'")
-    op.execute("ALTER TYPE fuelorderpriority ADD VALUE IF NOT EXISTS 'LOW'")
-    
-    # Note: Alembic handles transaction management, no manual commit needed
-
-    # --- From migration 59eff068d8af ---
+    # Simply add the service_type column - skip enum updates for fresh databases
+    # The model's default values will handle enum correctly for new records
     op.add_column('fuel_orders', sa.Column('service_type', sa.String(length=50), nullable=False, server_default='Full Service'))
-    
-    op.execute("UPDATE fuel_orders SET priority = 'NORMAL' WHERE priority = 'normal'")
-    op.execute("UPDATE fuel_orders SET priority = 'HIGH' WHERE priority = 'high'")
-    op.execute("UPDATE fuel_orders SET priority = 'LOW' WHERE priority = 'urgent'")
 
 
 def downgrade():
-    # --- From migration 59eff068d8af ---
-    op.execute("UPDATE fuel_orders SET priority = 'normal' WHERE priority = 'NORMAL'")
-    op.execute("UPDATE fuel_orders SET priority = 'high' WHERE priority = 'HIGH'")
-    op.execute("UPDATE fuel_orders SET priority = 'urgent' WHERE priority = 'LOW'")
-    
-    op.drop_column('fuel_orders', 'service_type')
-    
-    # Downgrade for enum values is complex and often skipped.
-    # The new values will remain in the type.
-    pass 
+    # Remove the service_type column
+    op.drop_column('fuel_orders', 'service_type') 

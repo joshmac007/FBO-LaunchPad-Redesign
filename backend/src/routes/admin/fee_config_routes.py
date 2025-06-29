@@ -7,7 +7,7 @@ from typing import Dict, Any, cast
 from ...services.admin_fee_config_service import AdminFeeConfigService
 from ...schemas.admin_fee_config_schemas import (
     AircraftTypeSchema, UpdateAircraftTypeFuelWaiverSchema,
-    FeeCategorySchema, CreateFeeCategorySchema, UpdateFeeCategorySchema,
+    AircraftClassificationSchema, CreateAircraftClassificationSchema, UpdateAircraftClassificationSchema,
     AircraftTypeMappingSchema, CreateAircraftTypeMappingSchema, UpdateAircraftTypeMappingSchema,
     CSVUploadResultSchema,
     FeeRuleSchema, CreateFeeRuleSchema, UpdateFeeRuleSchema,
@@ -25,10 +25,10 @@ aircraft_type_schema = AircraftTypeSchema()
 aircraft_type_list_schema = AircraftTypeSchema(many=True)
 update_aircraft_type_fuel_waiver_schema = UpdateAircraftTypeFuelWaiverSchema()
 
-fee_category_schema = FeeCategorySchema()
-fee_category_list_schema = FeeCategorySchema(many=True)
-create_fee_category_schema = CreateFeeCategorySchema()
-update_fee_category_schema = UpdateFeeCategorySchema()
+aircraft_classification_schema = AircraftClassificationSchema()
+aircraft_classification_list_schema = AircraftClassificationSchema(many=True)
+create_aircraft_classification_schema = CreateAircraftClassificationSchema()
+update_aircraft_classification_schema = UpdateAircraftClassificationSchema()
 
 aircraft_type_mapping_schema = AircraftTypeMappingSchema()
 aircraft_type_mapping_list_schema = AircraftTypeMappingSchema(many=True)
@@ -112,13 +112,13 @@ def get_fee_categories(fbo_id):
 
 @admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/fee-categories/<int:category_id>', methods=['GET'])
 @require_permission_v2('manage_fbo_fee_schedules')
-def get_fee_category(fbo_id, category_id):
+def get_aircraft_classification(fbo_id, category_id):
     """Get a single fee category by ID for a specific FBO."""
     try:
-        category = AdminFeeConfigService.get_fee_category(fbo_id, category_id)
+        category = AdminFeeConfigService.get_aircraft_classification(fbo_id, category_id)
         if not category:
             return jsonify({'error': 'Fee category not found'}), 404
-        return jsonify({'fee_category': category}), 200
+        return jsonify({'aircraft_classification': category}), 200
     except Exception as e:
         current_app.logger.error(f"Error fetching fee category: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
@@ -126,7 +126,7 @@ def get_fee_category(fbo_id, category_id):
 
 @admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/fee-categories', methods=['POST'])
 @require_permission_v2('manage_fbo_fee_schedules')
-def create_fee_category(fbo_id):
+def create_aircraft_classification(fbo_id):
     """Create a new fee category for a specific FBO."""
     try:
         # Check if request has valid JSON first
@@ -138,9 +138,9 @@ def create_fee_category(fbo_id):
             return jsonify({'error': 'Invalid JSON in request body'}), 400
         if json_data is None:
             return jsonify({'error': 'Invalid JSON in request body'}), 400
-        loaded_data = create_fee_category_schema.load(json_data)
+        loaded_data = create_aircraft_classification_schema.load(json_data)
         data = cast(Dict[str, Any], loaded_data)
-        category = AdminFeeConfigService.create_fee_category(fbo_id, data['name'])
+        category = AdminFeeConfigService.create_aircraft_classification(fbo_id, data['name'])
         return jsonify(category), 201
     except ValidationError as e:
         return jsonify({'error': 'Validation failed', 'messages': e.messages}), 400
@@ -153,17 +153,17 @@ def create_fee_category(fbo_id):
 
 @admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/fee-categories/<int:category_id>', methods=['PUT'])
 @require_permission_v2('manage_fbo_fee_schedules')
-def update_fee_category(fbo_id, category_id):
+def update_aircraft_classification(fbo_id, category_id):
     """Update a fee category for a specific FBO."""
     try:
         if not request.json:
             return jsonify({'error': 'Invalid JSON in request body'}), 400
-        loaded_data = update_fee_category_schema.load(request.json)
+        loaded_data = update_aircraft_classification_schema.load(request.json)
         data = cast(Dict[str, Any], loaded_data)
-        category = AdminFeeConfigService.update_fee_category(fbo_id, category_id, data['name'])
+        category = AdminFeeConfigService.update_aircraft_classification(fbo_id, category_id, data['name'])
         if not category:
             return jsonify({'error': 'Fee category not found'}), 404
-        return jsonify({'fee_category': category}), 200
+        return jsonify({'aircraft_classification': category}), 200
     except ValidationError as e:
         return jsonify({'error': 'Validation failed', 'messages': e.messages}), 400
     except ValueError as e:
@@ -175,10 +175,10 @@ def update_fee_category(fbo_id, category_id):
 
 @admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/fee-categories/<int:category_id>', methods=['DELETE'])
 @require_permission_v2('manage_fbo_fee_schedules')
-def delete_fee_category(fbo_id, category_id):
+def delete_aircraft_classification(fbo_id, category_id):
     """Delete a fee category for a specific FBO."""
     try:
-        success = AdminFeeConfigService.delete_fee_category(fbo_id, category_id)
+        success = AdminFeeConfigService.delete_aircraft_classification(fbo_id, category_id)
         if not success:
             return jsonify({'error': 'Fee category not found'}), 404
         return '', 204
@@ -191,11 +191,11 @@ def delete_fee_category(fbo_id, category_id):
 
 @admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/fee-categories/general', methods=['GET'])
 @require_permission_v2('manage_fbo_fee_schedules')
-def get_general_fee_category(fbo_id):
+def get_general_aircraft_classification(fbo_id):
     """Get or create the 'General' fee category for a specific FBO."""
     try:
-        category = AdminFeeConfigService.get_or_create_general_fee_category(fbo_id)
-        return jsonify({'fee_category': category}), 200
+        category = AdminFeeConfigService.get_or_create_general_aircraft_classification(fbo_id)
+        return jsonify({'aircraft_classification': category}), 200
     except Exception as e:
         current_app.logger.error(f"Error getting/creating general fee category: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
@@ -207,7 +207,7 @@ def get_general_fee_category(fbo_id):
 def get_aircraft_type_mappings(fbo_id):
     """Get all aircraft type to fee category mappings for a specific FBO, optionally filtered by fee category."""
     try:
-        category_id = request.args.get('fee_category_id', type=int)
+        category_id = request.args.get('aircraft_classification_id', type=int)
         mappings = AdminFeeConfigService.get_aircraft_type_mappings(fbo_id, category_id)
         return jsonify(mappings), 200
     except Exception as e:
@@ -227,7 +227,7 @@ def create_aircraft_type_mapping(fbo_id):
         mapping = AdminFeeConfigService.create_aircraft_type_mapping(
             fbo_id, 
             data['aircraft_type_id'], 
-            data['fee_category_id']
+            data['aircraft_classification_id']
         )
         return jsonify(mapping), 201
     except ValidationError as e:
@@ -251,7 +251,7 @@ def update_aircraft_type_mapping(fbo_id, mapping_id):
         mapping = AdminFeeConfigService.update_aircraft_type_mapping(
             fbo_id, 
             mapping_id, 
-            data['fee_category_id']
+            data['aircraft_classification_id']
         )
         if not mapping:
             return jsonify({'error': 'Aircraft type mapping not found'}), 404
@@ -310,7 +310,7 @@ def upload_aircraft_type_mappings_csv(fbo_id):
 def get_fee_rules(fbo_id):
     """Get all fee rules for a specific FBO, optionally filtered by fee category."""
     try:
-        category_id = request.args.get('applies_to_fee_category_id', type=int)
+        category_id = request.args.get('applies_to_aircraft_classification_id', type=int)
         rules = AdminFeeConfigService.get_fee_rules(fbo_id, category_id)
         return jsonify({'fee_rules': rules}), 200
     except Exception as e:
@@ -571,7 +571,7 @@ def create_aircraft_fee_setup(fbo_id):
         new_setup = AdminFeeConfigService.create_aircraft_fee_setup(
             fbo_location_id=fbo_id,
             aircraft_type_name=validated_data['aircraft_type_name'],
-            fee_category_id=validated_data['fee_category_id'],
+            aircraft_classification_id=validated_data['aircraft_classification_id'],
             min_fuel_gallons=validated_data['min_fuel_gallons'],
             initial_ramp_fee_rule_id=validated_data.get('initial_ramp_fee_rule_id'),
             initial_ramp_fee_amount=validated_data.get('initial_ramp_fee_amount')
@@ -669,4 +669,48 @@ def set_fuel_prices(fbo_id):
         return jsonify({'error': str(e)}), 400
     except Exception as e:
         current_app.logger.error(f"Error setting fuel prices: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+# Aircraft Classification Mapping Routes (Refactored)
+@admin_fee_config_bp.route('/api/admin/fbo/<int:fbo_id>/aircraft-classification-mappings/by-type/<int:aircraft_type_id>', methods=['PUT'])
+@require_permission_v2('manage_fbo_fee_schedules')
+def update_or_create_mapping_by_type(fbo_id, aircraft_type_id):
+    """
+    Update an aircraft type's classification.
+    
+    Note: The fbo_id parameter is kept for consistency with the API design,
+    but aircraft classifications are now global (not FBO-specific) after the refactoring.
+    """
+    try:
+        if not request.json:
+            return jsonify({'error': 'Invalid JSON in request body'}), 400
+        
+        classification_id = request.json.get('classification_id')
+        if not classification_id:
+            return jsonify({'error': 'classification_id is required'}), 400
+        
+        try:
+            classification_id = int(classification_id)
+        except (ValueError, TypeError):
+            return jsonify({'error': 'classification_id must be a valid integer'}), 400
+        
+        # Call the service method
+        result = AdminFeeConfigService.update_or_create_mapping_by_type(
+            aircraft_type_id=aircraft_type_id,
+            classification_id=classification_id
+        )
+        
+        return jsonify({'mapping': result}), 200
+        
+    except ValueError as e:
+        error_message = str(e)
+        if "Aircraft type not found" in error_message:
+            return jsonify({'error': error_message}), 404
+        elif "Aircraft classification not found" in error_message:
+            return jsonify({'error': error_message}), 400
+        else:
+            return jsonify({'error': error_message}), 400
+    except Exception as e:
+        current_app.logger.error(f"Error updating aircraft type classification: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500 

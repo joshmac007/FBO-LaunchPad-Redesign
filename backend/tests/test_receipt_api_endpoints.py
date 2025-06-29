@@ -15,8 +15,8 @@ from src.models.aircraft_type import AircraftType
 from src.models.fuel_order import FuelOrder, FuelOrderStatus
 from src.models.receipt import Receipt, ReceiptStatus
 from src.models.receipt_line_item import ReceiptLineItem, LineItemType
-from src.models.fee_category import FeeCategory
-from src.models.aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
+from src.models.aircraft_classification import AircraftClassification
+from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
 from src.models.fee_rule import FeeRule, CalculationBasis, WaiverStrategy
 from src.models.user import User
 from src.extensions import db
@@ -32,9 +32,9 @@ def setup_receipt_test_data(app, db):
         db.session.query(Receipt).delete()
         db.session.query(FuelOrder).delete()
         db.session.query(Aircraft).delete()
-        db.session.query(AircraftTypeToFeeCategoryMapping).delete()
+        db.session.query(AircraftTypeToAircraftClassificationMapping).delete()
         db.session.query(FeeRule).delete()
-        db.session.query(FeeCategory).delete()
+        db.session.query(AircraftClassification).delete()
         db.session.query(AircraftType).delete()
         db.session.query(Customer).delete()
         db.session.commit()
@@ -68,18 +68,18 @@ def setup_receipt_test_data(app, db):
         db.session.commit()
         
         # Create fee category
-        fee_category = FeeCategory(
+        aircraft_classification = AircraftClassification(
             fbo_location_id=1,
             name="Light Jet"
         )
-        db.session.add(fee_category)
+        db.session.add(aircraft_classification)
         db.session.commit()
         
         # Create aircraft type mapping
-        mapping = AircraftTypeToFeeCategoryMapping(
+        mapping = AircraftTypeToAircraftClassificationMapping(
             fbo_location_id=1,
             aircraft_type_id=aircraft_type.id,
-            fee_category_id=fee_category.id
+            aircraft_classification_id=aircraft_classification.id
         )
         db.session.add(mapping)
         db.session.commit()
@@ -89,7 +89,7 @@ def setup_receipt_test_data(app, db):
             fbo_location_id=1,
             fee_name="Ramp Fee",
             fee_code="RAMP_FEE",
-            applies_to_fee_category_id=fee_category.id,
+            applies_to_aircraft_classification_id=aircraft_classification.id,
             amount=Decimal('75.00'),
             currency="USD",
             is_taxable=True,
@@ -103,7 +103,7 @@ def setup_receipt_test_data(app, db):
             fbo_location_id=1,
             fee_name="GPU Service",
             fee_code="GPU_SERVICE",
-            applies_to_fee_category_id=fee_category.id,
+            applies_to_aircraft_classification_id=aircraft_classification.id,
             amount=Decimal('25.00'),
             currency="USD",
             is_taxable=True,
@@ -131,7 +131,7 @@ def setup_receipt_test_data(app, db):
             'customer_id': customer.id,
             'aircraft_type_id': aircraft_type.id,
             'aircraft_tail_number': aircraft.tail_number,
-            'fee_category_id': fee_category.id,
+            'aircraft_classification_id': aircraft_classification.id,
             'fuel_order_id': fuel_order.id,
             'ramp_fee_id': ramp_fee.id,
             'gpu_service_id': gpu_service.id

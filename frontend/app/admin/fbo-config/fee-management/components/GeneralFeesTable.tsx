@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus, Check, X, Edit, Trash2 } from "lucide-react"
 import {
-  getGeneralFeeCategory,
+  getGeneralAircraftClassification,
   createFeeRule,
   updateFeeRule,
   deleteFeeRule,
@@ -48,7 +48,7 @@ export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTabl
   // Fetch general fee category
   const { data: generalCategory } = useQuery({
     queryKey: ['general-fee-category', fboId],
-    queryFn: () => getGeneralFeeCategory(fboId),
+    queryFn: () => getGeneralAircraftClassification(fboId),
   })
 
   // Use the passed general service rules (already filtered by parent)
@@ -189,7 +189,7 @@ export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTabl
         const createData: CreateFeeRuleRequest = {
           fee_name: getCurrentValue(row, 'fee_name') as string,
           fee_code: getCurrentValue(row, 'fee_code') as string,
-          applies_to_fee_category_id: generalCategory.id,
+          applies_to_aircraft_classification_id: generalCategory.id,
           amount: getCurrentValue(row, 'amount') as number,
           is_taxable: getCurrentValue(row, 'is_taxable') as boolean || false,
           calculation_basis: 'FIXED_PRICE',
@@ -451,7 +451,7 @@ export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTabl
         }}
         defaultValues={{
           is_primary_fee: false, // Default to general fee for this table
-          applies_to_fee_category_id: generalCategory?.id,
+          applies_to_aircraft_classification_id: generalCategory?.id,
         }}
         availableCategories={generalCategory ? [generalCategory] : []}
       />

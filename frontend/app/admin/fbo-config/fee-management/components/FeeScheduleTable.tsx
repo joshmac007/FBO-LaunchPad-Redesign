@@ -15,12 +15,20 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { Trash2, Plus } from "lucide-react"
+import { Trash2, Plus, MoreHorizontal, Move } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { EditableFeeCell } from "./EditableFeeCell"
 import { EditableMinFuelCell } from "./EditableMinFuelCell"
 import { EditCategoryDefaultsDialog } from "./EditCategoryDefaultsDialog"
 import { NewAircraftTableRow } from "./NewAircraftTableRow"
 import { CreateClassificationDialog } from "./CreateClassificationDialog"
+import { MoveAircraftDialog, AircraftToMove, ClassificationOption } from "./MoveAircraftDialog"
 import {
   ConsolidatedFeeSchedule,
   FeeRule,
@@ -30,13 +38,14 @@ import {
   getConsolidatedFeeSchedule,
   deleteAircraftMapping,
 } from "@/app/services/admin-fee-config-service"
+import { getAircraftTypes } from "@/app/services/aircraft-service"
 import React from "react"
 
 interface AircraftRowData {
   aircraft_type_id: number
   aircraft_type_name: string
-  fee_category_id: number
-  fee_category_name: string
+  aircraft_classification_id: number
+  aircraft_classification_name: string
   min_fuel_gallons: number | null
   fees: Record<string, {
     fee_rule_id: number
@@ -67,6 +76,8 @@ export function FeeScheduleTable({
   const queryClient = useQueryClient()
   const [addingToCategory, setAddingToCategory] = useState<number | null>(null)
   const [showCreateClassificationDialog, setShowCreateClassificationDialog] = useState(false)
+  const [showMoveAircraftDialog, setShowMoveAircraftDialog] = useState(false)
+  const [selectedAircraftToMove, setSelectedAircraftToMove] = useState<AircraftToMove | null>(null)
 
   // Fetch consolidated fee schedule data
   const {
@@ -80,39 +91,61 @@ export function FeeScheduleTable({
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
 
+  // Fetch global aircraft types
+  const {
+    data: aircraftTypes,
+    isLoading: isLoadingAircraftTypes,
+    error: aircraftTypesError
+  } = useQuery({
+    queryKey: ['aircraft-types'],
+    queryFn: () => getAircraftTypes(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+
   // Transform and group data for table consumption
   const groupedData = useMemo(() => {
-    if (!data || !data.mappings || !data.categories) {
+    if (!data || !data.categories || !aircraftTypes) {
       return {}
     }
     
     const aircraftData: AircraftRowData[] = []
 
-    data.mappings.forEach((mapping, index) => {
+    // Use aircraft types instead of mappings
+    aircraftTypes.forEach((aircraftType) => {
+      // Find the classification for this aircraft type
+      const classification = data.categories.find(
+        cat => cat.id === aircraftType.classification_id
+      )
+      
+      if (!classification) {
+        // Skip aircraft types without valid classifications
+        return
+      }
+
       const minFuelConfig = data.fbo_aircraft_config?.find(
-        config => config.aircraft_type_id === mapping.aircraft_type_id
+        config => config.aircraft_type_id === aircraftType.id
       )
 
-      // Get fee category rules for this mapping's category
+      // Get fee category rules for this aircraft's classification
       const categoryRules = data.rules.filter(
-        rule => rule.applies_to_fee_category_id === mapping.fee_category_id
+        rule => rule.applies_to_aircraft_classification_id === aircraftType.classification_id
       )
 
       const aircraftRow: AircraftRowData = {
-        aircraft_type_id: mapping.aircraft_type_id,
-        aircraft_type_name: mapping.aircraft_type_name,
-        fee_category_id: mapping.fee_category_id,
-        fee_category_name: mapping.fee_category_name,
+        aircraft_type_id: aircraftType.id,
+        aircraft_type_name: aircraftType.name,
+        aircraft_classification_id: aircraftType.classification_id,
+        aircraft_classification_name: classification.name,
         min_fuel_gallons: minFuelConfig?.base_min_fuel_gallons_for_waiver 
           ? parseFloat(minFuelConfig.base_min_fuel_gallons_for_waiver.toString()) 
-          : null,
+          : aircraftType.base_min_fuel_gallons_for_waiver || null,
         fees: {}
       }
 
       // Build fees object for this aircraft
       categoryRules.forEach(rule => {
         const override = data.overrides?.find(
-          o => o.aircraft_type_id === mapping.aircraft_type_id && o.fee_rule_id === rule.id
+          o => o.aircraft_type_id === aircraftType.id && o.fee_rule_id === rule.id
         )
 
         const feeData = {
@@ -133,14 +166,14 @@ export function FeeScheduleTable({
 
     // Group by fee category name
     return aircraftData.reduce((acc, aircraft) => {
-      const categoryName = aircraft.fee_category_name
+      const categoryName = aircraft.aircraft_classification_name
       if (!acc[categoryName]) {
         acc[categoryName] = []
       }
       acc[categoryName].push(aircraft)
       return acc
     }, {} as { [key: string]: AircraftRowData[] })
-  }, [data])
+  }, [data, aircraftTypes])
 
   // Mutations for optimistic updates
   const upsertOverrideMutation = useMutation({
@@ -327,16 +360,45 @@ export function FeeScheduleTable({
           }
         }
 
+        const handleMoveAircraft = () => {
+          const aircraftToMove: AircraftToMove = {
+            aircraft_type_id: row.original.aircraft_type_id,
+            aircraft_type_name: row.original.aircraft_type_name,
+            current_classification_id: row.original.aircraft_classification_id,
+            current_classification_name: row.original.aircraft_classification_name,
+          }
+          
+          setSelectedAircraftToMove(aircraftToMove)
+          setShowMoveAircraftDialog(true)
+        }
+
         return (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={handleDeleteAircraft}
-            disabled={deleteAircraftMappingMutation.isPending}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleMoveAircraft}>
+                <Move className="mr-2 h-4 w-4" />
+                Move to Classification
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={handleDeleteAircraft}
+                disabled={deleteAircraftMappingMutation.isPending}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Remove from Schedule
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )
       },
     })
@@ -369,8 +431,25 @@ export function FeeScheduleTable({
     return filtered
   }, [groupedData, searchTerm])
 
+  // Prepare available classifications for MoveAircraftDialog
+  const availableClassifications: ClassificationOption[] = useMemo(() => {
+    if (!data?.categories) return []
+    
+    return data.categories.map(category => ({
+      id: category.id,
+      name: category.name,
+    }))
+  }, [data?.categories])
+
+  // Handler for MoveAircraftDialog success
+  const handleMoveAircraftSuccess = () => {
+    // The dialog already handles query invalidation, so we just need to close it
+    setShowMoveAircraftDialog(false)
+    setSelectedAircraftToMove(null)
+  }
+
   // Loading state
-  if (isLoading) {
+  if (isLoading || isLoadingAircraftTypes) {
     return (
       <div className="border rounded-lg p-8">
         <div className="text-center space-y-2">
@@ -381,7 +460,7 @@ export function FeeScheduleTable({
   }
 
   // Error state
-  if (error) {
+  if (error || aircraftTypesError) {
     return (
       <div className="border rounded-lg p-8">
         <div className="text-center space-y-4">
@@ -446,7 +525,20 @@ export function FeeScheduleTable({
         <TableBody>
           {Object.entries(filteredGroupedData).map(([categoryName, filteredRows]) => {
               const category = data!.categories.find(c => c.name === categoryName)
-              const categoryRules = category ? data!.rules.filter(r => r.applies_to_fee_category_id === category.id) : []
+              // Get fee rules for this category, or fall back to global "Unclassified" rules
+              let categoryRules: FeeRule[] = []
+              if (category) {
+                // First try to find rules specific to this classification
+                categoryRules = data!.rules.filter(r => r.applies_to_aircraft_classification_id === category.id)
+                
+                // If no specific rules found, fall back to global "Unclassified" rules (classification ID 13)
+                if (categoryRules.length === 0) {
+                  const unclassifiedCategory = data!.categories.find(c => c.name === 'Unclassified')
+                  if (unclassifiedCategory) {
+                    categoryRules = data!.rules.filter(r => r.applies_to_aircraft_classification_id === unclassifiedCategory.id)
+                  }
+                }
+              }
 
               return (
                 <React.Fragment key={categoryName}>
@@ -484,8 +576,8 @@ export function FeeScheduleTable({
                   {category && addingToCategory === category.id && (
                     <NewAircraftTableRow
                       fboId={fboId}
-                      feeCategoryId={category.id}
-                      feeCategoryName={category.name}
+                      aircraftClassificationId={category.id}
+                      aircraftClassificationName={category.name}
                       onSave={() => {
                         setAddingToCategory(null)
                         queryClient.invalidateQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
@@ -537,6 +629,16 @@ export function FeeScheduleTable({
             })}
         </TableBody>
       </Table>
+
+      {/* Move Aircraft Dialog */}
+      <MoveAircraftDialog
+        open={showMoveAircraftDialog}
+        onOpenChange={setShowMoveAircraftDialog}
+        aircraft={selectedAircraftToMove}
+        availableClassifications={availableClassifications}
+        fboId={fboId}
+        onSuccess={handleMoveAircraftSuccess}
+      />
     </div>
   )
 } 

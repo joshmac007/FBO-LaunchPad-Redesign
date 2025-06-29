@@ -38,7 +38,7 @@ import { getAuthHeaders } from "@/app/services/api-config"
 const feeRuleSchema = z.object({
   fee_name: z.string().min(1, "Fee name is required"),
   fee_code: z.string().min(1, "Fee code is required"),
-  applies_to_fee_category_id: z.number().min(1, "Fee category is required"),
+  applies_to_aircraft_classification_id: z.number().min(1, "Fee category is required"),
   amount: z.string()
     .min(1, "Amount is required")
     .refine((val) => !isNaN(Number(val)) && Number(val) >= 0, {
@@ -84,7 +84,7 @@ export function FeeRuleDialog({
     defaultValues: {
       fee_name: initialData?.fee_name || "",
       fee_code: initialData?.fee_code || "",
-      applies_to_fee_category_id: initialData?.applies_to_fee_category_id || defaultValues.applies_to_fee_category_id || 0,
+      applies_to_aircraft_classification_id: initialData?.applies_to_aircraft_classification_id || defaultValues.applies_to_aircraft_classification_id || 0,
       amount: initialData?.amount?.toString() || defaultValues.amount?.toString() || "",
       is_taxable: initialData?.is_taxable ?? defaultValues.is_taxable ?? true,
       is_potentially_waivable_by_fuel_uplift: initialData?.is_potentially_waivable_by_fuel_uplift ?? defaultValues.is_potentially_waivable_by_fuel_uplift ?? false,
@@ -105,7 +105,7 @@ export function FeeRuleDialog({
       form.reset({
         fee_name: "",
         fee_code: "",
-        applies_to_fee_category_id: defaultValues.applies_to_fee_category_id || 0,
+        applies_to_aircraft_classification_id: defaultValues.applies_to_aircraft_classification_id || 0,
         amount: defaultValues.amount?.toString() || "",
         is_taxable: defaultValues.is_taxable ?? true,
         is_potentially_waivable_by_fuel_uplift: defaultValues.is_potentially_waivable_by_fuel_uplift ?? false,
@@ -213,7 +213,7 @@ export function FeeRuleDialog({
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="applies_to_fee_category_id"
+                  name="applies_to_aircraft_classification_id"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Fee Category</FormLabel>

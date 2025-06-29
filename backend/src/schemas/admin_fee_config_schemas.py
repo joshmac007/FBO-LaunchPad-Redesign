@@ -13,7 +13,7 @@ class AircraftTypeSchema(Schema):
         validate=validate.Range(min=0),
         as_string=True
     )
-    default_fee_category_id = fields.Integer(allow_none=True)
+    default_aircraft_classification_id = fields.Integer(allow_none=True)
     default_max_gross_weight_lbs = fields.Decimal(
         allow_none=True,
         validate=validate.Range(min=0),
@@ -33,7 +33,7 @@ class UpdateAircraftTypeFuelWaiverSchema(Schema):
 
 
 # Fee Categories Schemas
-class FeeCategorySchema(Schema):
+class AircraftClassificationSchema(Schema):
     """Schema for fee category."""
     id = fields.Integer(dump_only=True)
     fbo_location_id = fields.Integer(dump_only=True)
@@ -42,12 +42,12 @@ class FeeCategorySchema(Schema):
     updated_at = fields.DateTime(dump_only=True)
 
 
-class CreateFeeCategorySchema(Schema):
+class CreateAircraftClassificationSchema(Schema):
     """Schema for creating a fee category."""
     name = fields.String(required=True, validate=validate.Length(min=1, max=100))
 
 
-class UpdateFeeCategorySchema(Schema):
+class UpdateAircraftClassificationSchema(Schema):
     """Schema for updating a fee category."""
     name = fields.String(required=True, validate=validate.Length(min=1, max=100))
 
@@ -59,8 +59,8 @@ class AircraftTypeMappingSchema(Schema):
     fbo_location_id = fields.Integer(dump_only=True)
     aircraft_type_id = fields.Integer(required=True)
     aircraft_type_name = fields.String(dump_only=True)
-    fee_category_id = fields.Integer(required=True)
-    fee_category_name = fields.String(dump_only=True)
+    aircraft_classification_id = fields.Integer(required=True)
+    aircraft_classification_name = fields.String(dump_only=True)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
 
@@ -68,12 +68,12 @@ class AircraftTypeMappingSchema(Schema):
 class CreateAircraftTypeMappingSchema(Schema):
     """Schema for creating aircraft type to fee category mapping."""
     aircraft_type_id = fields.Integer(required=True)
-    fee_category_id = fields.Integer(required=True)
+    aircraft_classification_id = fields.Integer(required=True)
 
 
 class UpdateAircraftTypeMappingSchema(Schema):
     """Schema for updating aircraft type to fee category mapping."""
-    fee_category_id = fields.Integer(required=True)
+    aircraft_classification_id = fields.Integer(required=True)
 
 
 class CSVUploadResultSchema(Schema):
@@ -90,8 +90,8 @@ class FeeRuleSchema(Schema):
     fbo_location_id = fields.Integer(dump_only=True)
     fee_name = fields.String(required=True, validate=validate.Length(min=1, max=100))
     fee_code = fields.String(required=True, validate=validate.Length(min=1, max=50))
-    applies_to_fee_category_id = fields.Integer(required=True)
-    fee_category_name = fields.String(dump_only=True)
+    applies_to_aircraft_classification_id = fields.Integer(required=True)
+    aircraft_classification_name = fields.String(dump_only=True)
     amount = fields.Decimal(
         required=True,
         validate=validate.Range(min=0),
@@ -152,7 +152,7 @@ class CreateFeeRuleSchema(Schema):
     """Schema for creating a fee rule."""
     fee_name = fields.String(required=True, validate=validate.Length(min=1, max=100))
     fee_code = fields.String(required=True, validate=validate.Length(min=1, max=50))
-    applies_to_fee_category_id = fields.Integer(required=True)
+    applies_to_aircraft_classification_id = fields.Integer(required=True)
     amount = fields.Decimal(
         required=True,
         validate=validate.Range(min=0),
@@ -199,7 +199,7 @@ class UpdateFeeRuleSchema(Schema):
     """Schema for updating a fee rule."""
     fee_name = fields.String(validate=validate.Length(min=1, max=100))
     fee_code = fields.String(validate=validate.Length(min=1, max=50))
-    applies_to_fee_category_id = fields.Integer()
+    applies_to_aircraft_classification_id = fields.Integer()
     amount = fields.Decimal(
         validate=validate.Range(min=0),
         as_string=True
@@ -287,7 +287,7 @@ class UpdateWaiverTierSchema(CreateWaiverTierSchema):
 
 class CreateAircraftFeeSetupSchema(Schema):
     aircraft_type_name = fields.Str(required=True, validate=validate.Length(min=1))
-    fee_category_id = fields.Int(required=True)
+    aircraft_classification_id = fields.Int(required=True)
     min_fuel_gallons = fields.Float(required=True, validate=validate.Range(min=0))
     initial_ramp_fee_rule_id = fields.Int(allow_none=True)
     initial_ramp_fee_amount = fields.Float(allow_none=True, validate=validate.Range(min=0))

@@ -9,8 +9,8 @@ from src.models.fuel_order import FuelOrder, FuelOrderStatus
 from src.models.receipt import Receipt, ReceiptStatus
 from src.models.receipt_line_item import ReceiptLineItem
 from src.models.aircraft_type import AircraftType
-from src.models.fee_category import FeeCategory
-from src.models.aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
+from src.models.aircraft_classification import AircraftClassification
+from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
 from src.models.fee_rule import FeeRule, WaiverStrategy, CalculationBasis
 from src.models.waiver_tier import WaiverTier
 from src.extensions import db
@@ -33,8 +33,8 @@ def setup_fbo_fee_configuration(app, db):
         db.session.query(Aircraft).delete()
         db.session.query(WaiverTier).delete()
         db.session.query(FeeRule).delete()
-        db.session.query(AircraftTypeToFeeCategoryMapping).delete()
-        db.session.query(FeeCategory).delete()
+        db.session.query(AircraftTypeToAircraftClassificationMapping).delete()
+        db.session.query(AircraftClassification).delete()
         db.session.query(AircraftType).delete()
         db.session.query(Customer).delete()
         db.session.commit()
@@ -43,13 +43,13 @@ def setup_fbo_fee_configuration(app, db):
         light_jet = AircraftType(
             name="Citation CJ3",
             base_min_fuel_gallons_for_waiver=Decimal('150.00'),
-            default_fee_category_id=None,
+            default_aircraft_classification_id=None,
             default_max_gross_weight_lbs=Decimal('13500.00')
         )
         piston_single = AircraftType(
             name="Cessna 172",
             base_min_fuel_gallons_for_waiver=Decimal('30.00'),
-            default_fee_category_id=None,
+            default_aircraft_classification_id=None,
             default_max_gross_weight_lbs=Decimal('2550.00')
         )
         
@@ -57,11 +57,11 @@ def setup_fbo_fee_configuration(app, db):
         db.session.commit()
         
         # Create Fee Categories
-        light_jet_category = FeeCategory(
+        light_jet_category = AircraftClassification(
             fbo_location_id=1,
             name="Light Jet"
         )
-        piston_category = FeeCategory(
+        piston_category = AircraftClassification(
             fbo_location_id=1,
             name="Piston Single"
         )
@@ -70,15 +70,15 @@ def setup_fbo_fee_configuration(app, db):
         db.session.commit()
         
         # Create Aircraft Type to Fee Category Mappings
-        light_jet_mapping = AircraftTypeToFeeCategoryMapping(
+        light_jet_mapping = AircraftTypeToAircraftClassificationMapping(
             fbo_location_id=1,
             aircraft_type_id=light_jet.id,
-            fee_category_id=light_jet_category.id
+            aircraft_classification_id=light_jet_category.id
         )
-        piston_mapping = AircraftTypeToFeeCategoryMapping(
+        piston_mapping = AircraftTypeToAircraftClassificationMapping(
             fbo_location_id=1,
             aircraft_type_id=piston_single.id,
-            fee_category_id=piston_category.id
+            aircraft_classification_id=piston_category.id
         )
         
         db.session.add_all([light_jet_mapping, piston_mapping])
@@ -89,7 +89,7 @@ def setup_fbo_fee_configuration(app, db):
             fbo_location_id=1,
             fee_name="Ramp Fee",
             fee_code="RAMP_LJ",
-            applies_to_fee_category_id=light_jet_category.id,
+            applies_to_aircraft_classification_id=light_jet_category.id,
             amount=Decimal('75.00'),
             currency="USD",
             is_taxable=True,
@@ -105,7 +105,7 @@ def setup_fbo_fee_configuration(app, db):
             fbo_location_id=1,
             fee_name="Overnight Fee",
             fee_code="OVN_LJ",
-            applies_to_fee_category_id=light_jet_category.id,
+            applies_to_aircraft_classification_id=light_jet_category.id,
             amount=Decimal('50.00'),
             currency="USD",
             is_taxable=True,
@@ -119,7 +119,7 @@ def setup_fbo_fee_configuration(app, db):
             fbo_location_id=1,
             fee_name="GPU Service",
             fee_code="GPU",
-            applies_to_fee_category_id=light_jet_category.id,
+            applies_to_aircraft_classification_id=light_jet_category.id,
             amount=Decimal('25.00'),
             currency="USD",
             is_taxable=True,
@@ -132,7 +132,7 @@ def setup_fbo_fee_configuration(app, db):
             fbo_location_id=1,
             fee_name="Lavatory Service",
             fee_code="LAV",
-            applies_to_fee_category_id=light_jet_category.id,
+            applies_to_aircraft_classification_id=light_jet_category.id,
             amount=Decimal('35.00'),
             currency="USD",
             is_taxable=True,

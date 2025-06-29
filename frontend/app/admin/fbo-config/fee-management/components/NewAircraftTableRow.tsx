@@ -25,16 +25,16 @@ import { getAircraftTypes, addAircraftToFeeSchedule } from "@/app/services/admin
 
 interface NewAircraftTableRowProps {
   fboId: number
-  feeCategoryId: number
-  feeCategoryName: string
+  aircraftClassificationId: number
+  aircraftClassificationName: string
   onSave: () => void
   onCancel: () => void
 }
 
 export function NewAircraftTableRow({
   fboId,
-  feeCategoryId,
-  feeCategoryName,
+  aircraftClassificationId,
+  aircraftClassificationName,
   onSave,
   onCancel,
 }: NewAircraftTableRowProps) {
@@ -56,7 +56,7 @@ export function NewAircraftTableRow({
     mutationFn: async () => {
       const payload = {
         aircraft_type_name: aircraftTypeName.trim(),
-        fee_category_id: feeCategoryId,
+        aircraft_classification_id: aircraftClassificationId,
         min_fuel_gallons: parseInt(minFuelGallons, 10),
       }
       
@@ -65,7 +65,7 @@ export function NewAircraftTableRow({
     onSuccess: () => {
       // Invalidate relevant queries to refresh the table
       queryClient.invalidateQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
-      toast.success(`Aircraft "${aircraftTypeName}" added successfully to ${feeCategoryName}`)
+      toast.success(`Aircraft "${aircraftTypeName}" added successfully to ${aircraftClassificationName}`)
       onSave()
     },
     onError: (error: any) => {

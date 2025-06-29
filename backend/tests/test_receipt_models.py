@@ -5,8 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from src.extensions import db
 from src.models.customer import Customer
 from src.models.aircraft_type import AircraftType
-from src.models.fee_category import FeeCategory
-from src.models.aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
+from src.models.aircraft_classification import AircraftClassification
+from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
 from src.models.fee_rule import FeeRule
 from src.models.waiver_tier import WaiverTier
 from src.models.receipt import Receipt
@@ -25,8 +25,8 @@ def clean_receipt_tables(db_session):
         db_session.query(Receipt).delete()
         db_session.query(FeeRule).delete()
         db_session.query(WaiverTier).delete()
-        db_session.query(AircraftTypeToFeeCategoryMapping).delete()
-        db_session.query(FeeCategory).delete()
+        db_session.query(AircraftTypeToAircraftClassificationMapping).delete()
+        db_session.query(AircraftClassification).delete()
         db_session.query(AircraftType).delete()
         
         # Clean up test customers that aren't part of the session fixtures
@@ -63,8 +63,8 @@ def clean_receipt_tables(db_session):
         db_session.query(Receipt).delete()
         db_session.query(FeeRule).delete()
         db_session.query(WaiverTier).delete()
-        db_session.query(AircraftTypeToFeeCategoryMapping).delete()
-        db_session.query(FeeCategory).delete()
+        db_session.query(AircraftTypeToAircraftClassificationMapping).delete()
+        db_session.query(AircraftClassification).delete()
         db_session.query(AircraftType).delete()
         
         # Clean up test customers that aren't part of the session fixtures
@@ -156,7 +156,7 @@ class TestAircraftTypes:
         aircraft_type = AircraftType(
             name="Citation CJ3",
             base_min_fuel_gallons_for_waiver=Decimal('200.0'),
-            default_fee_category_id=None,  # Will be set when fee categories exist
+            default_aircraft_classification_id=None,  # Will be set when fee categories exist
             default_max_gross_weight_lbs=Decimal('13870.0')
         )
         db_session.add(aircraft_type)
@@ -188,18 +188,18 @@ class TestAircraftTypes:
 
 
 class TestFeeCategories:
-    """Test FeeCategory model for receipt system."""
+    """Test AircraftClassification model for receipt system."""
     
-    def test_fee_category_creation(self, db_session):
+    def test_aircraft_classification_creation(self, db_session):
         """Test creating a fee category with FBO location ID."""
-        fee_category = FeeCategory(
+        aircraft_classification = AircraftClassification(
             fbo_location_id=1,
             name="Light Jet"
         )
-        db_session.add(fee_category)
+        db_session.add(aircraft_classification)
         db_session.commit()
         
-        retrieved = FeeCategory.query.filter_by(
+        retrieved = AircraftClassification.query.filter_by(
             fbo_location_id=1, 
             name="Light Jet"
         ).first()
@@ -207,24 +207,24 @@ class TestFeeCategories:
         assert retrieved.fbo_location_id == 1
         assert retrieved.name == "Light Jet"
     
-    def test_fee_category_unique_per_fbo(self, db_session):
+    def test_aircraft_classification_unique_per_fbo(self, db_session):
         """Test that fee category names are unique per FBO."""
         # Same name but different FBOs should be allowed
-        fee_category1 = FeeCategory(fbo_location_id=1, name="Light Jet")
-        fee_category2 = FeeCategory(fbo_location_id=2, name="Light Jet")
+        aircraft_classification1 = AircraftClassification(fbo_location_id=1, name="Light Jet")
+        aircraft_classification2 = AircraftClassification(fbo_location_id=2, name="Light Jet")
         
-        db_session.add_all([fee_category1, fee_category2])
+        db_session.add_all([aircraft_classification1, aircraft_classification2])
         db_session.commit()
         
         # Same name and same FBO should fail
-        fee_category3 = FeeCategory(fbo_location_id=1, name="Light Jet")
-        db_session.add(fee_category3)
+        aircraft_classification3 = AircraftClassification(fbo_location_id=1, name="Light Jet")
+        db_session.add(aircraft_classification3)
         with pytest.raises(IntegrityError):
             db_session.commit()
 
 
-class TestAircraftTypeToFeeCategoryMapping:
-    """Test AircraftTypeToFeeCategoryMapping model."""
+class TestAircraftTypeToAircraftClassificationMapping:
+    """Test AircraftTypeToAircraftClassificationMapping model."""
     
     def test_mapping_creation(self, db_session):
         """Test creating aircraft type to fee category mapping."""
@@ -233,26 +233,26 @@ class TestAircraftTypeToFeeCategoryMapping:
             name="Citation CJ3",
             base_min_fuel_gallons_for_waiver=Decimal('200.0')
         )
-        fee_category = FeeCategory(fbo_location_id=1, name="Light Jet")
+        aircraft_classification = AircraftClassification(fbo_location_id=1, name="Light Jet")
         
-        db_session.add_all([aircraft_type, fee_category])
+        db_session.add_all([aircraft_type, aircraft_classification])
         db_session.commit()
         
         # Create mapping
-        mapping = AircraftTypeToFeeCategoryMapping(
+        mapping = AircraftTypeToAircraftClassificationMapping(
             fbo_location_id=1,
             aircraft_type_id=aircraft_type.id,
-            fee_category_id=fee_category.id
+            aircraft_classification_id=aircraft_classification.id
         )
         db_session.add(mapping)
         db_session.commit()
         
-        retrieved = AircraftTypeToFeeCategoryMapping.query.filter_by(
+        retrieved = AircraftTypeToAircraftClassificationMapping.query.filter_by(
             fbo_location_id=1,
             aircraft_type_id=aircraft_type.id
         ).first()
         assert retrieved is not None
-        assert retrieved.fee_category_id == fee_category.id
+        assert retrieved.aircraft_classification_id == aircraft_classification.id
     
     def test_mapping_unique_per_fbo_aircraft_type(self, db_session):
         """Test that aircraft type can only map to one fee category per FBO."""
@@ -260,26 +260,26 @@ class TestAircraftTypeToFeeCategoryMapping:
             name="Citation CJ3",
             base_min_fuel_gallons_for_waiver=Decimal('200.0')
         )
-        fee_category1 = FeeCategory(fbo_location_id=1, name="Light Jet")
-        fee_category2 = FeeCategory(fbo_location_id=1, name="Medium Jet")
+        aircraft_classification1 = AircraftClassification(fbo_location_id=1, name="Light Jet")
+        aircraft_classification2 = AircraftClassification(fbo_location_id=1, name="Medium Jet")
         
-        db_session.add_all([aircraft_type, fee_category1, fee_category2])
+        db_session.add_all([aircraft_type, aircraft_classification1, aircraft_classification2])
         db_session.commit()
         
         # First mapping should work
-        mapping1 = AircraftTypeToFeeCategoryMapping(
+        mapping1 = AircraftTypeToAircraftClassificationMapping(
             fbo_location_id=1,
             aircraft_type_id=aircraft_type.id,
-            fee_category_id=fee_category1.id
+            aircraft_classification_id=aircraft_classification1.id
         )
         db_session.add(mapping1)
         db_session.commit()
         
         # Second mapping for same aircraft type and FBO should fail
-        mapping2 = AircraftTypeToFeeCategoryMapping(
+        mapping2 = AircraftTypeToAircraftClassificationMapping(
             fbo_location_id=1,
             aircraft_type_id=aircraft_type.id,
-            fee_category_id=fee_category2.id
+            aircraft_classification_id=aircraft_classification2.id
         )
         db_session.add(mapping2)
         with pytest.raises(IntegrityError):
@@ -291,15 +291,15 @@ class TestFeeRules:
     
     def test_fee_rule_creation(self, db_session):
         """Test creating a fee rule with all fields."""
-        fee_category = FeeCategory(fbo_location_id=1, name="Light Jet")
-        db_session.add(fee_category)
+        aircraft_classification = AircraftClassification(fbo_location_id=1, name="Light Jet")
+        db_session.add(aircraft_classification)
         db_session.commit()
         
         fee_rule = FeeRule(
             fbo_location_id=1,
             fee_name="Ramp Fee",
             fee_code="RAMP_FEE",
-            applies_to_fee_category_id=fee_category.id,
+            applies_to_aircraft_classification_id=aircraft_classification.id,
             amount=Decimal('50.00'),
             currency="USD",
             is_taxable=True,
@@ -328,8 +328,8 @@ class TestFeeRules:
     
     def test_fee_rule_code_unique_per_fbo(self, db_session):
         """Test that fee codes are unique per FBO."""
-        fee_category = FeeCategory(fbo_location_id=1, name="Light Jet")
-        db_session.add(fee_category)
+        aircraft_classification = AircraftClassification(fbo_location_id=1, name="Light Jet")
+        db_session.add(aircraft_classification)
         db_session.commit()
         
         # Same fee code but different FBOs should be allowed
@@ -337,14 +337,14 @@ class TestFeeRules:
             fbo_location_id=1,
             fee_name="Ramp Fee",
             fee_code="RAMP_FEE",
-            applies_to_fee_category_id=fee_category.id,
+            applies_to_aircraft_classification_id=aircraft_classification.id,
             amount=Decimal('50.00')
         )
         fee_rule2 = FeeRule(
             fbo_location_id=2,
             fee_name="Ramp Fee",
             fee_code="RAMP_FEE",
-            applies_to_fee_category_id=fee_category.id,
+            applies_to_aircraft_classification_id=aircraft_classification.id,
             amount=Decimal('60.00')
         )
         
@@ -356,7 +356,7 @@ class TestFeeRules:
             fbo_location_id=1,
             fee_name="Another Ramp Fee",
             fee_code="RAMP_FEE",
-            applies_to_fee_category_id=fee_category.id,
+            applies_to_aircraft_classification_id=aircraft_classification.id,
             amount=Decimal('70.00')
         )
         db_session.add(fee_rule3)
@@ -691,23 +691,23 @@ class TestFBOLocationScoping:
     
     def test_fee_rules_scoped_by_fbo_location(self, db_session):
         """Test querying fee rules by FBO location ID."""
-        fee_category1 = FeeCategory(fbo_location_id=1, name="Light Jet")
-        fee_category2 = FeeCategory(fbo_location_id=2, name="Light Jet")
-        db_session.add_all([fee_category1, fee_category2])
+        aircraft_classification1 = AircraftClassification(fbo_location_id=1, name="Light Jet")
+        aircraft_classification2 = AircraftClassification(fbo_location_id=2, name="Light Jet")
+        db_session.add_all([aircraft_classification1, aircraft_classification2])
         db_session.commit()
         
         fee_rule1 = FeeRule(
             fbo_location_id=1,
             fee_name="Ramp Fee FBO1",
             fee_code="RAMP_FEE",
-            applies_to_fee_category_id=fee_category1.id,
+            applies_to_aircraft_classification_id=aircraft_classification1.id,
             amount=Decimal('50.00')
         )
         fee_rule2 = FeeRule(
             fbo_location_id=2,
             fee_name="Ramp Fee FBO2",
             fee_code="RAMP_FEE",
-            applies_to_fee_category_id=fee_category2.id,
+            applies_to_aircraft_classification_id=aircraft_classification2.id,
             amount=Decimal('75.00')
         )
         db_session.add_all([fee_rule1, fee_rule2])
@@ -731,8 +731,8 @@ class TestEnumValueConstraints:
     
     def test_fee_rule_enum_constraints(self, db_session):
         """Test ENUM constraints on FeeRule model."""
-        fee_category = FeeCategory(fbo_location_id=1, name="Light Jet")
-        db_session.add(fee_category)
+        aircraft_classification = AircraftClassification(fbo_location_id=1, name="Light Jet")
+        db_session.add(aircraft_classification)
         db_session.commit()
         
         # Valid ENUM values should work
@@ -740,7 +740,7 @@ class TestEnumValueConstraints:
             fbo_location_id=1,
             fee_name="Test Fee",
             fee_code="TEST_FEE",
-            applies_to_fee_category_id=fee_category.id,
+            applies_to_aircraft_classification_id=aircraft_classification.id,
             amount=Decimal('50.00'),
             calculation_basis='FIXED_PRICE',
             waiver_strategy='SIMPLE_MULTIPLIER'
@@ -753,7 +753,7 @@ class TestEnumValueConstraints:
             fbo_location_id=1,
             fee_name="Invalid Fee",
             fee_code="INVALID_FEE",
-            applies_to_fee_category_id=fee_category.id,
+            applies_to_aircraft_classification_id=aircraft_classification.id,
             amount=Decimal('50.00'),
             calculation_basis='INVALID_BASIS',  # Invalid ENUM value
             waiver_strategy='NONE'

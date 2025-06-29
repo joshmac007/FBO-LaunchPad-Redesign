@@ -3,9 +3,9 @@ from src.models import Permission, Role, User
 from src.models.fuel_truck import FuelTruck
 from src.models.fuel_type import FuelType
 from src.models.aircraft_type import AircraftType
-from src.models.fee_category import FeeCategory
+from src.models.aircraft_classification import AircraftClassification
 from src.models.fee_rule import FeeRule
-from src.models.aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
+from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
 from src.models.fbo_aircraft_type_config import FBOAircraftTypeConfig
 from datetime import datetime
 from sqlalchemy import text
@@ -104,16 +104,45 @@ default_fuel_trucks = [
     }
 ]
 
+# Default global aircraft classifications
+default_classifications = [
+    "Piston Single Engine",
+    "Piston Multi Engine",
+    "Turboprop Single Engine",
+    "Turboprop Multi Engine",
+    "Light Jet",
+    "Medium Jet",
+    "Super-Mid Jet",
+    "Large Jet",
+    "Heavy Jet",
+    "Super Heavy Jet",
+    "Helicopter",
+    "Military"
+]
+
 default_aircraft_types = [
-    {"name": "Citation CJ3", "base_min_fuel_gallons_for_waiver": 100.00},
-    {"name": "Citation Mustang", "base_min_fuel_gallons_for_waiver": 80.00},
-    {"name": "Gulfstream G650", "base_min_fuel_gallons_for_waiver": 200.00},
-    {"name": "King Air 350", "base_min_fuel_gallons_for_waiver": 120.00},
-    {"name": "Pilatus PC-12", "base_min_fuel_gallons_for_waiver": 90.00},
-    {"name": "Cessna 172", "base_min_fuel_gallons_for_waiver": 30.00},
-    {"name": "Cessna 182", "base_min_fuel_gallons_for_waiver": 35.00},
-    {"name": "Piper Archer", "base_min_fuel_gallons_for_waiver": 32.00},
-    {"name": "Beechcraft Bonanza", "base_min_fuel_gallons_for_waiver": 40.00},
+    {"name": "Bell 206", "base_min_fuel_gallons_for_waiver": 30.00, "classification": "Helicopter"},
+    {"name": "Cessna 172", "base_min_fuel_gallons_for_waiver": 30.00, "classification": "Piston Single Engine"},
+    {"name": "Piper Archer", "base_min_fuel_gallons_for_waiver": 30.00, "classification": "Piston Single Engine"},
+    {"name": "Beechcraft Baron", "base_min_fuel_gallons_for_waiver": 40.00, "classification": "Piston Multi Engine"},
+    {"name": "King Air 350", "base_min_fuel_gallons_for_waiver": 120.00, "classification": "Turboprop Multi Engine"},
+    {"name": "Pilatus PC-12", "base_min_fuel_gallons_for_waiver": 80.00, "classification": "Turboprop Single Engine"},
+    {"name": "Citation Jet (CJ2, CJ3, CJ4)", "base_min_fuel_gallons_for_waiver": 180.00, "classification": "Light Jet"},
+    {"name": "Hawker 400", "base_min_fuel_gallons_for_waiver": 200.00, "classification": "Light Jet"},
+    {"name": "Phenom 300", "base_min_fuel_gallons_for_waiver": 275.00, "classification": "Medium Jet"},
+    {"name": "Learjet 60", "base_min_fuel_gallons_for_waiver": 275.00, "classification": "Medium Jet"},
+    {"name": "Citation XLS", "base_min_fuel_gallons_for_waiver": 275.00, "classification": "Medium Jet"},
+    {"name": "Citation X", "base_min_fuel_gallons_for_waiver": 450.00, "classification": "Super-Mid Jet"},
+    {"name": "Challenger 300", "base_min_fuel_gallons_for_waiver": 500.00, "classification": "Super-Mid Jet"},
+    {"name": "Gulfstream G200", "base_min_fuel_gallons_for_waiver": 500.00, "classification": "Super-Mid Jet"},
+    {"name": "Challenger 600", "base_min_fuel_gallons_for_waiver": 600.00, "classification": "Large Jet"},
+    {"name": "Falcon 900", "base_min_fuel_gallons_for_waiver": 600.00, "classification": "Large Jet"},
+    {"name": "Gulfstream G650", "base_min_fuel_gallons_for_waiver": 900.00, "classification": "Heavy Jet"},
+    {"name": "Global Express 5000", "base_min_fuel_gallons_for_waiver": 1000.00, "classification": "Heavy Jet"},
+    {"name": "Embraer 145", "base_min_fuel_gallons_for_waiver": 850.00, "classification": "Super Heavy Jet"},
+    {"name": "Airbus A320", "base_min_fuel_gallons_for_waiver": 1500.00, "classification": "Super Heavy Jet"},
+    {"name": "C130 Hercules", "base_min_fuel_gallons_for_waiver": 1750.00, "classification": "Military"},
+    {"name": "C17 Globemaster", "base_min_fuel_gallons_for_waiver": 2000.00, "classification": "Military"}
 ]
 
 default_fuel_types = [
@@ -166,7 +195,7 @@ def seed_data():
             'fuel_orders',
             'fee_rule_overrides',
             'fbo_aircraft_type_configs',
-            'aircraft_type_fee_category_mappings',
+            'aircraft_classification_mappings',
             'fee_rules',
             'aircraft',
 
@@ -180,8 +209,8 @@ def seed_data():
 
             # Fee system primary tables
             'aircraft_types',
-            'fee_categories',
-            'fuel_types'  # Add fuel_types table
+            'aircraft_classifications',
+            'fuel_types'
         ]
         
         # Use TRUNCATE CASCADE for more reliable table clearing
@@ -272,6 +301,32 @@ def seed_data():
             click.echo(f"Seeded {len(roles_to_add)} new roles.")
         else:
             click.echo("All roles already exist in the database. No new roles were added.")
+        
+        # Commit the changes before proceeding
+        db.session.commit()
+
+        # Seed Aircraft Classifications
+        click.echo("Seeding aircraft classifications...")
+        
+        # Get all classification names that already exist in the database
+        existing_classifications_query = db.session.query(AircraftClassification.name).all()
+        existing_classifications = {name for (name,) in existing_classifications_query}
+        
+        classifications_to_add = []
+        
+        for classification_name in default_classifications:
+            # Check if the classification already exists in the database
+            if classification_name not in existing_classifications:
+                classifications_to_add.append(
+                    AircraftClassification(name=classification_name)
+                )
+        
+        if classifications_to_add:
+            db.session.add_all(classifications_to_add)
+            db.session.commit()
+            click.echo(f"Seeded {len(classifications_to_add)} new aircraft classifications.")
+        else:
+            click.echo("All aircraft classifications already exist in the database. No new classifications were added.")
         
         # Commit the changes before proceeding
         db.session.commit()
@@ -368,17 +423,30 @@ def seed_data():
 
         # Create Default Aircraft Types
         click.echo("Creating default aircraft types...")
+        
+        # Create a map of classification names to their IDs
+        classification_map = {c.name: c.id for c in AircraftClassification.query.all()}
+        
         aircraft_types_created = 0
         for aircraft_type_data in default_aircraft_types:
             existing_type = AircraftType.query.filter_by(name=aircraft_type_data['name']).first()
             if not existing_type:
+                # Look up the classification_id from the seeded classifications
+                classification_name = aircraft_type_data.get('classification', 'Unclassified')
+                classification_id = classification_map.get(classification_name)
+                
+                if not classification_id:
+                    click.echo(f"Warning: Classification '{classification_name}' not found for aircraft type '{aircraft_type_data['name']}'. Using 'Unclassified'.")
+                    classification_id = classification_map.get('Unclassified')
+                
                 aircraft_type = AircraftType(
                     name=aircraft_type_data['name'],
-                    base_min_fuel_gallons_for_waiver=aircraft_type_data['base_min_fuel_gallons_for_waiver']
+                    base_min_fuel_gallons_for_waiver=aircraft_type_data['base_min_fuel_gallons_for_waiver'],
+                    classification_id=classification_id
                 )
                 db.session.add(aircraft_type)
                 aircraft_types_created += 1
-                click.echo(f"Default Aircraft Type '{aircraft_type_data['name']}' created.")
+                click.echo(f"Default Aircraft Type '{aircraft_type_data['name']}' created with classification '{classification_name}'.")
             else:
                 click.echo(f"Aircraft Type '{aircraft_type_data['name']}' already exists.")
 
@@ -408,18 +476,23 @@ def seed_data():
             db.session.commit()
             click.echo(f"Successfully created {fuel_types_created} default fuel types.")
 
-        # Seed Default Fee Categories, Rules, and Mappings for FBO 1
+        # Seed Default Fee Rules for FBO 1 using global classifications
         click.echo("Seeding default fee setup for FBO 1...")
         try:
             fbo_id = 1
-            # 1. Get/Create Default Fee Category
-            default_category = FeeCategory.query.filter_by(name="Default Aircraft Category", fbo_location_id=fbo_id).first()
-            if not default_category:
-                default_category = FeeCategory(name="Default Aircraft Category", fbo_location_id=fbo_id)
-                db.session.add(default_category)
+            
+            # Get the 'Unclassified' classification to use for default fee rules
+            default_classification = AircraftClassification.query.filter_by(name="Unclassified").first()
+            if not default_classification:
+                click.echo("Warning: 'Unclassified' classification not found. Creating it.")
+                default_classification = AircraftClassification(name="Unclassified")
+                db.session.add(default_classification)
                 db.session.flush()
 
-                # 2. Create Default Primary Fee Rules
+            # Check if fee rules already exist for this FBO
+            existing_rules = FeeRule.query.filter_by(fbo_location_id=fbo_id).first()
+            if not existing_rules:
+                # Create Default Primary Fee Rules
                 default_rules = [
                     {'fee_name': 'Hangar O/N', 'fee_code': 'HGR-OVN', 'amount': 0.00, 'is_primary_fee': True},
                     {'fee_name': 'Overnight', 'fee_code': 'OVN', 'amount': 0.00, 'is_primary_fee': True},
@@ -430,7 +503,7 @@ def seed_data():
                 for rule_data in default_rules:
                     new_rule = FeeRule(
                         fbo_location_id=fbo_id,
-                        applies_to_fee_category_id=default_category.id,
+                        applies_to_classification_id=default_classification.id,
                         fee_name=rule_data['fee_name'],
                         fee_code=rule_data['fee_code'],
                         amount=rule_data['amount'],
@@ -438,28 +511,12 @@ def seed_data():
                     )
                     db.session.add(new_rule)
                     rules_created += 1
-                click.echo(f"Created 'Default Aircraft Category' and {rules_created} primary fee rules for FBO {fbo_id}.")
+                click.echo(f"Created {rules_created} primary fee rules for FBO {fbo_id} using 'Unclassified' classification.")
 
-                # 3. Create Mappings for all existing AircraftTypes to the Default Category
+                # Create FBOAircraftTypeConfig for all aircraft types
                 all_aircraft_types = AircraftType.query.all()
-                mappings_created = 0
+                configs_created = 0
                 for aircraft_type in all_aircraft_types:
-                    existing_mapping = AircraftTypeToFeeCategoryMapping.query.filter_by(
-                        fbo_location_id=fbo_id,
-                        aircraft_type_id=aircraft_type.id
-                    ).first()
-                    if not existing_mapping:
-                        mapping = AircraftTypeToFeeCategoryMapping(
-                            fbo_location_id=fbo_id,
-                            aircraft_type_id=aircraft_type.id,
-                            fee_category_id=default_category.id
-                        )
-                        db.session.add(mapping)
-                        mappings_created += 1
-
-                    # --- START: ADD THIS BLOCK ---
-                    # Also create the FBOAircraftTypeConfig to store the min fuel value,
-                    # making seeded data consistent with manually added data.
                     fbo_config = FBOAircraftTypeConfig.query.filter_by(
                         fbo_location_id=fbo_id,
                         aircraft_type_id=aircraft_type.id
@@ -472,9 +529,9 @@ def seed_data():
                             base_min_fuel_gallons_for_waiver=aircraft_type.base_min_fuel_gallons_for_waiver
                         )
                         db.session.add(config)
-                    # --- END: ADD THIS BLOCK ---
+                        configs_created += 1
 
-                click.echo(f"Created {mappings_created} mappings to 'Default Aircraft Category'.")
+                click.echo(f"Created {configs_created} FBO aircraft type configurations.")
             else:
                 click.echo(f"Default fee setup for FBO {fbo_id} already exists, skipping.")
         except Exception as e:

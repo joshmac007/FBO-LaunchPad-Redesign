@@ -35,7 +35,7 @@ export function FeeColumnsTab({ fboId }: FeeColumnsTabProps) {
   }, [consolidatedData])
 
   // Fetch fee categories for the dialog
-  const { data: feeCategories = [] } = useQuery({
+  const { data: aircraftClassifications = [] } = useQuery({
     queryKey: ['fee-categories', fboId],
     queryFn: () => getFeeCategories(fboId),
   })
@@ -168,7 +168,7 @@ export function FeeColumnsTab({ fboId }: FeeColumnsTabProps) {
         defaultValues={{
           is_primary_fee: true, // Default to primary fee for this tab
         }}
-        availableCategories={feeCategories}
+        availableCategories={aircraftClassifications}
       />
     </div>
   )

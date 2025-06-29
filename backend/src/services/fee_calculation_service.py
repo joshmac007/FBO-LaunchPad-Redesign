@@ -20,8 +20,8 @@ from sqlalchemy import and_
 from ..extensions import db
 from ..models.customer import Customer
 from ..models.aircraft_type import AircraftType
-from ..models.fee_category import FeeCategory
-from ..models.aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
+from ..models.aircraft_classification import AircraftClassification
+from ..models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
 from ..models.fee_rule import FeeRule, WaiverStrategy, CalculationBasis
 from ..models.waiver_tier import WaiverTier
 
@@ -101,7 +101,7 @@ class FeeCalculationService:
             # 2. Determine applicable fee rules
             applicable_rules = self._determine_applicable_rules(
                 data['fee_rules'], 
-                data['aircraft_fee_category_id'],
+                data['aircraft_aircraft_classification_id'],
                 context.additional_services
             )
             
@@ -245,18 +245,18 @@ class FeeCalculationService:
             ).first()
         
         # Find aircraft's fee category for this FBO
-        aircraft_fee_category_id = None
+        aircraft_aircraft_classification_id = None
         if aircraft_type:
-            mapping = AircraftTypeToFeeCategoryMapping.query.filter_by(
+            mapping = AircraftTypeToAircraftClassificationMapping.query.filter_by(
                 fbo_location_id=context.fbo_location_id,
                 aircraft_type_id=aircraft_type.id
             ).first()
-            aircraft_fee_category_id = mapping.fee_category_id if mapping else None
+            aircraft_aircraft_classification_id = mapping.aircraft_classification_id if mapping else None
         
         # Fetch all fee rules for this FBO
         fee_rules = FeeRule.query.filter_by(
             fbo_location_id=context.fbo_location_id
-        ).options(joinedload(FeeRule.fee_category)).all()  # type: ignore
+        ).options(joinedload(FeeRule.aircraft_classification)).all()  # type: ignore
         
         # Fetch all waiver tiers for this FBO
         waiver_tiers = WaiverTier.query.filter_by(
@@ -267,7 +267,7 @@ class FeeCalculationService:
             'customer': customer,
             'aircraft_type': aircraft_type,
             'fbo_aircraft_config': fbo_aircraft_config,
-            'aircraft_fee_category_id': aircraft_fee_category_id,
+            'aircraft_aircraft_classification_id': aircraft_aircraft_classification_id,
             'fee_rules': fee_rules,
             'waiver_tiers': waiver_tiers
         }
@@ -275,7 +275,7 @@ class FeeCalculationService:
     def _determine_applicable_rules(
         self, 
         all_rules: List[FeeRule], 
-        aircraft_fee_category_id: Optional[int],
+        aircraft_aircraft_classification_id: Optional[int],
         additional_services: List[Dict[str, Any]]
     ) -> List[FeeRule]:
         """
@@ -283,7 +283,7 @@ class FeeCalculationService:
         
         Args:
             all_rules: All fee rules for the FBO
-            aircraft_fee_category_id: Fee category ID for the aircraft
+            aircraft_aircraft_classification_id: Fee category ID for the aircraft
             additional_services: Additional services requested
             
         Returns:
@@ -296,7 +296,7 @@ class FeeCalculationService:
         
         for rule in all_rules:
             # Include if it applies to the aircraft's fee category
-            if rule.applies_to_fee_category_id == aircraft_fee_category_id:
+            if rule.applies_to_aircraft_classification_id == aircraft_aircraft_classification_id:
                 applicable_rules.append(rule)
             # Include if it's an additional service that was requested
             elif rule.fee_code in additional_fee_codes:

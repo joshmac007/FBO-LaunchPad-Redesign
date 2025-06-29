@@ -10,8 +10,8 @@ import { EditableMinFuelCell } from "@/app/admin/fbo-config/fee-management/compo
 interface AircraftRowData {
   aircraft_type_id: number
   aircraft_type_name: string
-  fee_category_id: number
-  fee_category_name: string
+  aircraft_classification_id: number
+  aircraft_classification_name: string
   min_fuel_gallons: number | null
   fees: Record<string, {
     fee_rule_id: number
@@ -53,7 +53,7 @@ const FeeScheduleTableRow = memo(({
         {row.aircraft_type_name}
       </TableCell>
       <TableCell className="text-sm text-muted-foreground">
-        {row.fee_category_name}
+        {row.aircraft_classification_name}
       </TableCell>
       <TableCell>
         <EditableMinFuelCell
@@ -95,8 +95,8 @@ const FeeScheduleTableRow = memo(({
   if (
     prevRow.aircraft_type_id !== nextRow.aircraft_type_id ||
     prevRow.aircraft_type_name !== nextRow.aircraft_type_name ||
-    prevRow.fee_category_id !== nextRow.fee_category_id ||
-    prevRow.fee_category_name !== nextRow.fee_category_name ||
+    prevRow.aircraft_classification_id !== nextRow.aircraft_classification_id ||
+    prevRow.aircraft_classification_name !== nextRow.aircraft_classification_name ||
     prevRow.min_fuel_gallons !== nextRow.min_fuel_gallons ||
     prevProps.viewMode !== nextProps.viewMode ||
     prevProps.fboId !== nextProps.fboId

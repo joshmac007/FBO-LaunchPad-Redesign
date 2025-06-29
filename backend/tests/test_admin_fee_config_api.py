@@ -5,11 +5,12 @@ from decimal import Decimal
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 
-from src.models.fee_category import FeeCategory
+from src.models.aircraft_classification import AircraftClassification
 from src.models.fee_rule import FeeRule, CalculationBasis, WaiverStrategy
 from src.models.aircraft_type import AircraftType
-from src.models.aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
+from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
 from src.models.waiver_tier import WaiverTier
+from src.services.admin_fee_config_service import AdminFeeConfigService
 from src.extensions import db
 
 
@@ -17,13 +18,14 @@ from src.extensions import db
 def clean_fee_config_tables(db_session):
     """Clean fee configuration tables before each test."""
     # Delete all fee configuration data to ensure clean test state
-    from src.models.aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
+    # Order matters due to foreign key constraints
+    from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
     
     db_session.query(FeeRule).delete()
-    db_session.query(AircraftTypeToFeeCategoryMapping).delete() 
+    db_session.query(AircraftTypeToAircraftClassificationMapping).delete() 
     db_session.query(WaiverTier).delete()
-    db_session.query(FeeCategory).delete()
-    db_session.query(AircraftType).delete()  # Also clean aircraft types
+    db_session.query(AircraftType).delete()  # Delete aircraft types first (they reference classifications)
+    db_session.query(AircraftClassification).delete()  # Then delete classifications
     db_session.commit()
 
 
@@ -34,20 +36,40 @@ def test_fbo_id():
 
 
 @pytest.fixture(scope='function')
-def test_aircraft_types(db_session):
-    """Create test aircraft types"""
+def test_aircraft_classifications(db_session):
+    """Create test aircraft classifications (global)"""
+    import uuid
+    test_id = str(uuid.uuid4())[:8]  # Use a unique identifier
+    classifications = [
+        AircraftClassification(name=f'Test Piston {test_id}'),
+        AircraftClassification(name=f'Test Light Jet {test_id}'),
+        AircraftClassification(name=f'Test Heavy Jet {test_id}'),
+        AircraftClassification(name=f'Test Helicopter {test_id}')
+    ]
+    for classification in classifications:
+        db_session.add(classification)
+    db_session.commit()
+    return classifications
+
+
+@pytest.fixture(scope='function')
+def test_aircraft_types(db_session, test_aircraft_classifications):
+    """Create test aircraft types with classifications"""
     aircraft_types = [
         AircraftType(
             name='Test Cessna 172',
-            base_min_fuel_gallons_for_waiver=50.0
+            base_min_fuel_gallons_for_waiver=50.0,
+            classification_id=test_aircraft_classifications[0].id  # Piston
         ),
         AircraftType(
             name='Test Gulfstream G650',
-            base_min_fuel_gallons_for_waiver=500.0
+            base_min_fuel_gallons_for_waiver=500.0,
+            classification_id=test_aircraft_classifications[2].id  # Heavy Jet
         ),
         AircraftType(
             name='Test Boeing 737',
-            base_min_fuel_gallons_for_waiver=1000.0
+            base_min_fuel_gallons_for_waiver=1000.0,
+            classification_id=test_aircraft_classifications[2].id  # Heavy Jet
         )
     ]
     for aircraft_type in aircraft_types:
@@ -56,29 +78,11 @@ def test_aircraft_types(db_session):
     return aircraft_types
 
 
+# Legacy fixture - deprecated, use test_aircraft_classifications instead
 @pytest.fixture(scope='function')
-def test_fee_categories(db_session, test_fbo_id):
-    """Create test fee categories"""
-    import uuid
-    test_id = str(uuid.uuid4())[:8]  # Use a unique identifier
-    fee_categories = [
-        FeeCategory(
-            fbo_location_id=test_fbo_id,
-            name=f'Test Light Aircraft {test_id}'
-        ),
-        FeeCategory(
-            fbo_location_id=test_fbo_id,
-            name=f'Test Heavy Jet {test_id}'
-        ),
-        FeeCategory(
-            fbo_location_id=test_fbo_id,
-            name=f'Test Helicopter {test_id}'
-        )
-    ]
-    for category in fee_categories:
-        db_session.add(category)
-    db_session.commit()
-    return fee_categories
+def test_fee_categories(test_aircraft_classifications):
+    """Create test fee categories (deprecated - use test_aircraft_classifications)"""
+    return test_aircraft_classifications
 
 
 @pytest.fixture(scope='function')
@@ -89,7 +93,7 @@ def test_fee_rules(db_session, test_fbo_id, test_fee_categories):
             fbo_location_id=test_fbo_id,
             fee_name='Ramp Fee',
             fee_code='RAMP',
-            applies_to_fee_category_id=test_fee_categories[0].id,
+            applies_to_aircraft_classification_id=test_fee_categories[0].id,
             amount=50.00,
             is_potentially_waivable_by_fuel_uplift=True,
             waiver_strategy=WaiverStrategy.SIMPLE_MULTIPLIER,
@@ -99,7 +103,7 @@ def test_fee_rules(db_session, test_fbo_id, test_fee_categories):
             fbo_location_id=test_fbo_id,
             fee_name='Overnight Fee',
             fee_code='OVERNIGHT',
-            applies_to_fee_category_id=test_fee_categories[1].id,
+            applies_to_aircraft_classification_id=test_fee_categories[1].id,
             amount=100.00,
             is_potentially_waivable_by_fuel_uplift=False
         )
@@ -205,7 +209,7 @@ class TestAircraftTypesAPI:
 class TestFeeCategoriesAPI:
     """Test Fee Categories API endpoints"""
     
-    def test_create_fee_category_success(self, client, auth_headers, test_fbo_id):
+    def test_create_aircraft_classification_success(self, client, auth_headers, test_fbo_id):
         """Test successful fee category creation"""
         category_data = {
             'name': 'Test Category'
@@ -225,7 +229,7 @@ class TestFeeCategoriesAPI:
         assert 'created_at' in data
         assert 'updated_at' in data
     
-    def test_create_fee_category_missing_name(self, client, auth_headers, test_fbo_id):
+    def test_create_aircraft_classification_missing_name(self, client, auth_headers, test_fbo_id):
         """Test fee category creation with missing name"""
         response = client.post(
             f'/api/admin/fbo/{test_fbo_id}/fee-categories',
@@ -235,7 +239,7 @@ class TestFeeCategoriesAPI:
         
         assert response.status_code == 400
     
-    def test_create_fee_category_duplicate_name(self, client, auth_headers, test_fbo_id, test_fee_categories):
+    def test_create_aircraft_classification_duplicate_name(self, client, auth_headers, test_fbo_id, test_fee_categories):
         """Test fee category creation with duplicate name for same FBO"""
         category_data = {
             'name': test_fee_categories[0].name
@@ -249,7 +253,7 @@ class TestFeeCategoriesAPI:
         
         assert response.status_code == 409
     
-    def test_create_fee_category_unauthorized(self, client, test_fbo_id):
+    def test_create_aircraft_classification_unauthorized(self, client, test_fbo_id):
         """Test unauthorized fee category creation"""
         response = client.post(
             f'/api/admin/fbo/{test_fbo_id}/fee-categories',
@@ -285,7 +289,7 @@ class TestFeeCategoriesAPI:
     def test_get_fee_categories_scoped_by_fbo(self, client, auth_headers, db_session, test_fee_categories):
         """Test that fee categories are properly scoped by FBO"""
         # Create category for different FBO
-        other_fbo_category = FeeCategory(fbo_location_id=2, name='Other FBO Category')
+        other_fbo_category = AircraftClassification(fbo_location_id=2, name='Other FBO Category')
         db_session.add(other_fbo_category)
         db_session.commit()
         
@@ -300,7 +304,7 @@ class TestFeeCategoriesAPI:
         for category in data['fee_categories']:
             assert category['fbo_location_id'] == 1
     
-    def test_get_fee_category_single_success(self, client, auth_headers, test_fbo_id, test_fee_categories):
+    def test_get_aircraft_classification_single_success(self, client, auth_headers, test_fbo_id, test_fee_categories):
         """Test successful retrieval of single fee category"""
         category_id = test_fee_categories[0].id
         
@@ -311,10 +315,10 @@ class TestFeeCategoriesAPI:
         
         assert response.status_code == 200
         data = response.get_json()
-        assert 'fee_category' in data
-        assert data['fee_category']['id'] == category_id
+        assert 'aircraft_classification' in data
+        assert data['aircraft_classification']['id'] == category_id
     
-    def test_get_fee_category_not_found(self, client, auth_headers, test_fbo_id):
+    def test_get_aircraft_classification_not_found(self, client, auth_headers, test_fbo_id):
         """Test retrieval of non-existent fee category"""
         response = client.get(
             f'/api/admin/fbo/{test_fbo_id}/fee-categories/99999',
@@ -323,7 +327,7 @@ class TestFeeCategoriesAPI:
         
         assert response.status_code == 404
     
-    def test_update_fee_category_success(self, client, auth_headers, test_fbo_id, test_fee_categories):
+    def test_update_aircraft_classification_success(self, client, auth_headers, test_fbo_id, test_fee_categories):
         """Test successful fee category update"""
         category_id = test_fee_categories[0].id
         update_data = {
@@ -338,9 +342,9 @@ class TestFeeCategoriesAPI:
         
         assert response.status_code == 200
         data = response.get_json()
-        assert data['fee_category']['name'] == 'Updated Category Name'
+        assert data['aircraft_classification']['name'] == 'Updated Category Name'
     
-    def test_update_fee_category_duplicate_name(self, client, auth_headers, test_fbo_id, test_fee_categories):
+    def test_update_aircraft_classification_duplicate_name(self, client, auth_headers, test_fbo_id, test_fee_categories):
         """Test updating fee category with duplicate name"""
         category_id = test_fee_categories[0].id
         update_data = {
@@ -355,10 +359,10 @@ class TestFeeCategoriesAPI:
         
         assert response.status_code == 409
     
-    def test_delete_fee_category_success(self, client, auth_headers, test_fbo_id, db_session):
+    def test_delete_aircraft_classification_success(self, client, auth_headers, test_fbo_id, db_session):
         """Test successful fee category deletion"""
         # Create a category without dependencies
-        category = FeeCategory(fbo_location_id=test_fbo_id, name='Delete Me')
+        category = AircraftClassification(fbo_location_id=test_fbo_id, name='Delete Me')
         db_session.add(category)
         db_session.commit()
         
@@ -369,7 +373,7 @@ class TestFeeCategoriesAPI:
         
         assert response.status_code == 204
     
-    def test_delete_fee_category_with_dependencies(self, client, auth_headers, test_fbo_id, test_fee_categories, test_fee_rules):
+    def test_delete_aircraft_classification_with_dependencies(self, client, auth_headers, test_fbo_id, test_fee_categories, test_fee_rules):
         """Test deletion of fee category with dependent fee rules"""
         category_id = test_fee_categories[0].id
         
@@ -380,7 +384,7 @@ class TestFeeCategoriesAPI:
         
         assert response.status_code == 409
     
-    def test_delete_fee_category_not_found(self, client, auth_headers, test_fbo_id):
+    def test_delete_aircraft_classification_not_found(self, client, auth_headers, test_fbo_id):
         """Test deletion of non-existent fee category"""
         response = client.delete(
             f'/api/admin/fbo/{test_fbo_id}/fee-categories/99999',
@@ -398,7 +402,7 @@ class TestFeeRulesAPI:
         rule_data = {
             'fee_name': 'Test Fee',
             'fee_code': 'TEST',
-            'applies_to_fee_category_id': test_fee_categories[0].id,
+            'applies_to_aircraft_classification_id': test_fee_categories[0].id,
             'amount': 25.50,
             'is_potentially_waivable_by_fuel_uplift': True,
             'calculation_basis': 'FIXED_PRICE',
@@ -424,7 +428,7 @@ class TestFeeRulesAPI:
         rule_data = {
             'fee_name': 'CAA Test Fee',
             'fee_code': 'CAA_TEST',
-            'applies_to_fee_category_id': test_fee_categories[0].id,
+            'applies_to_aircraft_classification_id': test_fee_categories[0].id,
             'amount': 50.00,
             'has_caa_override': True,
             'caa_override_amount': 30.00,
@@ -458,7 +462,7 @@ class TestFeeRulesAPI:
         rule_data = {
             'fee_name': 'Duplicate Code Rule',
             'fee_code': test_fee_rules[0].fee_code,
-            'applies_to_fee_category_id': test_fee_categories[0].id,
+            'applies_to_aircraft_classification_id': test_fee_categories[0].id,
             'amount': 25.00
         }
         
@@ -470,12 +474,12 @@ class TestFeeRulesAPI:
         
         assert response.status_code == 409
     
-    def test_create_fee_rule_invalid_fee_category(self, client, auth_headers, test_fbo_id):
+    def test_create_fee_rule_invalid_aircraft_classification(self, client, auth_headers, test_fbo_id):
         """Test fee rule creation with non-existent fee category"""
         rule_data = {
             'fee_name': 'Invalid Category Rule',
             'fee_code': 'INVALID',
-            'applies_to_fee_category_id': 99999,
+            'applies_to_aircraft_classification_id': 99999,
             'amount': 25.00
         }
         
@@ -552,7 +556,7 @@ class TestAircraftTypeMappingsAPI:
         """Test successful aircraft type mapping creation"""
         mapping_data = {
             'aircraft_type_id': test_aircraft_types[0].id,
-            'fee_category_id': test_fee_categories[0].id
+            'aircraft_classification_id': test_fee_categories[0].id
         }
         
         response = client.post(
@@ -565,15 +569,15 @@ class TestAircraftTypeMappingsAPI:
         data = response.get_json()
         # Response contains the mapping data directly
         assert data['aircraft_type_id'] == test_aircraft_types[0].id
-        assert data['fee_category_id'] == test_fee_categories[0].id
+        assert data['aircraft_classification_id'] == test_fee_categories[0].id
     
     def test_create_mapping_duplicate(self, client, auth_headers, test_fbo_id, test_aircraft_types, test_fee_categories, db_session):
         """Test creation of duplicate aircraft type mapping for same FBO"""
         # Create initial mapping
-        mapping = AircraftTypeToFeeCategoryMapping(
+        mapping = AircraftTypeToAircraftClassificationMapping(
             fbo_location_id=test_fbo_id,
             aircraft_type_id=test_aircraft_types[0].id,
-            fee_category_id=test_fee_categories[0].id
+            aircraft_classification_id=test_fee_categories[0].id
         )
         db_session.add(mapping)
         db_session.commit()
@@ -581,7 +585,7 @@ class TestAircraftTypeMappingsAPI:
         # Try to create duplicate
         mapping_data = {
             'aircraft_type_id': test_aircraft_types[0].id,
-            'fee_category_id': test_fee_categories[1].id
+            'aircraft_classification_id': test_fee_categories[1].id
         }
         
         response = client.post(
@@ -595,7 +599,7 @@ class TestAircraftTypeMappingsAPI:
     def test_csv_upload_success(self, client, auth_headers, test_fbo_id, test_aircraft_types, test_fee_categories):
         """Test successful CSV upload for aircraft type mappings"""
         csv_content = (
-            "AircraftModel,AircraftManufacturer,FeeCategoryName\n"
+            "AircraftModel,AircraftManufacturer,AircraftClassificationName\n"
             f"{test_aircraft_types[0].name},Cessna,{test_fee_categories[0].name}\n"
             f"{test_aircraft_types[1].name},Gulfstream,{test_fee_categories[1].name}\n"
         )
@@ -635,7 +639,7 @@ class TestAircraftTypeMappingsAPI:
     def test_csv_upload_nonexistent_category(self, client, auth_headers, test_fbo_id, test_aircraft_types):
         """Test CSV upload with non-existent fee category"""
         csv_content = (
-            "AircraftModel,AircraftManufacturer,FeeCategoryName\n"
+            "AircraftModel,AircraftManufacturer,AircraftClassificationName\n"
             f"{test_aircraft_types[0].name},Cessna,NonExistentCategory\n"
         )
         
@@ -838,4 +842,154 @@ class TestFeeConfigErrorHandling:
         
         assert response.status_code == 409
         data = response.get_json()
-        assert 'error' in data 
+        assert 'error' in data
+
+
+class TestUpdateOrCreateMappingByType:
+    """Test the update_or_create_mapping_by_type service method"""
+    
+    def test_update_aircraft_type_classification_success(self, db_session, test_aircraft_types, test_aircraft_classifications):
+        """Test successfully updating an aircraft type's classification"""
+        # Arrange
+        aircraft_type = test_aircraft_types[0]  # Cessna 172 (currently Piston)
+        new_classification = test_aircraft_classifications[1]  # Light Jet
+        original_classification_id = aircraft_type.classification_id
+        
+        # Act
+        result = AdminFeeConfigService.update_or_create_mapping_by_type(
+            aircraft_type_id=aircraft_type.id,
+            classification_id=new_classification.id
+        )
+        
+        # Assert
+        assert result is not None
+        assert result['aircraft_type_id'] == aircraft_type.id
+        assert result['aircraft_type_name'] == aircraft_type.name
+        assert result['classification_id'] == new_classification.id
+        assert result['classification_name'] == new_classification.name
+        assert result['classification_id'] != original_classification_id
+        
+        # Verify the database was updated
+        db_session.refresh(aircraft_type)
+        assert aircraft_type.classification_id == new_classification.id
+    
+    def test_update_aircraft_type_classification_nonexistent_aircraft_type(self, db_session, test_aircraft_classifications):
+        """Test updating classification for non-existent aircraft type"""
+        # Act & Assert
+        with pytest.raises(ValueError, match="Aircraft type not found"):
+            AdminFeeConfigService.update_or_create_mapping_by_type(
+                aircraft_type_id=99999,
+                classification_id=test_aircraft_classifications[0].id
+            )
+    
+    def test_update_aircraft_type_classification_nonexistent_classification(self, db_session, test_aircraft_types):
+        """Test updating with non-existent classification"""
+        # Act & Assert
+        with pytest.raises(ValueError, match="Aircraft classification not found"):
+            AdminFeeConfigService.update_or_create_mapping_by_type(
+                aircraft_type_id=test_aircraft_types[0].id,
+                classification_id=99999
+            )
+    
+    def test_update_aircraft_type_classification_with_eager_loading(self, db_session, test_aircraft_types, test_aircraft_classifications):
+        """Test that the service method returns eagerly loaded relationships"""
+        # Arrange
+        aircraft_type = test_aircraft_types[0]
+        new_classification = test_aircraft_classifications[1]
+        
+        # Act
+        result = AdminFeeConfigService.update_or_create_mapping_by_type(
+            aircraft_type_id=aircraft_type.id,
+            classification_id=new_classification.id
+        )
+        
+        # Assert - verify that relationship data is included without additional queries
+        assert 'aircraft_type_name' in result
+        assert 'classification_name' in result
+        assert result['aircraft_type_name'] == aircraft_type.name
+        assert result['classification_name'] == new_classification.name
+
+
+class TestUpdateOrCreateMappingByTypeAPI:
+    """Test the API endpoint for updating aircraft type classifications"""
+    
+    def test_update_aircraft_classification_mapping_success(self, client, auth_headers, test_fbo_id, test_aircraft_types, test_aircraft_classifications):
+        """Test successful API call to update aircraft type classification"""
+        # Arrange
+        aircraft_type = test_aircraft_types[0]  # Cessna 172 (currently Piston)
+        new_classification = test_aircraft_classifications[1]  # Light Jet
+        
+        request_data = {
+            'classification_id': new_classification.id
+        }
+        
+        # Act
+        response = client.put(
+            f'/api/admin/fbo/{test_fbo_id}/aircraft-classification-mappings/by-type/{aircraft_type.id}',
+            headers=auth_headers['administrator'],
+            json=request_data
+        )
+        
+        # Assert
+        assert response.status_code == 200
+        data = response.get_json()
+        assert 'mapping' in data
+        assert data['mapping']['aircraft_type_id'] == aircraft_type.id
+        assert data['mapping']['classification_id'] == new_classification.id
+    
+    def test_update_aircraft_classification_mapping_invalid_aircraft_type(self, client, auth_headers, test_fbo_id, test_aircraft_classifications):
+        """Test API call with invalid aircraft type ID"""
+        # Arrange
+        request_data = {
+            'classification_id': test_aircraft_classifications[0].id
+        }
+        
+        # Act
+        response = client.put(
+            f'/api/admin/fbo/{test_fbo_id}/aircraft-classification-mappings/by-type/99999',
+            headers=auth_headers['administrator'],
+            json=request_data
+        )
+        
+        # Assert
+        assert response.status_code == 404
+        data = response.get_json()
+        assert 'error' in data
+    
+    def test_update_aircraft_classification_mapping_invalid_classification(self, client, auth_headers, test_fbo_id, test_aircraft_types):
+        """Test API call with invalid classification ID"""
+        # Arrange
+        aircraft_type = test_aircraft_types[0]
+        request_data = {
+            'classification_id': 99999
+        }
+        
+        # Act
+        response = client.put(
+            f'/api/admin/fbo/{test_fbo_id}/aircraft-classification-mappings/by-type/{aircraft_type.id}',
+            headers=auth_headers['administrator'],
+            json=request_data
+        )
+        
+        # Assert
+        assert response.status_code == 400
+        data = response.get_json()
+        assert 'error' in data
+    
+    def test_update_aircraft_classification_mapping_requires_permission(self, client, auth_headers, test_fbo_id, test_aircraft_types, test_aircraft_classifications):
+        """Test that the endpoint requires proper permissions"""
+        # Arrange
+        aircraft_type = test_aircraft_types[0]
+        request_data = {
+            'classification_id': test_aircraft_classifications[1].id
+        }
+        
+        # Act - try with LST permissions (should fail)
+        response = client.put(
+            f'/api/admin/fbo/{test_fbo_id}/aircraft-classification-mappings/by-type/{aircraft_type.id}',
+            headers=auth_headers['line'],
+            json=request_data
+        )
+        
+        # Assert
+        assert response.status_code == 403 

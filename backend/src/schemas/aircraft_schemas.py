@@ -25,6 +25,7 @@ class AircraftTypeResponseSchema(Schema):
     id = fields.Integer(dump_only=True)
     name = fields.String(dump_only=True)
     base_min_fuel_gallons_for_waiver = fields.Decimal(dump_only=True, places=2)
+    classification_id = fields.Integer(dump_only=True)
 
 class CreateAircraftTypeSchema(Schema):
     name = fields.String(required=True)
