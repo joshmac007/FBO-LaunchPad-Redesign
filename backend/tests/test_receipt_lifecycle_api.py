@@ -10,7 +10,7 @@ from src.models.receipt import Receipt, ReceiptStatus
 from src.models.receipt_line_item import ReceiptLineItem
 from src.models.aircraft_type import AircraftType
 from src.models.aircraft_classification import AircraftClassification
-from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
+# from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
 from src.models.fee_rule import FeeRule, WaiverStrategy, CalculationBasis
 from src.models.waiver_tier import WaiverTier
 from src.extensions import db

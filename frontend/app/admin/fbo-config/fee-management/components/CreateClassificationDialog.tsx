@@ -33,14 +33,12 @@ const createClassificationSchema = z.object({
 type CreateClassificationForm = z.infer<typeof createClassificationSchema>
 
 interface CreateClassificationDialogProps {
-  fboId: number
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSuccess: (newCategoryId: number) => void
+  onSuccess: (newClassificationId: number) => void
 }
 
 export function CreateClassificationDialog({
-  fboId,
   open,
   onOpenChange,
   onSuccess,
@@ -55,15 +53,15 @@ export function CreateClassificationDialog({
   })
 
   const createClassificationMutation = useMutation({
-    mutationFn: async (data: CreateClassificationForm) => {
-      return createAircraftClassification(fboId, data)
+    mutationFn: (data: CreateClassificationForm) => {
+      return createAircraftClassification(data)
     },
-    onSuccess: (newCategory) => {
-      // Invalidate both fee categories and consolidated fee schedule queries
-      queryClient.invalidateQueries({ queryKey: ['fee-categories', fboId] })
-      queryClient.invalidateQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
+    onSuccess: (newClassification) => {
+      // Invalidate queries to refetch data
+      queryClient.invalidateQueries({ queryKey: ["aircraft-classifications"] })
+      queryClient.invalidateQueries({ queryKey: ["global-fee-schedule"] })
       toast.success("Classification created successfully")
-      onSuccess(newCategory.id)
+      onSuccess(newClassification.id)
       onOpenChange(false)
       form.reset()
     },

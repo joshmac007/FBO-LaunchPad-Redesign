@@ -5,7 +5,6 @@ from src.models.fuel_type import FuelType
 from src.models.aircraft_type import AircraftType
 from src.models.aircraft_classification import AircraftClassification
 from src.models.fee_rule import FeeRule
-from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
 from src.models.fbo_aircraft_type_config import FBOAircraftTypeConfig
 from datetime import datetime
 from sqlalchemy import text
@@ -195,7 +194,6 @@ def seed_data():
             'fuel_orders',
             'fee_rule_overrides',
             'fbo_aircraft_type_configs',
-            'aircraft_classification_mappings',
             'fee_rules',
             'aircraft',
 

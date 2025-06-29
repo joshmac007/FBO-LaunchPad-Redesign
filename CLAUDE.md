@@ -1,12 +1,151 @@
-Of course. Here is the complete, new and improved `claude.md` file.
+ # Using Gemini CLI for Large Codebase Analysis
 
-This version integrates the rigorous development philosophy from the researcher's file directly into your project's specific context. It establishes a clear, high-quality standard of work while providing all the necessary practical information for the AI to be effective immediately.
+  When analyzing large codebases or multiple files that might exceed context limits, use the Gemini CLI with its massive
+  context window. Use `gemini -p` to leverage Google Gemini's large context capacity.
 
----
+  ## File and Directory Inclusion Syntax
 
-# CLAUDE.MD - FBO LaunchPad Development Guide
+  Use the `@` syntax to include files and directories in your Gemini prompts. The paths should be relative to WHERE you run the
+   gemini command:
 
-This file provides guidance to Claude for working on the FBO LaunchPad repository. It contains our core development philosophy, project-specific context, and essential commands. Read and adhere to this guide for every task.
+  Examples:
+
+  **Single file analysis:**
+  gemini -p "@src/main.py Explain this file's purpose and structure"
+
+  Multiple files:
+  gemini -p "@package.json @src/index.js Analyze the dependencies used in the code"
+
+  Entire directory:
+  gemini -p "@src/ Summarize the architecture of this codebase"
+
+  Multiple directories:
+  gemini -p "@src/ @tests/ Analyze test coverage for the source code"
+
+  Current directory and subdirectories:
+  gemini -p "@./ Give me an overview of this entire project"
+  
+ Or use --all_files flag:
+  gemini --all_files -p "Analyze the project structure and dependencies"
+
+  Implementation Verification Examples
+
+  Check if a feature is implemented:
+  gemini -p "@src/ @lib/ Has dark mode been implemented in this codebase? Show me the relevant files and functions"
+
+  Verify authentication implementation:
+  gemini -p "@src/ @middleware/ Is JWT authentication implemented? List all auth-related endpoints and middleware"
+
+  Check for specific patterns:
+  gemini -p "@src/ Are there any React hooks that handle WebSocket connections? List them with file paths"
+
+  Verify error handling:
+  gemini -p "@src/ @api/ Is proper error handling implemented for all API endpoints? Show examples of try-catch blocks"
+
+  Check for rate limiting:
+  gemini -p "@backend/ @middleware/ Is rate limiting implemented for the API? Show the implementation details"
+
+  Verify caching strategy:
+  gemini -p "@src/ @lib/ @services/ Is Redis caching implemented? List all cache-related functions and their usage"
+
+  Check for specific security measures:
+  gemini -p "@src/ @api/ Are SQL injection protections implemented? Show how user inputs are sanitized"
+
+  Verify test coverage for features:
+  gemini -p "@src/payment/ @tests/ Is the payment processing module fully tested? List all test cases"
+
+  When to Use Gemini CLI
+
+  Use gemini -p when:
+  - Analyzing entire codebases or large directories
+  - Comparing multiple large files
+  - Need to understand project-wide patterns or architecture
+  - Current context window is insufficient for the task
+  - Working with files totaling more than 100KB
+  - Verifying if specific features, patterns, or security measures are implemented
+  - Checking for the presence of certain coding patterns across the entire codebase
+
+  Important Notes
+
+  - Paths in @ syntax are relative to your current working directory when invoking gemini
+  - The CLI will include file contents directly in the context
+  - No need for --yolo flag for read-only analysis
+  - Gemini's context window can handle entire codebases that would overflow Claude's context
+  - When checking implementations, be specific about what you're looking for to get accurate results # Using Gemini CLI for Large Codebase Analysis
+
+
+  When analyzing large codebases or multiple files that might exceed context limits, use the Gemini CLI with its massive
+  context window. Use `gemini -p` to leverage Google Gemini's large context capacity.
+
+
+  ## File and Directory Inclusion Syntax
+
+  Use the `@` syntax to include files and directories in your Gemini prompts. The paths should be relative to WHERE you run the
+   gemini command:
+
+  ### Examples:
+  **Single file analysis:**
+  gemini -p "@src/main.py Explain this file's purpose and structure"
+
+  Multiple files:
+  gemini -p "@package.json @src/index.js Analyze the dependencies used in the code"
+
+  Entire directory:
+  gemini -p "@src/ Summarize the architecture of this codebase"
+
+  Multiple directories:
+  gemini -p "@src/ @tests/ Analyze test coverage for the source code"
+
+  Current directory and subdirectories:
+  gemini -p "@./ Give me an overview of this entire project"
+  # Or use --all_files flag:
+  gemini --all_files -p "Analyze the project structure and dependencies"
+
+  Implementation Verification Examples
+
+  Check if a feature is implemented:
+  gemini -p "@src/ @lib/ Has dark mode been implemented in this codebase? Show me the relevant files and functions"
+
+  Verify authentication implementation:
+  gemini -p "@src/ @middleware/ Is JWT authentication implemented? List all auth-related endpoints and middleware"
+
+  Check for specific patterns:
+  gemini -p "@src/ Are there any React hooks that handle WebSocket connections? List them with file paths"
+
+  Verify error handling:
+  gemini -p "@src/ @api/ Is proper error handling implemented for all API endpoints? Show examples of try-catch blocks"
+
+  Check for rate limiting:
+  gemini -p "@backend/ @middleware/ Is rate limiting implemented for the API? Show the implementation details"
+
+  Verify caching strategy:
+  gemini -p "@src/ @lib/ @services/ Is Redis caching implemented? List all cache-related functions and their usage"
+
+  Check for specific security measures:
+  gemini -p "@src/ @api/ Are SQL injection protections implemented? Show how user inputs are sanitized"
+
+  Verify test coverage for features:
+  gemini -p "@src/payment/ @tests/ Is the payment processing module fully tested? List all test cases"
+
+  When to Use Gemini CLI
+
+  Use gemini -p when:
+  - Analyzing entire codebases or large directories
+  - Comparing multiple large files
+  - Need to understand project-wide patterns or architecture
+  - Current context window is insufficient for the task
+  - Working with files totaling more than 100KB
+  - Verifying if specific features, patterns, or security measures are implemented
+  - Checking for the presence of certain coding patterns across the entire codebase
+
+  Important Notes
+
+  - Paths in @ syntax are relative to your current working directory when invoking gemini
+  - The CLI will include file contents directly in the context
+  - No need for --yolo flag for read-only analysis
+  - Gemini's context window can handle entire codebases that would overflow Claude's context
+  - When checking implementations, be specific about what you're looking for to get accurate results
+
 
 ## 1. Core Philosophy & Guiding Principles
 
@@ -14,7 +153,7 @@ This file provides guidance to Claude for working on the FBO LaunchPad repositor
 
 -   **Test First:** Always write a failing test that describes the desired business behavior before writing any implementation code (Red-Green-Refactor).
 -   **Test Behavior, Not Implementation:** Tests must validate the public API of a module or component, treating the internals as a black box. Do not test private functions or internal state.
--   **Schema-First Development:** Define data structures with validation schemas first (**Zod** for frontend, **Pydantic** for backend), then derive static types. This is the single source of truth.
+-   **Schema-First Development:** Define data structures with validation schemas first (Zod for frontend), then derive static types. This is the single source of truth.
 -   **Immutability:** Treat all data as immutable. Create new objects/arrays instead of modifying existing ones.
 -   **Clarity Over Cleverness:** Write self-documenting code with clear names. Avoid comments that explain *what* the code does; the code itself should be the explanation.
 -   **Respect Existing Architecture:** Adhere to the established project structure, API conventions, and state management patterns outlined below.
@@ -198,8 +337,3 @@ This combines the TDD process with our project's specific setup.
     -   Run `npm run test`. The test should now pass.
 
 6.  **Refactor (if needed)**: Look at the code you just wrote in both the frontend and backend. Is it clean? Are the names clear? Could logic be simplified? Refactor if it adds value and ensure all tests still pass.
-
-7.  **Commit**: Commit the complete, tested feature.
-    ```bash
-    git commit -m "feat: add priority flag to fuel orders"
-    ```

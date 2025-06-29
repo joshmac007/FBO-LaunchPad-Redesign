@@ -17,12 +17,12 @@ import { FeeColumnsTab } from "./FeeColumnsTab"
 import { WaiverTiersTab } from "./WaiverTiersTab"
 
 interface ScheduleRulesDialogProps {
-  fboId: number
+  // No props needed for global architecture
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function ScheduleRulesDialog({ fboId, open, onOpenChange }: ScheduleRulesDialogProps) {
+export function ScheduleRulesDialog({ open, onOpenChange }: ScheduleRulesDialogProps) {
   const [activeTab, setActiveTab] = useState("fee-columns")
 
   return (
@@ -40,11 +40,11 @@ export function ScheduleRulesDialog({ fboId, open, onOpenChange }: ScheduleRules
           
           <div className="flex-1 overflow-y-auto">
             <TabsContent value="fee-columns" className="mt-0">
-              <FeeColumnsTab fboId={fboId} />
+              <FeeColumnsTab />
             </TabsContent>
             
             <TabsContent value="waiver-tiers" className="mt-0">
-              <WaiverTiersTab fboId={fboId} />
+              <WaiverTiersTab />
             </TabsContent>
           </div>
         </Tabs>

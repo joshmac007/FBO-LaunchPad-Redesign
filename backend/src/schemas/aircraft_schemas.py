@@ -26,14 +26,17 @@ class AircraftTypeResponseSchema(Schema):
     name = fields.String(dump_only=True)
     base_min_fuel_gallons_for_waiver = fields.Decimal(dump_only=True, places=2)
     classification_id = fields.Integer(dump_only=True)
+    classification_name = fields.String(attribute="classification.name", dump_only=True)
 
 class CreateAircraftTypeSchema(Schema):
     name = fields.String(required=True)
     base_min_fuel_gallons_for_waiver = fields.Decimal(required=True, places=2)
+    classification_id = fields.Integer(required=True)
 
 class UpdateAircraftTypeSchema(Schema):
     name = fields.String(required=False)
     base_min_fuel_gallons_for_waiver = fields.Decimal(required=False, places=2)
+    classification_id = fields.Integer(required=False)
 
 class ErrorResponseSchema(Schema):
     error = fields.String()

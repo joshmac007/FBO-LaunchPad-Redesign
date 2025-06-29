@@ -65,6 +65,7 @@ import {
   type AircraftTypeUpdateRequest,
 } from "../../../services/aircraft-service"
 import { toast } from "sonner"
+import { getAircraftClassifications } from "../../../services/admin-fee-config-service"
 
 export default function AircraftTypesTable() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -76,6 +77,7 @@ export default function AircraftTypesTable() {
   const [newAircraftTypeData, setNewAircraftTypeData] = useState<AircraftTypeCreateRequest>({
     name: "",
     base_min_fuel_gallons_for_waiver: 0,
+    classification_id: 0,
   })
 
   const [editAircraftTypeData, setEditAircraftTypeData] = useState<AircraftTypeUpdateRequest>({})
@@ -93,6 +95,11 @@ export default function AircraftTypesTable() {
   } = useQuery({
     queryKey: ['aircraftTypes'],
     queryFn: getAircraftTypes,
+  })
+
+  const { data: classifications = [], isLoading: isLoadingClassifications } = useQuery({
+    queryKey: ["aircraftClassifications"],
+    queryFn: getAircraftClassifications,
   })
 
   // Mutations
@@ -147,6 +154,7 @@ export default function AircraftTypesTable() {
     setEditAircraftTypeData({
       name: aircraftType.name,
       base_min_fuel_gallons_for_waiver: aircraftType.base_min_fuel_gallons_for_waiver,
+      classification_id: aircraftType.classification_id,
     })
     setEditFormError(null)
     setIsEditDialogOpen(true)
@@ -175,6 +183,7 @@ export default function AircraftTypesTable() {
     const payload: AircraftTypeCreateRequest = {
       name: newAircraftTypeData.name.trim(),
       base_min_fuel_gallons_for_waiver: newAircraftTypeData.base_min_fuel_gallons_for_waiver,
+      classification_id: newAircraftTypeData.classification_id,
     }
 
     createMutation.mutate(payload)
@@ -201,6 +210,7 @@ export default function AircraftTypesTable() {
     const payload: AircraftTypeUpdateRequest = {
       name: editAircraftTypeData.name.trim(),
       base_min_fuel_gallons_for_waiver: editAircraftTypeData.base_min_fuel_gallons_for_waiver,
+      classification_id: editAircraftTypeData.classification_id,
     }
 
     updateMutation.mutate({ typeId: selectedAircraftType.id, data: payload })
@@ -222,6 +232,7 @@ export default function AircraftTypesTable() {
     setNewAircraftTypeData({
       name: "",
       base_min_fuel_gallons_for_waiver: 0,
+      classification_id: 0,
     })
     setCreateFormError(null)
   }
@@ -351,6 +362,23 @@ export default function AircraftTypesTable() {
                     placeholder="e.g., 200.00"
                   />
                 </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="create-classification" className="text-right">
+                    Classification *
+                  </Label>
+                  <select
+                    id="create-classification"
+                    className="col-span-3 border rounded px-2 py-1"
+                    value={newAircraftTypeData.classification_id}
+                    onChange={e => setNewAircraftTypeData({ ...newAircraftTypeData, classification_id: parseInt(e.target.value) })}
+                    disabled={isLoadingClassifications}
+                  >
+                    <option value={0}>Select a classification</option>
+                    {classifications.map((c: any) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
@@ -376,6 +404,7 @@ export default function AircraftTypesTable() {
           <TableHeader>
             <TableRow>
               <TableHead>Type Name</TableHead>
+              <TableHead>Classification</TableHead>
               <TableHead>Base Min Fuel (Waiver)</TableHead>
               <TableHead className="w-[100px]">Actions</TableHead>
             </TableRow>
@@ -384,6 +413,7 @@ export default function AircraftTypesTable() {
             {aircraftTypes.map((aircraftType) => (
               <TableRow key={aircraftType.id}>
                 <TableCell className="font-medium">{aircraftType.name}</TableCell>
+                <TableCell>{aircraftType.classification_name || "Unclassified"}</TableCell>
                 <TableCell>{Math.round(aircraftType.base_min_fuel_gallons_for_waiver)}</TableCell>
                 <TableCell>
                   <DropdownMenu>
@@ -469,6 +499,23 @@ export default function AircraftTypesTable() {
                 }
                 className="col-span-3"
               />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-classification" className="text-right">
+                Classification *
+              </Label>
+              <select
+                id="edit-classification"
+                className="col-span-3 border rounded px-2 py-1"
+                value={editAircraftTypeData.classification_id || 0}
+                onChange={e => setEditAircraftTypeData({ ...editAircraftTypeData, classification_id: parseInt(e.target.value) })}
+                disabled={isLoadingClassifications}
+              >
+                <option value={0}>Select a classification</option>
+                {classifications.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
             </div>
           </div>
           <DialogFooter>

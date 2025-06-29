@@ -7,10 +7,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Upload, Settings, Search } from "lucide-react"
 import { FeeScheduleTable } from "./components/FeeScheduleTable"
-import { GeneralFeesTable } from "./components/GeneralFeesTable"
 import { ScheduleRulesDialog } from "./components/ScheduleRulesDialog"
 import { UploadFeesDialog } from "./components/UploadFeesDialog"
-import { getConsolidatedFeeSchedule } from "@/app/services/admin-fee-config-service"
+import { getGlobalFeeSchedule } from "@/app/services/admin-fee-config-service"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,42 +27,35 @@ function FeeManagementContent() {
   const [searchTerm, setSearchTerm] = useState("")
   const [viewMode, setViewMode] = useState<'standard' | 'caa'>('standard')
   const [showScheduleRulesDialog, setShowScheduleRulesDialog] = useState(false)
-  const fboId = 1 // TODO: Get this from context/params
-
-  // Fetch consolidated fee schedule data
-  const { data: consolidatedData } = useQuery({
-    queryKey: ['consolidated-fee-schedule', fboId],
-    queryFn: () => getConsolidatedFeeSchedule(fboId),
+  // Fetch global fee schedule data (no FBO ID needed)
+  const { data: globalData } = useQuery({
+    queryKey: ['global-fee-schedule'],
+    queryFn: () => getGlobalFeeSchedule(),
   })
 
   // Filter rules into primary and general categories
   const primaryFeeRules = useMemo(() => {
-    const filtered = consolidatedData?.rules?.filter(rule => rule.is_primary_fee) || []
-    console.log('All rules from consolidated data:', consolidatedData?.rules)
+    const filtered = globalData?.fee_rules?.filter(rule => rule.is_primary_fee) || []
+    console.log('All rules from global data:', globalData?.fee_rules)
     console.log('Filtered primary fee rules:', filtered)
     
     // Fallback: if no rules are marked as primary, show all rules as primary
     // This helps when the system hasn't been configured yet
-    if (filtered.length === 0 && consolidatedData?.rules && consolidatedData.rules.length > 0) {
+    if (filtered.length === 0 && globalData?.fee_rules && globalData.fee_rules.length > 0) {
       console.log('No primary fees configured, falling back to show all rules as primary')
-      return consolidatedData.rules
+      return globalData.fee_rules
     }
     
     return filtered
-  }, [consolidatedData])
+  }, [globalData])
 
-  const generalServiceRules = useMemo(() => {
-    const filtered = consolidatedData?.rules?.filter(rule => !rule.is_primary_fee) || []
-    console.log('Filtered general service rules:', filtered)
-    return filtered
-  }, [consolidatedData])
 
   // Check if we need to show a warning about primary fees
   const showPrimaryFeeWarning = useMemo(() => {
-    const actualPrimary = consolidatedData?.rules?.filter(rule => rule.is_primary_fee) || []
-    const hasRules = consolidatedData?.rules && consolidatedData.rules.length > 0
+    const actualPrimary = globalData?.fee_rules?.filter(rule => rule.is_primary_fee) || []
+    const hasRules = globalData?.fee_rules && globalData.fee_rules.length > 0
     return hasRules && actualPrimary.length === 0
-  }, [consolidatedData])
+  }, [globalData])
 
   const handleToggleCAA = () => {
     setViewMode(prev => prev === 'standard' ? 'caa' : 'standard')
@@ -105,7 +97,7 @@ function FeeManagementContent() {
 
       {/* Action Toolbar */}
       <div className="flex items-center gap-4 flex-wrap">
-        <UploadFeesDialog fboId={fboId} />
+        <UploadFeesDialog />
 
         <Button
           variant={viewMode === 'caa' ? 'default' : 'outline'}
@@ -139,25 +131,16 @@ function FeeManagementContent() {
       <div className="space-y-4">
         <h2 className="text-xl font-semibold">Aircraft Fee Schedule</h2>
         <FeeScheduleTable
-          fboId={fboId}
           searchTerm={searchTerm}
           viewMode={viewMode}
           primaryFeeRules={primaryFeeRules}
+          globalData={globalData}
         />
       </div>
 
-      {/* General Service Fees Section */}
-      <div className="space-y-4">
-        <h2 className="text-xl font-semibold">General Service Fees</h2>
-        <GeneralFeesTable 
-          fboId={fboId} 
-          generalServiceRules={generalServiceRules}
-        />
-      </div>
 
       {/* Schedule Rules Dialog */}
       <ScheduleRulesDialog
-        fboId={fboId}
         open={showScheduleRulesDialog}
         onOpenChange={setShowScheduleRulesDialog}
       />

@@ -34,19 +34,19 @@ const uploadSchema = z.object({
 });
 
 interface UploadFeesDialogProps {
-  fboId: number;
+  // No props needed for global architecture
 }
 
-export function UploadFeesDialog({ fboId }: UploadFeesDialogProps) {
+export function UploadFeesDialog({}: UploadFeesDialogProps) {
   const [open, setOpen] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadFeeOverridesCSV(fboId, file),
+    mutationFn: (file: File) => uploadFeeOverridesCSV(1, file),  // TODO: Remove fboId when backend is fully global
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["consolidated-fee-schedule", fboId] })
+      queryClient.invalidateQueries({ queryKey: ["global-fee-schedule"] })
       toast.success("Fee overrides uploaded successfully.")
       setOpen(false)
       setSelectedFile(null)

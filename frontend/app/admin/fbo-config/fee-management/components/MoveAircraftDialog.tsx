@@ -30,27 +30,22 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { updateAircraftClassificationMapping } from "@/app/services/admin-fee-config-service"
-
-// TypeScript interfaces as specified in RFI-03
-export interface ClassificationOption {
-  id: number
-  name: string
-}
-
-export interface AircraftToMove {
-  aircraft_type_id: number
-  aircraft_type_name: string
-  current_classification_id: number
-  current_classification_name: string
-}
+import {
+  updateAircraftClassificationMapping,
+  updateAircraftTypeClassification,
+} from "@/app/services/admin-fee-config-service"
+import { useToast } from "@/hooks/use-toast"
+import { AircraftClassification } from "@/app/services/admin-fee-config-service"
 
 export interface MoveAircraftDialogProps {
+  aircraft: {
+    aircraft_type_id: number
+    aircraft_type_name: string
+    classification_id: number
+  } | null
+  classifications: AircraftClassification[]
   open: boolean
   onOpenChange: (open: boolean) => void
-  aircraft: AircraftToMove | null
-  availableClassifications: ClassificationOption[]
-  fboId: number
   onSuccess: () => void
 }
 
@@ -65,16 +60,16 @@ export function MoveAircraftDialog({
   open,
   onOpenChange,
   aircraft,
-  availableClassifications,
-  fboId,
+  classifications,
   onSuccess,
 }: MoveAircraftDialogProps) {
   const queryClient = useQueryClient()
+  const { toast } = useToast()
 
   const form = useForm<MoveAircraftForm>({
     resolver: zodResolver(moveAircraftSchema),
     defaultValues: {
-      classification_id: aircraft?.current_classification_id || 0,
+      classification_id: aircraft?.classification_id || 0,
     },
   })
 
@@ -82,44 +77,38 @@ export function MoveAircraftDialog({
   useEffect(() => {
     if (aircraft) {
       form.reset({
-        classification_id: aircraft.current_classification_id,
+        classification_id: aircraft.classification_id,
       })
     }
   }, [aircraft?.aircraft_type_id, form])
 
   const moveAircraftMutation = useMutation({
-    mutationFn: async (data: MoveAircraftForm) => {
-      if (!aircraft) {
-        throw new Error("No aircraft selected")
-      }
-      
-      return updateAircraftClassificationMapping(fboId, aircraft.aircraft_type_id, {
-        classification_id: data.classification_id,
-      })
-    },
+    mutationFn: (vars: { aircraftTypeId: number; classificationId: number }) =>
+      updateAircraftTypeClassification(vars.aircraftTypeId, vars.classificationId),
     onSuccess: () => {
-      // Close the dialog
-      onOpenChange(false)
-      
-      // Programmatically refetch the fee schedule data
-      queryClient.invalidateQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
-      queryClient.invalidateQueries({ queryKey: ['aircraft-mappings', fboId] })
-      
-      // Call the success callback
+      toast({
+        title: "Aircraft Moved",
+        description: "The aircraft has been moved to the new classification.",
+      })
       onSuccess()
-      
-      // Show success toast
-      toast.success(`Successfully moved ${aircraft?.aircraft_type_name} to new classification`)
+      onOpenChange(false)
     },
     onError: (error: any) => {
-      // Display a toast notification with the API error message
-      const errorMessage = error?.message || 'Failed to move aircraft'
-      toast.error(`Error: ${errorMessage}`)
+      toast({
+        title: "Error Moving Aircraft",
+        description:
+          error.message || "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      })
     },
   })
 
   const handleSubmit = (data: MoveAircraftForm) => {
-    moveAircraftMutation.mutate(data)
+    if (!aircraft) return
+    moveAircraftMutation.mutate({
+      aircraftTypeId: aircraft.aircraft_type_id,
+      classificationId: data.classification_id,
+    })
   }
 
   const handleCancel = () => {
@@ -127,9 +116,12 @@ export function MoveAircraftDialog({
     form.reset()
   }
 
+  const currentClassificationName =
+    classifications.find((c) => c.id === aircraft?.classification_id)?.name ?? "Not Classified"
+
   // Filter out the current classification from available options
-  const filteredClassifications = availableClassifications.filter(
-    (classification) => classification.id !== aircraft?.current_classification_id
+  const filteredClassifications = classifications.filter(
+    (classification) => classification.id !== aircraft?.classification_id
   )
 
   if (!aircraft) {
@@ -143,7 +135,7 @@ export function MoveAircraftDialog({
           <DialogTitle>Move Aircraft</DialogTitle>
           <DialogDescription>
             Move <strong>{aircraft.aircraft_type_name}</strong> from{" "}
-            <strong>{aircraft.current_classification_name}</strong> to a different classification.
+            <strong>{currentClassificationName}</strong> to a different classification.
           </DialogDescription>
         </DialogHeader>
 

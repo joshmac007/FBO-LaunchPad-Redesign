@@ -95,7 +95,7 @@
     ====================================================================================================================
     ```
 
-**Step 6: Implement the `[+ Add Aircraft]` Wizard** ✅ **COMPLETED**
+**Step 6: Implement the `[+ Add Aircraft]` Wizard
 *   **File to Create:** `frontend/app/admin/fbo-config/fee-management/components/AddAircraftDialog.tsx`
 *   **Directive:** Build the modal form precisely as shown in the mockup.
     *   **Endpoint Correction:** The mockup mentions `POST /aircraft-fee-structure`. This is incorrect. The existing, verified, and now-enhanced endpoint is `POST /api/admin/fbo/{fboId}/aircraft-fee-setup`. Your implementation **must** target the correct endpoint.
@@ -124,7 +124,7 @@
     └──────────────────────────────────────────────────────────┘
     ```
 
-**Step 7: Implement the `General Service Fees` Table** ✅ **COMPLETED**
+**Step 7: Implement the `General Service Fees` Table
 *   **File to Create:** `frontend/app/admin/fbo-config/fee-management/components/GeneralFeesTable.tsx`
 *   **Directive:** Build this as an editable table using `@tanstack/react-table`.
     *   On mount, fetch the "General" category ID using the `getGeneralFeeCategory` service function.

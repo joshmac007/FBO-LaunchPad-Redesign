@@ -16,7 +16,7 @@ from src.models.fuel_order import FuelOrder, FuelOrderStatus
 from src.models.receipt import Receipt, ReceiptStatus
 from src.models.receipt_line_item import ReceiptLineItem, LineItemType
 from src.models.aircraft_classification import AircraftClassification
-from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
+# from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
 from src.models.fee_rule import FeeRule, CalculationBasis, WaiverStrategy
 from src.models.user import User
 from src.extensions import db

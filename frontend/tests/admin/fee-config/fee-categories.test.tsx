@@ -5,6 +5,11 @@ import userEvent from "@testing-library/user-event"
 
 // Mock the admin fee config service
 const mockAdminFeeConfigService = {
+  getAircraftClassifications: jest.fn(),
+  createAircraftClassification: jest.fn(),
+  updateAircraftClassification: jest.fn(),
+  deleteAircraftClassification: jest.fn(),
+  // Legacy methods for backward compatibility
   getFeeCategories: jest.fn(),
   createFeeCategory: jest.fn(),
   updateFeeCategory: jest.fn(),
@@ -87,16 +92,18 @@ const FeeCategoryForm = ({
   )
 }
 
-describe('Fee Categories Management', () => {
-  const mockCategories = [
-    { id: 1, name: 'Light Jet', fbo_location_id: 1 },
-    { id: 2, name: 'Heavy Jet', fbo_location_id: 1 },
-    { id: 3, name: 'Helicopter', fbo_location_id: 1 },
+describe('Aircraft Classifications Management', () => {
+  const mockClassifications = [
+    { id: 1, name: 'Light Jet' },
+    { id: 2, name: 'Heavy Jet' },
+    { id: 3, name: 'Helicopter' },
   ]
 
   beforeEach(() => {
     jest.clearAllMocks()
-    mockAdminFeeConfigService.getFeeCategories.mockResolvedValue(mockCategories)
+    mockAdminFeeConfigService.getAircraftClassifications.mockResolvedValue(mockClassifications)
+    // Keep legacy method for compatibility
+    mockAdminFeeConfigService.getFeeCategories.mockResolvedValue(mockClassifications)
   })
 
   describe('FeeCategoryList Component', () => {
@@ -106,7 +113,7 @@ describe('Fee Categories Management', () => {
 
       render(
         <FeeCategoryList 
-          categories={mockCategories} 
+          categories={mockClassifications} 
           onEdit={mockOnEdit} 
           onDelete={mockOnDelete} 
         />
@@ -129,14 +136,14 @@ describe('Fee Categories Management', () => {
 
       render(
         <FeeCategoryList 
-          categories={mockCategories} 
+          categories={mockClassifications} 
           onEdit={mockOnEdit} 
           onDelete={mockOnDelete} 
         />
       )
 
       await user.click(screen.getByTestId('edit-1'))
-      expect(mockOnEdit).toHaveBeenCalledWith(mockCategories[0])
+      expect(mockOnEdit).toHaveBeenCalledWith(mockClassifications[0])
     })
 
     test('calls onDelete when delete button is clicked', async () => {
@@ -146,7 +153,7 @@ describe('Fee Categories Management', () => {
 
       render(
         <FeeCategoryList 
-          categories={mockCategories} 
+          categories={mockClassifications} 
           onEdit={mockOnEdit} 
           onDelete={mockOnDelete} 
         />
@@ -307,57 +314,57 @@ describe('Fee Categories Management', () => {
   })
 
   describe('Service Integration Tests', () => {
-    test('getFeeCategories service is called correctly', async () => {
-      mockAdminFeeConfigService.getFeeCategories.mockResolvedValue(mockCategories)
+    test('getAircraftClassifications service is called correctly', async () => {
+      mockAdminFeeConfigService.getAircraftClassifications.mockResolvedValue(mockClassifications)
 
-      const result = await mockAdminFeeConfigService.getFeeCategories(1)
-      expect(result).toEqual(mockCategories)
-      expect(mockAdminFeeConfigService.getFeeCategories).toHaveBeenCalledWith(1)
+      const result = await mockAdminFeeConfigService.getAircraftClassifications()
+      expect(result).toEqual(mockClassifications)
+      expect(mockAdminFeeConfigService.getAircraftClassifications).toHaveBeenCalledWith()
     })
 
-    test('createFeeCategory service is called correctly', async () => {
-      const newCategory = { name: 'New Category' }
-      const createdCategory = { id: 4, ...newCategory, fbo_location_id: 1 }
+    test('createAircraftClassification service is called correctly', async () => {
+      const newClassification = { name: 'New Classification' }
+      const createdClassification = { id: 4, ...newClassification }
       
-      mockAdminFeeConfigService.createFeeCategory.mockResolvedValue(createdCategory)
+      mockAdminFeeConfigService.createAircraftClassification.mockResolvedValue(createdClassification)
 
-      const result = await mockAdminFeeConfigService.createFeeCategory(1, newCategory)
-      expect(result).toEqual(createdCategory)
-      expect(mockAdminFeeConfigService.createFeeCategory).toHaveBeenCalledWith(1, newCategory)
+      const result = await mockAdminFeeConfigService.createAircraftClassification(newClassification)
+      expect(result).toEqual(createdClassification)
+      expect(mockAdminFeeConfigService.createAircraftClassification).toHaveBeenCalledWith(newClassification)
     })
 
-    test('updateFeeCategory service is called correctly', async () => {
-      const updatedData = { name: 'Updated Category' }
-      const updatedCategory = { id: 1, ...updatedData, fbo_location_id: 1 }
+    test('updateAircraftClassification service is called correctly', async () => {
+      const updatedData = { name: 'Updated Classification' }
+      const updatedClassification = { id: 1, ...updatedData }
       
-      mockAdminFeeConfigService.updateFeeCategory.mockResolvedValue(updatedCategory)
+      mockAdminFeeConfigService.updateAircraftClassification.mockResolvedValue(updatedClassification)
 
-      const result = await mockAdminFeeConfigService.updateFeeCategory(1, 1, updatedData)
-      expect(result).toEqual(updatedCategory)
-      expect(mockAdminFeeConfigService.updateFeeCategory).toHaveBeenCalledWith(1, 1, updatedData)
+      const result = await mockAdminFeeConfigService.updateAircraftClassification(1, updatedData)
+      expect(result).toEqual(updatedClassification)
+      expect(mockAdminFeeConfigService.updateAircraftClassification).toHaveBeenCalledWith(1, updatedData)
     })
 
-    test('deleteFeeCategory service is called correctly', async () => {
-      mockAdminFeeConfigService.deleteFeeCategory.mockResolvedValue(true)
+    test('deleteAircraftClassification service is called correctly', async () => {
+      mockAdminFeeConfigService.deleteAircraftClassification.mockResolvedValue(undefined)
 
-      const result = await mockAdminFeeConfigService.deleteFeeCategory(1, 1)
-      expect(result).toBe(true)
-      expect(mockAdminFeeConfigService.deleteFeeCategory).toHaveBeenCalledWith(1, 1)
+      const result = await mockAdminFeeConfigService.deleteAircraftClassification(1)
+      expect(result).toBe(undefined)
+      expect(mockAdminFeeConfigService.deleteAircraftClassification).toHaveBeenCalledWith(1)
     })
   })
 })
 
 // Error handling tests
-describe('Fee Categories Error Handling', () => {
+describe('Aircraft Classifications Error Handling', () => {
   beforeEach(() => {
     jest.clearAllMocks()
   })
 
   test('handles service errors gracefully', async () => {
-    const errorMessage = 'Failed to fetch categories'
-    mockAdminFeeConfigService.getFeeCategories.mockRejectedValue(new Error(errorMessage))
+    const errorMessage = 'Failed to fetch classifications'
+    mockAdminFeeConfigService.getAircraftClassifications.mockRejectedValue(new Error(errorMessage))
 
-    await expect(mockAdminFeeConfigService.getFeeCategories(1)).rejects.toThrow(errorMessage)
+    await expect(mockAdminFeeConfigService.getAircraftClassifications()).rejects.toThrow(errorMessage)
   })
 
   test('handles validation errors from backend', async () => {
@@ -367,23 +374,23 @@ describe('Fee Categories Error Handling', () => {
       errors: { name: 'Name already exists' }
     }
     
-    mockAdminFeeConfigService.createFeeCategory.mockRejectedValue(validationError)
+    mockAdminFeeConfigService.createAircraftClassification.mockRejectedValue(validationError)
 
     await expect(
-      mockAdminFeeConfigService.createFeeCategory(1, { name: 'Duplicate' })
+      mockAdminFeeConfigService.createAircraftClassification({ name: 'Duplicate' })
     ).rejects.toEqual(validationError)
   })
 
   test('handles delete constraints errors', async () => {
     const constraintError = {
       status: 409,
-      message: 'Cannot delete fee category that is referenced by fee rules'
+      message: 'Cannot delete aircraft classification that is referenced by fee rules'
     }
     
-    mockAdminFeeConfigService.deleteFeeCategory.mockRejectedValue(constraintError)
+    mockAdminFeeConfigService.deleteAircraftClassification.mockRejectedValue(constraintError)
 
     await expect(
-      mockAdminFeeConfigService.deleteFeeCategory(1, 1)
+      mockAdminFeeConfigService.deleteAircraftClassification(1)
     ).rejects.toEqual(constraintError)
   })
 }) 

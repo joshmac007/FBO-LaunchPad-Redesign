@@ -1,14 +1,13 @@
 """
 Admin Fee Configuration Service
 
-This service handles CRUD operations for FBO-specific fee configuration entities including:
+This service handles CRUD operations for fee configuration entities including:
 - Aircraft Types (base min fuel for waiver management)
-- Fee Categories
-- Aircraft Type to Fee Category Mappings
-- Fee Rules (with CAA overrides)
-- Waiver Tiers
+- Aircraft Classifications (global resources)
+- Fee Rules (FBO-specific, with CAA overrides)
+- Waiver Tiers (FBO-specific)
 
-All operations are scoped by fbo_location_id to ensure proper multi-tenancy.
+Aircraft Classifications are global resources. Fee Rules and other configurations are FBO-scoped.
 """
 
 import csv
@@ -21,7 +20,7 @@ from sqlalchemy import func
 
 from ..extensions import db
 from ..models import (
-    AircraftType, AircraftClassification, AircraftTypeToAircraftClassificationMapping,
+    AircraftType, AircraftClassification,
     FeeRule, WaiverTier, CalculationBasis, WaiverStrategy,
     FBOAircraftTypeConfig, FeeRuleOverride, FuelPrice, FuelTypeEnum, FuelType
 )
@@ -33,7 +32,7 @@ from .aircraft_service import AircraftService
 
 
 class AdminFeeConfigService:
-    """Service for managing FBO-specific fee configurations."""
+    """Service for managing fee configurations (global aircraft classifications and FBO-specific rules)."""
 
     @staticmethod
     def get_aircraft_types(fbo_location_id: int) -> List[Dict[str, Any]]:
@@ -47,7 +46,7 @@ class AdminFeeConfigService:
                     'id': aircraft_type.id,
                     'name': aircraft_type.name,
                     'base_min_fuel_gallons_for_waiver': float(aircraft_type.base_min_fuel_gallons_for_waiver),
-                    'default_aircraft_classification_id': aircraft_type.default_aircraft_classification_id,
+                    'classification_id': aircraft_type.classification_id,
                     'default_max_gross_weight_lbs': float(aircraft_type.default_max_gross_weight_lbs) if aircraft_type.default_max_gross_weight_lbs else None,
                     'created_at': aircraft_type.created_at.isoformat(),
                     'updated_at': aircraft_type.updated_at.isoformat()
@@ -113,23 +112,27 @@ class AdminFeeConfigService:
 
     # Fee Categories CRUD
     @staticmethod
-    def get_fee_categories(fbo_location_id: int) -> List[Dict[str, Any]]:
-        """Get all fee categories for a specific FBO."""
+    def get_aircraft_classifications() -> List[Dict[str, Any]]:
+        """Get all aircraft classifications."""
         try:
-            # Aircraft classifications are now global, return all for compatibility
-            categories = AircraftClassification.query.all()
+            classifications = AircraftClassification.query.all()
             return [
                 {
-                    'id': cat.id,
-                    'name': cat.name,
-                    'created_at': cat.created_at.isoformat(),
-                    'updated_at': cat.updated_at.isoformat()
+                    'id': classification.id,
+                    'name': classification.name,
+                    'created_at': classification.created_at.isoformat(),
+                    'updated_at': classification.updated_at.isoformat()
                 }
-                for cat in categories
+                for classification in classifications
             ]
         except SQLAlchemyError as e:
-            current_app.logger.error(f"Error fetching fee categories: {str(e)}")
+            current_app.logger.error(f"Error fetching aircraft classifications: {str(e)}")
             raise
+
+    @staticmethod
+    def get_fee_categories(fbo_location_id: int) -> List[Dict[str, Any]]:
+        """Get all fee categories for a specific FBO (deprecated - use get_aircraft_classifications)."""
+        return AdminFeeConfigService.get_aircraft_classifications()
 
     @staticmethod
     def get_aircraft_classification(fbo_location_id: int, category_id: int) -> Optional[Dict[str, Any]]:
@@ -152,24 +155,38 @@ class AdminFeeConfigService:
             raise
 
     @staticmethod
-    def get_aircraft_classification_by_id(fbo_location_id: int, category_id: int) -> Optional[Dict[str, Any]]:
-        """Get a single fee category by ID for a specific FBO (alias for get_aircraft_classification)."""
-        return AdminFeeConfigService.get_aircraft_classification(fbo_location_id, category_id)
+    def get_aircraft_classification_by_id(classification_id: int) -> Optional[Dict[str, Any]]:
+        """Get a single aircraft classification by ID."""
+        try:
+            classification = AircraftClassification.query.get(classification_id)
+            
+            if not classification:
+                return None
+                
+            return {
+                'id': classification.id,
+                'name': classification.name,
+                'created_at': classification.created_at.isoformat(),
+                'updated_at': classification.updated_at.isoformat()
+            }
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Error fetching aircraft classification: {str(e)}")
+            raise
 
     @staticmethod
-    def create_aircraft_classification(fbo_location_id: int, name: str) -> Dict[str, Any]:
-        """Create a new fee category (global aircraft classification)."""
+    def create_aircraft_classification(name: str) -> Dict[str, Any]:
+        """Create a new aircraft classification."""
         try:
-            category = AircraftClassification()
-            category.name = name
-            db.session.add(category)
+            classification = AircraftClassification()
+            classification.name = name
+            db.session.add(classification)
             db.session.commit()
             
             return {
-                'id': category.id,
-                'name': category.name,
-                'created_at': category.created_at.isoformat(),
-                'updated_at': category.updated_at.isoformat()
+                'id': classification.id,
+                'name': classification.name,
+                'created_at': classification.created_at.isoformat(),
+                'updated_at': classification.updated_at.isoformat()
             }
         except IntegrityError as e:
             db.session.rollback()
@@ -178,27 +195,26 @@ class AdminFeeConfigService:
             raise
         except SQLAlchemyError as e:
             db.session.rollback()
-            current_app.logger.error(f"Error creating fee category: {str(e)}")
+            current_app.logger.error(f"Error creating aircraft classification: {str(e)}")
             raise
 
     @staticmethod
-    def update_aircraft_classification(fbo_location_id: int, category_id: int, name: str) -> Optional[Dict[str, Any]]:
-        """Update a fee category (global aircraft classification)."""
+    def update_aircraft_classification(classification_id: int, name: str) -> Optional[Dict[str, Any]]:
+        """Update an aircraft classification."""
         try:
-            # Aircraft classifications are now global, no FBO filtering needed
-            category = AircraftClassification.query.get(category_id)
+            classification = AircraftClassification.query.get(classification_id)
             
-            if not category:
+            if not classification:
                 return None
             
-            category.name = name
+            classification.name = name
             db.session.commit()
             
             return {
-                'id': category.id,
-                'name': category.name,
-                'created_at': category.created_at.isoformat(),
-                'updated_at': category.updated_at.isoformat()
+                'id': classification.id,
+                'name': classification.name,
+                'created_at': classification.created_at.isoformat(),
+                'updated_at': classification.updated_at.isoformat()
             }
         except IntegrityError as e:
             db.session.rollback()
@@ -207,44 +223,41 @@ class AdminFeeConfigService:
             raise
         except SQLAlchemyError as e:
             db.session.rollback()
-            current_app.logger.error(f"Error updating fee category: {str(e)}")
+            current_app.logger.error(f"Error updating aircraft classification: {str(e)}")
             raise
 
     @staticmethod
-    def delete_aircraft_classification(fbo_location_id: int, category_id: int) -> bool:
-        """Delete a fee category for a specific FBO."""
+    def delete_aircraft_classification(classification_id: int) -> bool:
+        """Delete an aircraft classification."""
         try:
-            category = AircraftClassification.query.filter_by(
-                id=category_id, 
-                fbo_location_id=fbo_location_id
-            ).first()
+            classification = AircraftClassification.query.get(classification_id)
             
-            if not category:
+            if not classification:
                 return False
             
-            # Check if category is referenced by fee rules
-            fee_rules_count = FeeRule.query.filter_by(applies_to_classification_id=category_id).count()
+            # Check if classification is referenced by fee rules
+            fee_rules_count = FeeRule.query.filter_by(applies_to_classification_id=classification_id).count()
             if fee_rules_count > 0:
-                raise ValueError("Cannot delete fee category that is referenced by fee rules")
+                raise ValueError("Cannot delete aircraft classification that is referenced by fee rules")
             
-            # Check if category is referenced by mappings
-            mappings_count = AircraftTypeToAircraftClassificationMapping.query.filter_by(aircraft_classification_id=category_id).count()
-            if mappings_count > 0:
-                raise ValueError("Cannot delete fee category that has aircraft type mappings")
+            # Check if classification is referenced by aircraft types
+            aircraft_types_count = AircraftType.query.filter_by(classification_id=classification_id).count()
+            if aircraft_types_count > 0:
+                raise ValueError("Cannot delete aircraft classification that is used by aircraft types")
             
-            db.session.delete(category)
+            db.session.delete(classification)
             db.session.commit()
             return True
         except SQLAlchemyError as e:
             db.session.rollback()
-            current_app.logger.error(f"Error deleting fee category: {str(e)}")
+            current_app.logger.error(f"Error deleting aircraft classification: {str(e)}")
             raise
 
     @staticmethod
-    def get_or_create_general_aircraft_classification(fbo_location_id: int) -> Dict[str, Any]:
+    def get_or_create_general_aircraft_classification() -> Dict[str, Any]:
         """
         Get or create a 'General' aircraft classification using race-condition-proof logic.
-        Aircraft classifications are now global, not FBO-specific.
+        Aircraft classifications are global.
         """
         category_name = "General Service Fees"
         
@@ -298,42 +311,38 @@ class AdminFeeConfigService:
 
     # Aircraft Type to Fee Category Mappings CRUD
     @staticmethod
-    def get_aircraft_type_mappings(fbo_location_id: int, category_id: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Get all aircraft type to fee category mappings for a specific FBO, optionally filtered by fee category."""
+    def get_aircraft_type_classifications(category_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get all aircraft types with their classifications, optionally filtered by classification."""
         try:
-            query = AircraftTypeToAircraftClassificationMapping.query.filter_by(
-                fbo_location_id=fbo_location_id
+            query = AircraftType.query.options(
+                joinedload(AircraftType.classification)  # type: ignore
             )
             
             # Apply category filter if provided
             if category_id is not None:
                 query = query.filter_by(classification_id=category_id)
             
-            mappings = query.options(
-                joinedload(AircraftTypeToAircraftClassificationMapping.aircraft_type),  # type: ignore
-                joinedload(AircraftTypeToAircraftClassificationMapping.aircraft_classification)  # type: ignore
-            ).all()
+            aircraft_types = query.all()
             
             return [
                 {
-                    'id': mapping.id,
-                    'fbo_location_id': mapping.fbo_location_id,
-                    'aircraft_type_id': mapping.aircraft_type_id,
-                    'aircraft_type_name': mapping.aircraft_type.name,
-                    'aircraft_classification_id': mapping.classification_id,
-                    'aircraft_classification_name': mapping.classification.name,
-                    'created_at': mapping.created_at.isoformat(),
-                    'updated_at': mapping.updated_at.isoformat()
+                    'id': aircraft_type.id,
+                    'aircraft_type_id': aircraft_type.id,
+                    'aircraft_type_name': aircraft_type.name,
+                    'classification_id': aircraft_type.classification_id,
+                    'classification_name': aircraft_type.classification.name if aircraft_type.classification else None,
+                    'created_at': aircraft_type.created_at.isoformat(),
+                    'updated_at': aircraft_type.updated_at.isoformat()
                 }
-                for mapping in mappings
+                for aircraft_type in aircraft_types
             ]
         except SQLAlchemyError as e:
-            current_app.logger.error(f"Error fetching aircraft type mappings: {str(e)}")
+            current_app.logger.error(f"Error fetching aircraft type classifications: {str(e)}")
             raise
 
     @staticmethod
-    def create_aircraft_type_mapping(fbo_location_id: int, aircraft_type_id: int, aircraft_classification_id: int) -> Dict[str, Any]:
-        """Create a new aircraft type to fee category mapping."""
+    def update_aircraft_type_classification(aircraft_type_id: int, aircraft_classification_id: int) -> Dict[str, Any]:
+        """Update an aircraft type's classification (global operation)."""
         try:
             # Verify the aircraft classification exists (global)
             aircraft_classification = AircraftClassification.query.get(aircraft_classification_id)
@@ -345,31 +354,22 @@ class AdminFeeConfigService:
             if not aircraft_type:
                 raise ValueError("Aircraft type not found")
             
-            mapping = AircraftTypeToAircraftClassificationMapping()
-            mapping.fbo_location_id = fbo_location_id
-            mapping.aircraft_type_id = aircraft_type_id
-            mapping.classification_id = aircraft_classification_id
-            db.session.add(mapping)
+            # Update the classification directly
+            aircraft_type.classification_id = aircraft_classification_id
             db.session.commit()
             
             return {
-                'id': mapping.id,
-                'fbo_location_id': mapping.fbo_location_id,
-                'aircraft_type_id': mapping.aircraft_type_id,
+                'id': aircraft_type.id,
+                'aircraft_type_id': aircraft_type.id,
                 'aircraft_type_name': aircraft_type.name,
-                'aircraft_classification_id': mapping.classification_id,
-                'aircraft_classification_name': aircraft_classification.name,
-                'created_at': mapping.created_at.isoformat(),
-                'updated_at': mapping.updated_at.isoformat()
+                'classification_id': aircraft_type.classification_id,
+                'classification_name': aircraft_classification.name,
+                'created_at': aircraft_type.created_at.isoformat(),
+                'updated_at': aircraft_type.updated_at.isoformat()
             }
-        except IntegrityError as e:
-            db.session.rollback()
-            if 'uq_aircraft_type_fbo_mapping' in str(e):
-                raise ValueError("Aircraft type already has a mapping for this FBO")
-            raise
         except SQLAlchemyError as e:
             db.session.rollback()
-            current_app.logger.error(f"Error creating aircraft type mapping: {str(e)}")
+            current_app.logger.error(f"Error updating aircraft type classification: {str(e)}")
             raise
 
     @staticmethod
@@ -596,7 +596,7 @@ class AdminFeeConfigService:
         """Create a new fee rule for a specific FBO."""
         try:
             # Verify the aircraft classification exists (global)
-            aircraft_classification = AircraftClassification.query.get(rule_data['applies_to_classification_id'])
+            aircraft_classification = AircraftClassification.query.get(rule_data['applies_to_aircraft_classification_id'])
             if not aircraft_classification:
                 raise ValueError("Aircraft classification not found")
             
@@ -604,7 +604,7 @@ class AdminFeeConfigService:
             rule.fbo_location_id = fbo_location_id
             rule.fee_name = rule_data['fee_name']
             rule.fee_code = rule_data['fee_code']
-            rule.applies_to_classification_id = rule_data['applies_to_classification_id']
+            rule.applies_to_classification_id = rule_data['applies_to_aircraft_classification_id']
             rule.amount = rule_data['amount']
             rule.currency = rule_data.get('currency', 'USD')
             rule.is_taxable = rule_data.get('is_taxable', False)
@@ -627,8 +627,8 @@ class AdminFeeConfigService:
             return result
         except IntegrityError as e:
             db.session.rollback()
-            if 'uq_fee_rule_fbo_code' in str(e):
-                raise ValueError("Fee rule with this code already exists for this FBO")
+            if 'uq_fee_rule_fbo_classification_code' in str(e):
+                raise ValueError("Fee rule with this code already exists for this classification")
             raise
         except SQLAlchemyError as e:
             db.session.rollback()
@@ -675,8 +675,8 @@ class AdminFeeConfigService:
             return AdminFeeConfigService.get_fee_rule(fbo_location_id, rule.id)
         except IntegrityError as e:
             db.session.rollback()
-            if 'uq_fee_rule_fbo_code' in str(e):
-                raise ValueError("Fee rule with this code already exists for this FBO")
+            if 'uq_fee_rule_fbo_classification_code' in str(e):
+                raise ValueError("Fee rule with this code already exists for this classification")
             raise
         except SQLAlchemyError as e:
             db.session.rollback()
@@ -903,6 +903,39 @@ class AdminFeeConfigService:
             }
         except SQLAlchemyError as e:
             current_app.logger.error(f"Error fetching consolidated fee schedule: {str(e)}")
+            raise
+
+    @staticmethod
+    def get_global_fee_schedule() -> Dict[str, Any]:
+        """
+        Get the entire global fee schedule, structured for the UI.
+        This will be the single source of truth for the fee management page.
+        """
+        try:
+            classifications = AircraftClassification.query.order_by(AircraftClassification.name).all()
+            aircraft_types = AircraftType.query.order_by(AircraftType.name).all()
+            fee_rules = FeeRule.query.order_by(FeeRule.fee_name).all()
+            overrides = FeeRuleOverride.query.all()
+            
+            # Structure the data in a way the frontend can easily consume
+            # Group aircraft by their classification
+            schedule = []
+            classifications_map = {c.id: c.to_dict() for c in classifications}
+            
+            for classification in classifications:
+                classification_data = classification.to_dict()
+                classification_data['aircraft_types'] = [
+                    ac.to_dict() for ac in aircraft_types if ac.classification_id == classification.id
+                ]
+                schedule.append(classification_data)
+
+            return {
+                "schedule": schedule,  # Grouped data
+                "fee_rules": [rule.to_dict() for rule in fee_rules],
+                "overrides": [override.to_dict() for override in overrides]
+            }
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Error fetching global fee schedule: {str(e)}")
             raise
 
     @staticmethod

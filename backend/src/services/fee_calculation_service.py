@@ -21,7 +21,6 @@ from ..extensions import db
 from ..models.customer import Customer
 from ..models.aircraft_type import AircraftType
 from ..models.aircraft_classification import AircraftClassification
-from ..models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
 from ..models.fee_rule import FeeRule, WaiverStrategy, CalculationBasis
 from ..models.waiver_tier import WaiverTier
 
@@ -244,14 +243,10 @@ class FeeCalculationService:
                 aircraft_type_id=aircraft_type.id
             ).first()
         
-        # Find aircraft's fee category for this FBO
+        # Find aircraft's fee category (now global relationship)
         aircraft_aircraft_classification_id = None
         if aircraft_type:
-            mapping = AircraftTypeToAircraftClassificationMapping.query.filter_by(
-                fbo_location_id=context.fbo_location_id,
-                aircraft_type_id=aircraft_type.id
-            ).first()
-            aircraft_aircraft_classification_id = mapping.aircraft_classification_id if mapping else None
+            aircraft_aircraft_classification_id = aircraft_type.classification_id
         
         # Fetch all fee rules for this FBO
         fee_rules = FeeRule.query.filter_by(

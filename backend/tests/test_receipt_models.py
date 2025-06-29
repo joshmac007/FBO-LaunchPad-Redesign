@@ -6,7 +6,7 @@ from src.extensions import db
 from src.models.customer import Customer
 from src.models.aircraft_type import AircraftType
 from src.models.aircraft_classification import AircraftClassification
-from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
+# from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
 from src.models.fee_rule import FeeRule
 from src.models.waiver_tier import WaiverTier
 from src.models.receipt import Receipt

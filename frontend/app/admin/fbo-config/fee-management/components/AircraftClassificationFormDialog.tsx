@@ -19,7 +19,7 @@ import { type AircraftClassification, type CreateAircraftClassificationRequest, 
 
 const formSchema = z.object({
   name: z.string().min(2, {
-    message: "Category name must be at least 2 characters.",
+    message: "Classification name must be at least 2 characters.",
   }),
 });
 
@@ -27,10 +27,10 @@ interface AircraftClassificationFormDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: CreateAircraftClassificationRequest | UpdateAircraftClassificationRequest) => Promise<void>;
-  category: AircraftClassification | null;
+  classification: AircraftClassification | null;
 }
 
-export function AircraftClassificationFormDialog({ isOpen, onClose, onSubmit, category }: AircraftClassificationFormDialogProps) {
+export function AircraftClassificationFormDialog({ isOpen, onClose, onSubmit, classification }: AircraftClassificationFormDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -40,12 +40,12 @@ export function AircraftClassificationFormDialog({ isOpen, onClose, onSubmit, ca
   });
 
   useEffect(() => {
-    if (category) {
-      form.reset({ name: category.name });
+    if (classification) {
+      form.reset({ name: classification.name });
     } else {
       form.reset({ name: "" });
     }
-  }, [category, form]);
+  }, [classification, form]);
 
   const handleSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsSubmitting(true);
@@ -57,9 +57,9 @@ export function AircraftClassificationFormDialog({ isOpen, onClose, onSubmit, ca
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>{category ? "Edit Fee Category" : "Create Fee Category"}</DialogTitle>
+          <DialogTitle>{classification ? "Edit Aircraft Classification" : "Create Aircraft Classification"}</DialogTitle>
           <DialogDescription>
-            {category ? "Update the details for this fee category." : "Enter a name for the new fee category."}
+            {classification ? "Update the details for this aircraft classification." : "Enter a name for the new aircraft classification."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(handleSubmit)}>

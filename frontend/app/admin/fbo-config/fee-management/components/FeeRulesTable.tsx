@@ -1,18 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Plus, Edit, Trash2, AlertCircle } from "lucide-react";
+import { Plus, Edit, Trash2 } from "lucide-react";
 import {
-  getFeeRules,
-  createFeeRule,
-  updateFeeRule,
-  deleteFeeRule,
   type FeeRule,
   type CreateFeeRuleRequest,
   type UpdateFeeRuleRequest
@@ -21,43 +15,21 @@ import { FeeRuleFormDialog } from "./FeeRuleFormDialog";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
 
 interface FeeRulesTableProps {
-  categoryId: number;
+  classificationId: number;
+  rules: FeeRule[];
+  viewMode: 'standard' | 'caa';
 }
 
-export function FeeRulesTable({ categoryId }: FeeRulesTableProps) {
-  const [rules, setRules] = useState<FeeRule[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
+export function FeeRulesTable({ classificationId, rules, viewMode }: FeeRulesTableProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<FeeRule | null>(null);
-
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [ruleToDelete, setRuleToDelete] = useState<FeeRule | null>(null);
-  
-  // TODO: Get actual FBO ID from user context
-  const fboId = 1;
 
-  useEffect(() => {
-    if (categoryId) {
-        loadRules();
-    }
-  }, [categoryId]);
-
-  const loadRules = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await getFeeRules(fboId, categoryId);
-      setRules(data);
-    } catch (error: any) {
-      const errorMessage = `Failed to load fee rules: ${error.message}`;
-      setError(errorMessage);
-      toast.error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Filter rules that are specific to this classification
+  const classificationSpecificRules = rules.filter(
+    (rule) => rule.applies_to_aircraft_classification_id === classificationId
+  );
 
   const handleCreateClick = () => {
     setEditingRule(null);
@@ -75,32 +47,17 @@ export function FeeRulesTable({ categoryId }: FeeRulesTableProps) {
   };
 
   const handleFormSubmit = async (data: CreateFeeRuleRequest | UpdateFeeRuleRequest) => {
-    try {
-      if (editingRule) {
-        await updateFeeRule(fboId, editingRule.id, data as UpdateFeeRuleRequest);
-        toast.success("Fee rule updated successfully");
-      } else {
-        await createFeeRule(fboId, data as CreateFeeRuleRequest);
-        toast.success("Fee rule created successfully");
-      }
-      setIsFormOpen(false);
-      await loadRules();
-    } catch (error: any) {
-      toast.error(`Failed to save fee rule: ${error.details?.messages?.name || error.message}`);
-    }
+    // This logic should be handled by the parent component
+    toast.info("This action should be handled by the parent component.");
+    console.log("Form data:", data);
+    setIsFormOpen(false);
   };
 
   const confirmDelete = async () => {
-    if (!ruleToDelete) return;
-    try {
-      await deleteFeeRule(fboId, ruleToDelete.id);
-      toast.success("Fee rule deleted successfully");
-      setIsDeleteDialogOpen(false);
-      setRuleToDelete(null);
-      await loadRules();
-    } catch (error: any) {
-      toast.error(`Failed to delete fee rule: ${error.message}`);
-    }
+    // This logic should be handled by the parent component
+    toast.info("This action should be handled by the parent component.");
+    console.log("Deleting rule:", ruleToDelete);
+    setIsDeleteDialogOpen(false);
   };
 
   const formatCurrency = (amount: number): string => {
@@ -116,51 +73,6 @@ export function FeeRulesTable({ categoryId }: FeeRulesTableProps) {
       .replace(/\b\w/g, char => char.toUpperCase());
   };
 
-  if (loading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Fee Rules</CardTitle>
-          <CardDescription>Loading fee rules for this category...</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-16 w-full" />
-          ))}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-destructive" />
-            Error Loading Fee Rules
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              {error}
-            </AlertDescription>
-          </Alert>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadRules}
-            className="mt-4"
-          >
-            Retry
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <>
       <Card>
@@ -169,10 +81,10 @@ export function FeeRulesTable({ categoryId }: FeeRulesTableProps) {
             <div>
               <CardTitle className="flex items-center gap-2">
                 Fee Rules
-                <Badge variant="secondary">{rules.length}</Badge>
+                <Badge variant="secondary">{classificationSpecificRules.length}</Badge>
               </CardTitle>
               <CardDescription>
-                Manage fee rules for this category
+                Manage fee rules for this classification
               </CardDescription>
             </div>
             <Button size="sm" className="flex items-center gap-2" onClick={handleCreateClick}>
@@ -182,9 +94,9 @@ export function FeeRulesTable({ categoryId }: FeeRulesTableProps) {
           </div>
         </CardHeader>
         <CardContent>
-          {rules.length === 0 ? (
+          {classificationSpecificRules.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <p>No fee rules found for this category.</p>
+              <p>No fee rules found for this classification.</p>
               <p className="text-sm">Create your first rule to get started.</p>
             </div>
           ) : (
@@ -203,7 +115,7 @@ export function FeeRulesTable({ categoryId }: FeeRulesTableProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {rules.map((rule) => (
+                    {classificationSpecificRules.map((rule) => (
                       <tr key={rule.id} className="border-b hover:bg-muted/25">
                         <td className="p-3">
                           <div className="font-medium">{rule.fee_name}</div>
@@ -241,10 +153,10 @@ export function FeeRulesTable({ categoryId }: FeeRulesTableProps) {
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => handleEditClick(rule)}>
+                            <Button variant="ghost" size="icon" onClick={() => handleEditClick(rule)}>
                               <Edit className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteClick(rule)}>
+                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteClick(rule)}>
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
@@ -258,19 +170,20 @@ export function FeeRulesTable({ categoryId }: FeeRulesTableProps) {
           )}
         </CardContent>
       </Card>
+      
       <FeeRuleFormDialog
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
         onSubmit={handleFormSubmit}
         rule={editingRule}
-        categoryId={categoryId}
+        categoryId={classificationId}
       />
-      <DeleteConfirmationDialog 
+      <DeleteConfirmationDialog
         isOpen={isDeleteDialogOpen}
         onClose={() => setIsDeleteDialogOpen(false)}
         onConfirm={confirmDelete}
         title="Delete Fee Rule"
-        description={`Are you sure you want to delete the rule "${ruleToDelete?.fee_name}"? This action cannot be undone.`}
+        description={`Are you sure you want to delete the rule "${ruleToDelete?.fee_name || ''}"? This action cannot be undone.`}
       />
     </>
   );

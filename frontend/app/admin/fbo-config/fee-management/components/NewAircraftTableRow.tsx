@@ -24,18 +24,18 @@ import { TableCell, TableRow } from "@/components/ui/table"
 import { getAircraftTypes, addAircraftToFeeSchedule } from "@/app/services/admin-fee-config-service"
 
 interface NewAircraftTableRowProps {
-  fboId: number
-  aircraftClassificationId: number
-  aircraftClassificationName: string
-  onSave: () => void
+  categoryId: number
+  feeColumns: string[]
+  primaryFeeRules: any[]
+  onSuccess: () => void
   onCancel: () => void
 }
 
 export function NewAircraftTableRow({
-  fboId,
-  aircraftClassificationId,
-  aircraftClassificationName,
-  onSave,
+  categoryId,
+  feeColumns,
+  primaryFeeRules,
+  onSuccess,
   onCancel,
 }: NewAircraftTableRowProps) {
   const [aircraftTypeName, setAircraftTypeName] = useState("")
@@ -47,8 +47,8 @@ export function NewAircraftTableRow({
 
   // Fetch aircraft types for autocomplete
   const { data: aircraftTypes = [] } = useQuery({
-    queryKey: ['aircraft-types', fboId],
-    queryFn: () => getAircraftTypes(fboId),
+    queryKey: ['aircraft-types', 1],  // TODO: Remove fboId when backend is fully global
+    queryFn: () => getAircraftTypes(1),  // TODO: Remove fboId when backend is fully global
   })
 
   // Add aircraft mutation
@@ -56,17 +56,24 @@ export function NewAircraftTableRow({
     mutationFn: async () => {
       const payload = {
         aircraft_type_name: aircraftTypeName.trim(),
-        aircraft_classification_id: aircraftClassificationId,
+        aircraft_classification_id: categoryId,
         min_fuel_gallons: parseInt(minFuelGallons, 10),
       }
       
-      return addAircraftToFeeSchedule(fboId, payload)
+      return addAircraftToFeeSchedule(1, payload)  // TODO: Remove fboId when backend is fully global
     },
     onSuccess: () => {
       // Invalidate relevant queries to refresh the table
-      queryClient.invalidateQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
-      toast.success(`Aircraft "${aircraftTypeName}" added successfully to ${aircraftClassificationName}`)
-      onSave()
+      queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
+      queryClient.invalidateQueries({ queryKey: ['aircraft-types', 1] })  // TODO: Remove fboId when backend is fully global
+      
+      // Reset form
+      setAircraftTypeName("")
+      setMinFuelGallons("100")
+      setOpen(false)
+      
+      toast.success(`Aircraft "${aircraftTypeName}" added successfully`)
+      onSuccess()
     },
     onError: (error: any) => {
       const errorMessage = error?.message || "Failed to add aircraft. Please try again."

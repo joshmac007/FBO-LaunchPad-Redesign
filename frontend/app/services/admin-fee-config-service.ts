@@ -1,5 +1,6 @@
 // Admin Fee Configuration Service
-// Handles all API interactions for FBO fee configuration management
+// Handles all API interactions for fee configuration management
+// Aircraft Classifications are global; Fee Rules are FBO-specific
 
 import { API_BASE_URL, handleApiResponse, getAuthHeaders } from "./api-config"
 
@@ -7,7 +8,6 @@ import { API_BASE_URL, handleApiResponse, getAuthHeaders } from "./api-config"
 export interface AircraftClassification {
   id: number;
   name: string;
-  fbo_location_id: number;
 }
 
 export interface FeeRule {
@@ -32,6 +32,7 @@ export interface FeeRule {
   updated_at: string;
 }
 
+// @deprecated - Aircraft mapping table has been removed. Aircraft types now have direct classification_id relationships.
 export interface AircraftMapping {
   id: number;
   aircraft_type_id: number;
@@ -77,12 +78,71 @@ export interface FBOAircraftTypeConfig {
   updated_at: string;
 }
 
+// @deprecated - Use GlobalFeeSchedule instead. ConsolidatedFeeSchedule is being phased out in favor of the global architecture.
 export interface ConsolidatedFeeSchedule {
   categories: AircraftClassification[];
   rules: FeeRule[];
   mappings: AircraftMapping[];
   overrides: FeeRuleOverride[];
   fbo_aircraft_config: FBOAircraftTypeConfig[];
+}
+
+// New global types for the simplified architecture
+export interface GlobalAircraftClassification {
+  id: number;
+  name: string;
+  aircraft_types: GlobalAircraftType[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GlobalAircraftType {
+  id: number;
+  name: string;
+  classification_id: number;
+  base_min_fuel_gallons_for_waiver: string | number;
+  default_max_gross_weight_lbs?: string | number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GlobalFeeRule {
+  id: number;
+  fbo_location_id: number;
+  fee_name: string;
+  fee_code: string;
+  applies_to_classification_id: number;
+  amount: number;
+  currency: string;
+  is_taxable: boolean;
+  is_potentially_waivable_by_fuel_uplift: boolean;
+  calculation_basis: 'FIXED_PRICE' | 'PER_UNIT_SERVICE' | 'NOT_APPLICABLE';
+  waiver_strategy: 'NONE' | 'SIMPLE_MULTIPLIER' | 'TIERED_MULTIPLIER';
+  simple_waiver_multiplier?: number;
+  has_caa_override: boolean;
+  caa_override_amount?: number;
+  caa_waiver_strategy_override?: 'NONE' | 'SIMPLE_MULTIPLIER' | 'TIERED_MULTIPLIER';
+  caa_simple_waiver_multiplier_override?: number;
+  is_primary_fee: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GlobalFeeRuleOverride {
+  id: number;
+  fbo_location_id: number;
+  aircraft_type_id: number;
+  fee_rule_id: number;
+  override_amount?: number;
+  override_caa_amount?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GlobalFeeSchedule {
+  schedule: GlobalAircraftClassification[];
+  fee_rules: GlobalFeeRule[];
+  overrides: GlobalFeeRuleOverride[];
 }
 
 export interface UpsertFeeRuleOverrideRequest {
@@ -220,19 +280,25 @@ export interface UpdateAircraftClassificationMappingResponse {
 
 // Using shared API configuration from api-config.ts
 
-// Fee Categories Service
-export const getFeeCategories = async (fboId: number): Promise<AircraftClassification[]> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-categories`, {
+// Aircraft Classifications Service (Global)
+export const getAircraftClassifications = async (): Promise<AircraftClassification[]> => {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-classifications`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
   
-  const result = await handleApiResponse<{ fee_categories: AircraftClassification[] }>(response);
-  return result.fee_categories;
+  const result = await handleApiResponse<{ aircraft_classifications: AircraftClassification[] }>(response);
+  return result.aircraft_classifications;
 };
 
-export const getAircraftClassificationById = async (fboId: number, categoryId: number): Promise<AircraftClassification> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-categories/${categoryId}`, {
+// @deprecated - Use getAircraftClassifications() instead
+export const getFeeCategories = async (fboId: number): Promise<AircraftClassification[]> => {
+  console.warn('getFeeCategories is deprecated. Use getAircraftClassifications() instead.');
+  return getAircraftClassifications();
+};
+
+export const getAircraftClassificationById = async (classificationId: number): Promise<AircraftClassification> => {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-classifications/${classificationId}`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
@@ -241,8 +307,8 @@ export const getAircraftClassificationById = async (fboId: number, categoryId: n
   return result.aircraft_classification;
 };
 
-export const createAircraftClassification = async (fboId: number, data: CreateAircraftClassificationRequest): Promise<AircraftClassification> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-categories`, {
+export const createAircraftClassification = async (data: CreateAircraftClassificationRequest): Promise<AircraftClassification> => {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-classifications`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
@@ -251,8 +317,8 @@ export const createAircraftClassification = async (fboId: number, data: CreateAi
   return handleApiResponse<AircraftClassification>(response);
 };
 
-export const updateAircraftClassification = async (fboId: number, categoryId: number, data: UpdateAircraftClassificationRequest): Promise<AircraftClassification> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-categories/${categoryId}`, {
+export const updateAircraftClassification = async (classificationId: number, data: UpdateAircraftClassificationRequest): Promise<AircraftClassification> => {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-classifications/${classificationId}`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
@@ -261,8 +327,8 @@ export const updateAircraftClassification = async (fboId: number, categoryId: nu
   return handleApiResponse<AircraftClassification>(response);
 };
 
-export const deleteAircraftClassification = async (fboId: number, categoryId: number): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-categories/${categoryId}`, {
+export const deleteAircraftClassification = async (classificationId: number): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-classifications/${classificationId}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
@@ -270,8 +336,8 @@ export const deleteAircraftClassification = async (fboId: number, categoryId: nu
   return handleApiResponse<void>(response);
 };
 
-export const getGeneralAircraftClassification = async (fboId: number): Promise<AircraftClassification> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-categories/general`, {
+export const getGeneralAircraftClassification = async (): Promise<AircraftClassification> => {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-classifications/general`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
@@ -360,7 +426,9 @@ export const deleteFeeRule = async (fboId: number, ruleId: number): Promise<void
 };
 
 // Aircraft Type to Fee Category Mapping Service
+// @deprecated - Aircraft mapping table has been removed. Use getGlobalFeeSchedule() instead.
 export const getAircraftMappings = async (fboId: number, categoryId?: number): Promise<AircraftMapping[]> => {
+  console.warn('getAircraftMappings is deprecated. The aircraft mapping table has been removed. Use getGlobalFeeSchedule() instead.');
   const params = new URLSearchParams();
   if (categoryId !== undefined) {
     params.append('aircraft_classification_id', categoryId.toString());
@@ -377,7 +445,9 @@ export const getAircraftMappings = async (fboId: number, categoryId?: number): P
   return handleApiResponse<AircraftMapping[]>(response);
 };
 
+// @deprecated - Aircraft mapping uploads are no longer supported. Aircraft types are now directly assigned to classifications.
 export const uploadAircraftMappings = async (fboId: number, csvFile: File): Promise<{ created: number; updated: number }> => {
+  console.warn('uploadAircraftMappings is deprecated. Aircraft mapping table has been removed.');
   const formData = new FormData();
   formData.append('csv_file', csvFile);
   
@@ -396,17 +466,46 @@ export const uploadAircraftMappings = async (fboId: number, csvFile: File): Prom
   return handleApiResponse<{ created: number; updated: number }>(response);
 };
 
+// @deprecated - Aircraft classification mappings are no longer used. Aircraft types have direct classification_id relationships.
+export const deleteAircraftMapping = async (fboId: number, mappingId: number): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/aircraft-type-mappings/${mappingId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  return handleApiResponse(response);
+}
+
+export const updateAircraftTypeClassification = async (
+  aircraftTypeId: number,
+  classificationId: number
+): Promise<UpdateAircraftClassificationMappingResponse> => {
+  const response = await fetch(
+    `${API_BASE_URL}/admin/aircraft-types/${aircraftTypeId}/classification`,
+    {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ classification_id: classificationId }),
+    }
+  );
+  return handleApiResponse(response);
+};
+
+/**
+ * @deprecated - Use updateAircraftTypeClassification instead. This function uses a legacy route.
+ */
 export const updateAircraftClassificationMapping = async (
   fboId: number, 
   aircraftTypeId: number, 
   data: UpdateAircraftClassificationMappingRequest
 ): Promise<UpdateAircraftClassificationMappingResponse> => {
+  console.warn('updateAircraftClassificationMapping is deprecated. Use updateAircraftTypeClassification instead.');
   const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/aircraft-classification-mappings/by-type/${aircraftTypeId}`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
   
+  // The legacy endpoint returns the object nested under a 'mapping' key
   const result = await handleApiResponse<{ mapping: UpdateAircraftClassificationMappingResponse }>(response);
   return result.mapping;
 };
@@ -460,14 +559,25 @@ export const reorderWaiverTiers = async (fboId: number, tierUpdates: { tier_id: 
   return handleApiResponse(response);
 };
 
-// New API functions for Phase 2
+// @deprecated - Use getGlobalFeeSchedule() instead. The consolidated endpoint is being phased out in favor of the global architecture.
 export const getConsolidatedFeeSchedule = async (fboId: number): Promise<ConsolidatedFeeSchedule> => {
+  console.warn('getConsolidatedFeeSchedule is deprecated. Use getGlobalFeeSchedule() instead for the new global architecture.');
   const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-schedule/consolidated`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
   
   return handleApiResponse<ConsolidatedFeeSchedule>(response);
+};
+
+// New global fee schedule function (no FBO scope needed)
+export const getGlobalFeeSchedule = async (): Promise<GlobalFeeSchedule> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fee-schedule/global`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+  
+  return handleApiResponse<GlobalFeeSchedule>(response);
 };
 
 export const upsertFeeRuleOverride = async (fboId: number, data: UpsertFeeRuleOverrideRequest): Promise<FeeRuleOverride> => {
@@ -533,15 +643,7 @@ export const uploadFeeOverridesCSV = async (fboId: number, file: File): Promise<
   return handleApiResponse(response);
 };
 
-export const deleteAircraftMapping = async (fboId: number, mappingId: number): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/aircraft-type-mappings/${mappingId}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
-  });
-  
-  return handleApiResponse<void>(response);
-};
-
+// @deprecated - Aircraft mapping table has been removed. Aircraft types are now directly assigned to classifications.
 export const addAircraftToFeeSchedule = async (fboId: number, data: AddAircraftToFeeScheduleRequest): Promise<any> => {
   const response = await fetch(
     `${API_BASE_URL}/admin/fbo/${fboId}/aircraft-fee-setup`,
@@ -586,8 +688,10 @@ export const setFuelPrices = async (fboId: number, data: SetFuelPricesRequest): 
 
 // Export all functions for easy importing
 export const AdminFeeConfigService = {
-  // Fee Categories
-  getFeeCategories,
+  // Aircraft Classifications
+  getAircraftClassifications,
+  getFeeCategories, // @deprecated
+  getAircraftClassificationById,
   createAircraftClassification,
   updateAircraftClassification,
   deleteAircraftClassification,
@@ -598,11 +702,12 @@ export const AdminFeeConfigService = {
   updateFeeRule,
   deleteFeeRule,
   
-  // Aircraft Mappings
+  // Aircraft Mappings - DEPRECATED
+  // @deprecated - These functions are deprecated due to removal of aircraft mapping table
   getAircraftMappings,
   uploadAircraftMappings,
   deleteAircraftMapping,
-  updateAircraftClassificationMapping,
+  updateAircraftTypeClassification,
   
   // Waiver Tiers
   getWaiverTiers,
@@ -610,8 +715,9 @@ export const AdminFeeConfigService = {
   updateWaiverTier,
   deleteWaiverTier,
   
-  // Consolidated Fee Schedule
-  getConsolidatedFeeSchedule,
+  // Fee Schedule
+  getGlobalFeeSchedule, // ✅ Current global endpoint
+  getConsolidatedFeeSchedule, // @deprecated - Use getGlobalFeeSchedule instead
   upsertFeeRuleOverride,
   deleteFeeRuleOverride,
   

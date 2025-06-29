@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from src.models.aircraft_classification import AircraftClassification
 from src.models.fee_rule import FeeRule, CalculationBasis, WaiverStrategy
 from src.models.aircraft_type import AircraftType
-from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
+# from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
 from src.models.waiver_tier import WaiverTier
 from src.services.admin_fee_config_service import AdminFeeConfigService
 from src.extensions import db
@@ -19,10 +19,10 @@ def clean_fee_config_tables(db_session):
     """Clean fee configuration tables before each test."""
     # Delete all fee configuration data to ensure clean test state
     # Order matters due to foreign key constraints
-    from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
+    # from src.models.aircraft_type_aircraft_classification_mapping import AircraftTypeToAircraftClassificationMapping
     
     db_session.query(FeeRule).delete()
-    db_session.query(AircraftTypeToAircraftClassificationMapping).delete() 
+    # db_session.query(AircraftTypeToAircraftClassificationMapping).delete() 
     db_session.query(WaiverTier).delete()
     db_session.query(AircraftType).delete()  # Delete aircraft types first (they reference classifications)
     db_session.query(AircraftClassification).delete()  # Then delete classifications

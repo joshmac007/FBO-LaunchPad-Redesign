@@ -8,56 +8,54 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus } from "lucide-react"
 import {
-  getConsolidatedFeeSchedule,
-  getFeeCategories,
+  getGlobalFeeSchedule,
   updateFeeRule,
-  FeeRule,
+  GlobalFeeRule,
   UpdateFeeRuleRequest,
 } from "@/app/services/admin-fee-config-service"
 import { FeeRuleDialog } from "./FeeRuleDialog"
 
 interface FeeColumnsTabProps {
-  fboId: number
+  // No props needed for global architecture
 }
 
-export function FeeColumnsTab({ fboId }: FeeColumnsTabProps) {
+export function FeeColumnsTab({}: FeeColumnsTabProps) {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const queryClient = useQueryClient()
 
   // Fetch all fee rules
-  const { data: consolidatedData, isLoading } = useQuery({
-    queryKey: ['consolidated-fee-schedule', fboId],
-    queryFn: () => getConsolidatedFeeSchedule(fboId),
+  const { data: globalData, isLoading } = useQuery({
+    queryKey: ['global-fee-schedule'],
+    queryFn: () => getGlobalFeeSchedule(),
   })
 
   const feeRules = useMemo(() => {
-    return consolidatedData?.rules || []
-  }, [consolidatedData])
+    return globalData?.fee_rules || []
+  }, [globalData])
 
-  // Fetch fee categories for the dialog
-  const { data: aircraftClassifications = [] } = useQuery({
-    queryKey: ['fee-categories', fboId],
-    queryFn: () => getFeeCategories(fboId),
-  })
+  // Get classifications from global data
+  const aircraftClassifications = useMemo(() => {
+    return globalData?.schedule || []
+  }, [globalData])
 
   // Update fee rule mutation with optimistic updates
   const updateFeeRuleMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: UpdateFeeRuleRequest }) => 
-      updateFeeRule(fboId, id, data),
+      updateFeeRule(1, id, data),  // TODO: Remove fboId when backend is fully global
     onMutate: async ({ id, data }) => {
       // Cancel any outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
+      await queryClient.cancelQueries({ queryKey: ['global-fee-schedule'] })
 
       // Snapshot the previous value
-      const previousData = queryClient.getQueryData(['consolidated-fee-schedule', fboId])
+      const previousData = queryClient.getQueryData(['global-fee-schedule'])
 
       // Optimistically update to the new value
-      queryClient.setQueryData(['consolidated-fee-schedule', fboId], (old: any) => {
+      queryClient.setQueryData(['global-fee-schedule'], (old: any) => {
         if (!old) return old
         
         return {
           ...old,
-          rules: old.rules.map((rule: FeeRule) => 
+          fee_rules: old.fee_rules.map((rule: GlobalFeeRule) => 
             rule.id === id ? { ...rule, ...data } : rule
           )
         }
@@ -68,7 +66,7 @@ export function FeeColumnsTab({ fboId }: FeeColumnsTabProps) {
     },
     onError: (err, variables, context) => {
       // If the mutation fails, use the context returned from onMutate to roll back
-      queryClient.setQueryData(['consolidated-fee-schedule', fboId], context?.previousData)
+      queryClient.setQueryData(['global-fee-schedule'], context?.previousData)
       toast.error("Failed to update fee column setting")
     },
     onSuccess: (updatedRule, { data }) => {
@@ -77,11 +75,11 @@ export function FeeColumnsTab({ fboId }: FeeColumnsTabProps) {
     },
     onSettled: () => {
       // Always refetch after error or success to ensure we have the latest data
-      queryClient.invalidateQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
+      queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
     },
   })
 
-  const handleTogglePrimaryFee = (rule: FeeRule, newPrimaryStatus: boolean) => {
+  const handleTogglePrimaryFee = (rule: GlobalFeeRule, newPrimaryStatus: boolean) => {
     updateFeeRuleMutation.mutate({
       id: rule.id,
       data: { is_primary_fee: newPrimaryStatus }
@@ -160,9 +158,8 @@ export function FeeColumnsTab({ fboId }: FeeColumnsTabProps) {
       <FeeRuleDialog
         isOpen={showCreateDialog}
         onClose={() => setShowCreateDialog(false)}
-        fboId={fboId}
         onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['consolidated-fee-schedule', fboId] })
+          queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
           toast.success("Fee rule created successfully")
         }}
         defaultValues={{

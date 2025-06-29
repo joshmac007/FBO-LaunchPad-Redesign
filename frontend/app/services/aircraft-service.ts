@@ -7,6 +7,7 @@ interface BackendAircraftType {
   name: string
   base_min_fuel_gallons_for_waiver: number | string
   classification_id: number
+  classification_name: string
 }
 
 export interface AircraftType {
@@ -14,17 +15,20 @@ export interface AircraftType {
   name: string
   base_min_fuel_gallons_for_waiver: number
   classification_id: number
+  classification_name: string
 }
 
 // Request payload interfaces for Aircraft Types
 export interface AircraftTypeCreateRequest {
   name: string
   base_min_fuel_gallons_for_waiver: number
+  classification_id: number
 }
 
 export interface AircraftTypeUpdateRequest {
   name?: string
   base_min_fuel_gallons_for_waiver?: number
+  classification_id?: number
 }
 
 // Frontend Aircraft model - accurately reflecting backend structure
@@ -248,16 +252,16 @@ export async function getAircraftByTailNumber(tailNumber: string): Promise<Aircr
 
 export async function getAircraftTypes(): Promise<AircraftType[]> {
   const response = await fetch(`${API_BASE_URL}/aircraft/types`, {
-    method: "GET",
     headers: getAuthHeaders(),
   })
   const data = await handleApiResponse<BackendAircraftType[]>(response)
-  // Ensure base_min_fuel_gallons_for_waiver is always a number
-  return data.map(type => ({
-    ...type,
-    base_min_fuel_gallons_for_waiver: typeof type.base_min_fuel_gallons_for_waiver === 'string' 
-      ? parseFloat(type.base_min_fuel_gallons_for_waiver) 
-      : type.base_min_fuel_gallons_for_waiver
+  // Ensure base_min_fuel_gallons_for_waiver is always a number and classification_name is present
+  return data.map((backendType) => ({
+    ...backendType,
+    base_min_fuel_gallons_for_waiver: Number(
+      backendType.base_min_fuel_gallons_for_waiver,
+    ),
+    classification_name: backendType.classification_name || "Unclassified",
   }))
 }
 
@@ -270,9 +274,8 @@ export async function createAircraftType(data: AircraftTypeCreateRequest): Promi
   const result = await handleApiResponse<{ message: string; aircraft_type: BackendAircraftType }>(response)
   return {
     ...result.aircraft_type,
-    base_min_fuel_gallons_for_waiver: typeof result.aircraft_type.base_min_fuel_gallons_for_waiver === 'string' 
-      ? parseFloat(result.aircraft_type.base_min_fuel_gallons_for_waiver) 
-      : result.aircraft_type.base_min_fuel_gallons_for_waiver
+    base_min_fuel_gallons_for_waiver: Number(result.aircraft_type.base_min_fuel_gallons_for_waiver),
+    classification_name: result.aircraft_type.classification_name || "Unclassified",
   }
 }
 
@@ -285,9 +288,8 @@ export async function updateAircraftType(typeId: number, data: AircraftTypeUpdat
   const result = await handleApiResponse<{ message: string; aircraft_type: BackendAircraftType }>(response)
   return {
     ...result.aircraft_type,
-    base_min_fuel_gallons_for_waiver: typeof result.aircraft_type.base_min_fuel_gallons_for_waiver === 'string' 
-      ? parseFloat(result.aircraft_type.base_min_fuel_gallons_for_waiver) 
-      : result.aircraft_type.base_min_fuel_gallons_for_waiver
+    base_min_fuel_gallons_for_waiver: Number(result.aircraft_type.base_min_fuel_gallons_for_waiver),
+    classification_name: result.aircraft_type.classification_name || "Unclassified",
   }
 }
 
