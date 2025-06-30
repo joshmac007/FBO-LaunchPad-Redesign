@@ -52,15 +52,15 @@ export async function calculateFees(request: FeeCalculationRequest): Promise<Fee
   return handleApiResponse<FeeCalculationResult>(response)
 }
 
-// Get available services (fee rules) for a specific FBO
-export async function getAvailableServices(fboId: number): Promise<AvailableService[]> {
+// Get available services (fee rules) for the system
+export async function getAvailableServices(): Promise<AvailableService[]> {
   if (isOfflineMode()) {
     // Return mock data for offline mode
     return getMockAvailableServices()
   }
 
   // Online mode - fetch from API using CSR-accessible endpoint
-  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/available-services`, {
+  const response = await fetch(`${API_BASE_URL}/receipts/available-services`, {
     method: "GET",
     headers: getAuthHeaders(),
   })

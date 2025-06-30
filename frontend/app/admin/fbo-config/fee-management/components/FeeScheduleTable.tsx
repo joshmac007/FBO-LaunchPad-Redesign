@@ -90,8 +90,7 @@ export function FeeScheduleTable({
         viewMode === 'caa'
           ? { aircraft_type_id: aircraftTypeId, fee_rule_id: feeRuleId, override_caa_amount: amount }
           : { aircraft_type_id: aircraftTypeId, fee_rule_id: feeRuleId, override_amount: amount };
-      // TODO: Remove fboId when backend is fully global - using 1 for single-FBO system
-      return upsertFeeRuleOverride(1, payload);
+      return upsertFeeRuleOverride(payload);
     },
     onMutate: async (variables) => {
       // Optimistic update logic would go here
@@ -112,8 +111,7 @@ export function FeeScheduleTable({
 
   const deleteOverrideMutation = useMutation({
     mutationFn: (params: { aircraft_type_id: number; fee_rule_id: number }) =>
-      // TODO: Remove fboId when backend is fully global - using 1 for single-FBO system
-      deleteFeeRuleOverride(1, params),
+      deleteFeeRuleOverride(params),
     onMutate: async (variables) => {
       await queryClient.cancelQueries({ queryKey: ['global-fee-schedule'] })
       return { variables }
@@ -130,8 +128,7 @@ export function FeeScheduleTable({
 
   const updateMinFuelMutation = useMutation({
     mutationFn: ({ aircraftTypeId, minFuel }: { aircraftTypeId: number; minFuel: number }) =>
-      // TODO: Remove fboId when backend is fully global - using 1 for single-FBO system
-      updateMinFuelForAircraft(1, aircraftTypeId, { base_min_fuel_gallons_for_waiver: minFuel }),
+      updateMinFuelForAircraft(aircraftTypeId, { base_min_fuel_gallons_for_waiver: minFuel }),
     onMutate: async () => {
       // Optimistically update the UI
       await queryClient.cancelQueries({ queryKey: ["global-fee-schedule"] });

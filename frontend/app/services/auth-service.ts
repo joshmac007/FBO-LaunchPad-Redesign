@@ -22,7 +22,6 @@ export interface LoginResponse {
     roles: string[]
     is_active: boolean
     created_at: string
-    fbo_id: number | null
   }
 }
 
@@ -78,7 +77,6 @@ export interface EnhancedUser {
   created_at: string
   access_token: string
   isLoggedIn: boolean
-  fbo_id: number | null
   // New permission fields
   permissions?: string[]
   effective_permissions?: Record<string, EffectivePermission>
@@ -103,7 +101,6 @@ export async function login(credentials: LoginRequest): Promise<LoginResponse> {
       ...data.user,
       access_token: data.token,
       isLoggedIn: true,
-      fbo_id: data.user.fbo_id || null,
       permissions: [], // Will be loaded separately
       effective_permissions: {},
       permission_summary: {
@@ -337,14 +334,4 @@ export async function refreshUserPermissions(): Promise<boolean> {
   }
 }
 
-// Helper function to get the current user's FBO ID
-export function getCurrentUserFboId(): number {
-  const user = getCurrentUser()
-  if (!user) {
-    throw new Error("User is not logged in")
-  }
-  if (!user.fbo_id) {
-    throw new Error("User is not associated with an FBO")
-  }
-  return user.fbo_id
-}
+

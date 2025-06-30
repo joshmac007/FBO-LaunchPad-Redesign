@@ -55,10 +55,6 @@ import {
   CreateWaiverTierRequest,
 } from "@/app/services/admin-fee-config-service"
 
-interface WaiverTiersTabProps {
-  fboId: number
-}
-
 const createWaiverSchema = z.object({
   fuel_uplift_multiplier: z.string()
     .min(1, "Fuel multiplier is required")
@@ -139,7 +135,7 @@ function SortableWaiverTier({ tier, onDelete, feeRules }: SortableWaiverTierProp
   )
 }
 
-export function WaiverTiersTab({ fboId }: WaiverTiersTabProps) {
+export function WaiverTiersTab() {
   const [showAddForm, setShowAddForm] = useState(false)
   const queryClient = useQueryClient()
 
@@ -153,14 +149,14 @@ export function WaiverTiersTab({ fboId }: WaiverTiersTabProps) {
 
   // Fetch waiver tiers
   const { data: waiverTiers = [], isLoading } = useQuery({
-    queryKey: ['waiver-tiers', fboId],
-    queryFn: () => getWaiverTiers(fboId),
+    queryKey: ['waiver-tiers'],
+    queryFn: () => getWaiverTiers(),
   })
 
   // Fetch fee rules for dropdown
   const { data: feeRules = [] } = useQuery({
-    queryKey: ['fee-rules', fboId],
-    queryFn: () => getFeeRules(fboId),
+    queryKey: ['fee-rules'],
+    queryFn: () => getFeeRules(),
   })
 
   // Sort tiers by priority (highest first)
@@ -170,9 +166,9 @@ export function WaiverTiersTab({ fboId }: WaiverTiersTabProps) {
 
   // Create waiver tier mutation
   const createWaiverMutation = useMutation({
-    mutationFn: (data: CreateWaiverTierRequest) => createWaiverTier(fboId, data),
+    mutationFn: (data: CreateWaiverTierRequest) => createWaiverTier(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['waiver-tiers', fboId] })
+      queryClient.invalidateQueries({ queryKey: ['waiver-tiers'] })
       toast.success("Waiver tier created successfully")
       setShowAddForm(false)
       form.reset()
@@ -185,9 +181,9 @@ export function WaiverTiersTab({ fboId }: WaiverTiersTabProps) {
 
   // Delete waiver tier mutation
   const deleteWaiverMutation = useMutation({
-    mutationFn: (id: number) => deleteWaiverTier(fboId, id),
+    mutationFn: (id: number) => deleteWaiverTier(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['waiver-tiers', fboId] })
+      queryClient.invalidateQueries({ queryKey: ['waiver-tiers'] })
       toast.success("Waiver tier deleted successfully")
     },
     onError: (error) => {
@@ -199,19 +195,23 @@ export function WaiverTiersTab({ fboId }: WaiverTiersTabProps) {
   // Reorder waiver tiers mutation
   const reorderMutation = useMutation({
     mutationFn: (tierUpdates: { tier_id: number; new_priority: number }[]) => 
-      reorderWaiverTiers(fboId, tierUpdates),
+      reorderWaiverTiers(tierUpdates),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['waiver-tiers', fboId] })
-      toast.success("Waiver tier order updated successfully")
+      queryClient.invalidateQueries({ queryKey: ['waiver-tiers'] })
+      toast.success("Waiver tiers reordered successfully")
     },
     onError: (error) => {
-      toast.error("Failed to update waiver tier order")
+      toast.error("Failed to reorder waiver tiers")
       console.error(error)
     },
   })
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -220,28 +220,20 @@ export function WaiverTiersTab({ fboId }: WaiverTiersTabProps) {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
 
-    if (!over || active.id === over.id) {
-      return
+    if (over && active.id !== over.id) {
+      const oldIndex = sortedTiers.findIndex(tier => tier.id.toString() === active.id)
+      const newIndex = sortedTiers.findIndex(tier => tier.id.toString() === over.id)
+
+      const newOrder = arrayMove(sortedTiers, oldIndex, newIndex)
+      
+      // Calculate new priorities based on position
+      const tierUpdates = newOrder.map((tier, index) => ({
+        tier_id: tier.id,
+        new_priority: newOrder.length - index, // Higher index = lower priority
+      }))
+
+      reorderMutation.mutate(tierUpdates)
     }
-
-    const oldIndex = sortedTiers.findIndex(tier => tier.id.toString() === active.id)
-    const newIndex = sortedTiers.findIndex(tier => tier.id.toString() === over.id)
-
-    if (oldIndex === -1 || newIndex === -1) {
-      return
-    }
-
-    // Calculate new priorities based on the reordered array
-    const reorderedTiers = arrayMove(sortedTiers, oldIndex, newIndex)
-    
-    // Create tier updates with new priorities (highest priority first)
-    const tierUpdates = reorderedTiers.map((tier, index) => ({
-      tier_id: tier.id,
-      new_priority: reorderedTiers.length - index, // Reverse index for priority
-    }))
-
-    // Execute the reorder mutation
-    reorderMutation.mutate(tierUpdates)
   }
 
   const handleDeleteTier = (id: number) => {
@@ -249,186 +241,176 @@ export function WaiverTiersTab({ fboId }: WaiverTiersTabProps) {
   }
 
   const onSubmit = (data: CreateWaiverForm) => {
-    // Generate a name based on the multiplier and fees
-    const feeNames = data.fees_waived_codes
-      .map(code => {
-        const rule = feeRules.find(r => r.fee_code === code)
-        return rule ? rule.fee_name : code
-      })
-      .join(' + ')
-    
-    const name = `${data.fuel_uplift_multiplier}x Min Fuel - ${feeNames}`
-    
-    // Calculate tier priority (highest + 1)
-    const maxPriority = Math.max(...waiverTiers.map(t => t.tier_priority), 0)
+    const nextPriority = Math.max(...waiverTiers.map(t => t.tier_priority), 0) + 1
     
     const createData: CreateWaiverTierRequest = {
-      name,
+      name: `Waiver Tier ${nextPriority}`,
       fuel_uplift_multiplier: parseFloat(data.fuel_uplift_multiplier),
       fees_waived_codes: data.fees_waived_codes,
-      tier_priority: maxPriority + 1,
+      tier_priority: nextPriority,
+      is_caa_specific_tier: false,
     }
-    
+
     createWaiverMutation.mutate(createData)
   }
 
+  if (isLoading) {
+    return <div>Loading waiver tiers...</div>
+  }
+
   return (
-    <div className="space-y-6 p-6">
-      <div className="space-y-2">
-        <h3 className="text-lg font-semibold">Manage Waiver Tiers</h3>
-        <p className="text-sm text-muted-foreground">
-          Configure automatic fee waivers based on fuel uplift amounts. Higher priority tiers are applied first.
-        </p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-medium">Waiver Tiers</h3>
+          <p className="text-sm text-muted-foreground">
+            Configure automatic fee waivers based on fuel uplift. Drag to reorder priority.
+          </p>
+        </div>
+        <Button
+          onClick={() => setShowAddForm(!showAddForm)}
+          className="flex items-center gap-2"
+        >
+          <Plus className="h-4 w-4" />
+          Add Waiver Tier
+        </Button>
       </div>
 
-      {/* Active Tiers Section */}
-      <div className="space-y-3">
-        <h4 className="font-medium">Active Tiers (drag to re-order priority)</h4>
-        
-        {isLoading ? (
-          <div className="text-center py-8 text-muted-foreground">Loading waiver tiers...</div>
-        ) : sortedTiers.length > 0 ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext 
-              items={sortedTiers.map(tier => tier.id.toString())}
-              strategy={verticalListSortingStrategy}
-            >
-              {sortedTiers.map(tier => (
-                <SortableWaiverTier
-                  key={tier.id}
-                  tier={tier}
-                  onDelete={handleDeleteTier}
-                  feeRules={feeRules}
-                />
-              ))}
-            </SortableContext>
-          </DndContext>
-        ) : (
-          <div className="text-center py-8 text-muted-foreground">No waiver tiers configured</div>
-        )}
-      </div>
-
-      {/* Add New Tier Section */}
-      <div className="border-t pt-4">
-        {!showAddForm ? (
-          <Button
-            onClick={() => setShowAddForm(true)}
-            variant="outline"
-            className="w-full"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add New Waiver Tier
-          </Button>
-        ) : (
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="fuel_uplift_multiplier"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fuel Multiplier</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          placeholder="1.0"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="fees_waived_codes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fees to Waive</FormLabel>
-                      <Select
-                        onValueChange={(value) => {
-                          if (!field.value.includes(value)) {
-                            field.onChange([...field.value, value])
-                          }
-                        }}
-                      >
+      {showAddForm && (
+        <Card>
+          <CardContent className="p-6">
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="fuel_uplift_multiplier"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Fuel Uplift Multiplier</FormLabel>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select fees to waive" />
-                          </SelectTrigger>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            placeholder="e.g., 1.5"
+                            {...field}
+                          />
                         </FormControl>
-                        <SelectContent>
-                          {feeRules.map((rule) => (
-                            <SelectItem 
-                              key={rule.id} 
-                              value={rule.fee_code}
-                              disabled={field.value.includes(rule.fee_code)}
-                            >
-                              {rule.fee_name} ({rule.fee_code})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      
-                      {field.value.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {field.value.map((code) => {
-                            const rule = feeRules.find(r => r.fee_code === code)
-                            return (
-                              <span
-                                key={code}
-                                className="inline-flex items-center gap-1 px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs"
-                              >
-                                {rule?.fee_name || code}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    field.onChange(field.value.filter(c => c !== code))
-                                  }}
-                                  className="text-muted-foreground hover:text-foreground"
-                                >
-                                  ×
-                                </button>
-                              </span>
-                            )
-                          })}
-                        </div>
-                      )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              <div className="flex gap-2">
-                <Button
-                  type="submit"
-                  disabled={createWaiverMutation.isPending}
-                >
-                  {createWaiverMutation.isPending ? "Adding..." : "Add Tier"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setShowAddForm(false)
-                    form.reset()
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </Form>
-        )}
-      </div>
+                  <FormField
+                    control={form.control}
+                    name="fees_waived_codes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Fees to Waive</FormLabel>
+                        <FormControl>
+                          <Select
+                            value={field.value[0] || ""}
+                            onValueChange={(value) => {
+                              if (value && !field.value.includes(value)) {
+                                field.onChange([...field.value, value])
+                              }
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select fees to waive" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {feeRules.map((rule) => (
+                                <SelectItem key={rule.fee_code} value={rule.fee_code}>
+                                  {rule.fee_name} ({rule.fee_code})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                        <FormMessage />
+                        {field.value.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {field.value.map((code) => {
+                              const rule = feeRules.find(r => r.fee_code === code)
+                              return (
+                                <span
+                                  key={code}
+                                  className="inline-flex items-center gap-1 px-2 py-1 bg-secondary text-secondary-foreground rounded-sm text-xs"
+                                >
+                                  {rule?.fee_name || code}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      field.onChange(field.value.filter(c => c !== code))
+                                    }}
+                                    className="hover:text-destructive"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="submit"
+                    disabled={createWaiverMutation.isPending}
+                  >
+                    {createWaiverMutation.isPending ? "Creating..." : "Create Waiver Tier"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowAddForm(false)
+                      form.reset()
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      )}
+
+      {sortedTiers.length > 0 ? (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={sortedTiers.map(tier => tier.id.toString())}
+            strategy={verticalListSortingStrategy}
+          >
+            {sortedTiers.map((tier) => (
+              <SortableWaiverTier
+                key={tier.id}
+                tier={tier}
+                onDelete={handleDeleteTier}
+                feeRules={feeRules}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+      ) : (
+        <Card>
+          <CardContent className="p-6 text-center">
+            <p className="text-muted-foreground">
+              No waiver tiers configured. Create your first waiver tier to get started.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

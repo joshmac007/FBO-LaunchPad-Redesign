@@ -62,7 +62,6 @@ import {
 } from "@/app/services/admin-fee-config-service"
 
 interface WaiverRuleBuilderProps {
-  fboId: number
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -147,7 +146,7 @@ function SortableWaiverTier({ tier, onDelete, feeRules }: SortableWaiverTierProp
   )
 }
 
-export function WaiverRuleBuilder({ fboId, open, onOpenChange }: WaiverRuleBuilderProps) {
+export function WaiverRuleBuilder({ open, onOpenChange }: WaiverRuleBuilderProps) {
   const [showAddForm, setShowAddForm] = useState(false)
   const queryClient = useQueryClient()
 
@@ -161,15 +160,15 @@ export function WaiverRuleBuilder({ fboId, open, onOpenChange }: WaiverRuleBuild
 
   // Fetch waiver tiers
   const { data: waiverTiers = [], isLoading } = useQuery({
-    queryKey: ['waiver-tiers', fboId],
-    queryFn: () => getWaiverTiers(fboId),
+    queryKey: ['waiver-tiers'],
+    queryFn: () => getWaiverTiers(),
     enabled: open,
   })
 
   // Fetch fee rules for dropdown
   const { data: feeRules = [] } = useQuery({
-    queryKey: ['fee-rules', fboId],
-    queryFn: () => getFeeRules(fboId),
+    queryKey: ['fee-rules'],
+    queryFn: () => getFeeRules(),
     enabled: open,
   })
 
@@ -180,9 +179,9 @@ export function WaiverRuleBuilder({ fboId, open, onOpenChange }: WaiverRuleBuild
 
   // Create waiver tier mutation
   const createWaiverMutation = useMutation({
-    mutationFn: (data: CreateWaiverTierRequest) => createWaiverTier(fboId, data),
+    mutationFn: (data: CreateWaiverTierRequest) => createWaiverTier(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['waiver-tiers', fboId] })
+      queryClient.invalidateQueries({ queryKey: ['waiver-tiers'] })
       toast.success("Waiver tier created successfully")
       setShowAddForm(false)
       form.reset()
@@ -195,9 +194,9 @@ export function WaiverRuleBuilder({ fboId, open, onOpenChange }: WaiverRuleBuild
 
   // Delete waiver tier mutation
   const deleteWaiverMutation = useMutation({
-    mutationFn: (id: number) => deleteWaiverTier(fboId, id),
+    mutationFn: (id: number) => deleteWaiverTier(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['waiver-tiers', fboId] })
+      queryClient.invalidateQueries({ queryKey: ['waiver-tiers'] })
       toast.success("Waiver tier deleted successfully")
     },
     onError: (error) => {
@@ -209,9 +208,9 @@ export function WaiverRuleBuilder({ fboId, open, onOpenChange }: WaiverRuleBuild
   // Reorder waiver tiers mutation
   const reorderMutation = useMutation({
     mutationFn: (tierUpdates: { tier_id: number; new_priority: number }[]) => 
-      reorderWaiverTiers(fboId, tierUpdates),
+      reorderWaiverTiers(tierUpdates),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['waiver-tiers', fboId] })
+      queryClient.invalidateQueries({ queryKey: ['waiver-tiers'] })
       toast.success("Waiver tier order updated successfully")
     },
     onError: (error) => {

@@ -16,16 +16,15 @@ class WaiverStrategy(enum.Enum):
 
 
 class FeeRule(db.Model):
-    """Model representing fee rules that apply to fee categories per FBO location.
-    Includes support for fuel uplift waivers and CAA member overrides."""
+    """Model representing fee rules that apply to fee categories.
+    Now operates in a single-tenant context per database."""
     
     __tablename__ = 'fee_rules'
     __table_args__ = (
-        db.UniqueConstraint('fbo_location_id', 'fee_code', name='uq_fee_rule_fbo_code'),
+        db.UniqueConstraint('fee_code', 'applies_to_classification_id', name='uq_fee_rule_code_classification'),
     )
 
     id = db.Column(db.Integer, primary_key=True)
-    fbo_location_id = db.Column(db.Integer, nullable=False, index=True)
     fee_name = db.Column(db.String(100), nullable=False)
     fee_code = db.Column(db.String(50), nullable=False, index=True)
     applies_to_classification_id = db.Column(db.Integer, db.ForeignKey('aircraft_classifications.id'), nullable=False)
@@ -59,7 +58,6 @@ class FeeRule(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
-            'fbo_location_id': self.fbo_location_id,
             'fee_name': self.fee_name,
             'fee_code': self.fee_code,
             'applies_to_aircraft_classification_id': self.applies_to_classification_id,
@@ -80,4 +78,4 @@ class FeeRule(db.Model):
         }
 
     def __repr__(self):
-        return f'<FeeRule {self.fee_code} - {self.fee_name} (FBO {self.fbo_location_id})>' 
+        return f'<FeeRule {self.fee_code} - {self.fee_name}>' 

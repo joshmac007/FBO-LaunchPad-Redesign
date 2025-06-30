@@ -61,7 +61,6 @@ type FeeRuleFormData = z.infer<typeof feeRuleSchema>
 interface FeeRuleDialogProps {
   isOpen: boolean
   onClose: () => void
-  fboId: number
   onSuccess: () => void
   initialData?: FeeRule | null
   defaultValues?: Partial<FeeRuleFormData>
@@ -71,7 +70,6 @@ interface FeeRuleDialogProps {
 export function FeeRuleDialog({
   isOpen,
   onClose,
-  fboId,
   onSuccess,
   initialData = null,
   defaultValues = {},
@@ -134,7 +132,7 @@ export function FeeRuleDialog({
       if (isEditing && initialData) {
         // Update existing fee rule
         const updateData: UpdateFeeRuleRequest = submitData
-        const response = await fetch(`/api/admin/fbo/${fboId}/fee-rules/${initialData.id}`, {
+        const response = await fetch(`/api/admin/fee-rules/${initialData.id}`, {
           method: 'PUT',
           headers: getAuthHeaders(),
           body: JSON.stringify(updateData),
@@ -146,7 +144,7 @@ export function FeeRuleDialog({
       } else {
         // Create new fee rule
         const createData: CreateFeeRuleRequest = submitData
-        const response = await fetch(`/api/admin/fbo/${fboId}/fee-rules`, {
+        const response = await fetch(`/api/admin/fee-rules`, {
           method: 'POST',
           headers: getAuthHeaders(),
           body: JSON.stringify(createData),

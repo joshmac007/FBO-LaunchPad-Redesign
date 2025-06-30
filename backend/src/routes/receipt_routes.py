@@ -67,9 +67,9 @@ def handle_general_error(e):
     }), 500
 
 
-@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/draft', methods=['POST'])
+@receipt_bp.route('/api/receipts/draft', methods=['POST'])
 @require_permission_v2('create_receipt')
-def create_draft_receipt(fbo_id):
+def create_draft_receipt():
     """
     Create a new draft receipt from a completed fuel order.
     
@@ -95,7 +95,6 @@ def create_draft_receipt(fbo_id):
 
         receipt = receipt_service.create_draft_from_fuel_order(
             fuel_order_id=fuel_order_id,
-            fbo_location_id=fbo_id,
             user_id=user_id if user_id is not None else 0  # Ensure user_id is int, fallback to 0 if None
         )
         response_data = {
@@ -123,9 +122,9 @@ def create_draft_receipt(fbo_id):
             "timestamp": datetime.utcnow().isoformat()
         }), 500
 
-@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/<int:receipt_id>/draft', methods=['PUT'])
+@receipt_bp.route('/api/receipts/<int:receipt_id>/draft', methods=['PUT'])
 @require_permission_v2('update_receipt')
-def update_draft_receipt(fbo_id, receipt_id):
+def update_draft_receipt(receipt_id):
     """
     Update a draft receipt's editable fields.
     
@@ -149,7 +148,6 @@ def update_draft_receipt(fbo_id, receipt_id):
         # Update draft receipt
         receipt = receipt_service.update_draft(
             receipt_id=receipt_id,
-            fbo_location_id=fbo_id,
             update_data=dict(data) if isinstance(data, dict) else {},
             user_id=user_id
         )
@@ -170,9 +168,9 @@ def update_draft_receipt(fbo_id, receipt_id):
             return jsonify({'error': error_msg}), 400
 
 
-@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/<int:receipt_id>/calculate-fees', methods=['POST'])
+@receipt_bp.route('/api/receipts/<int:receipt_id>/calculate-fees', methods=['POST'])
 @require_permission_v2('calculate_receipt_fees')
-def calculate_receipt_fees(fbo_id, receipt_id):
+def calculate_receipt_fees(receipt_id):
     """
     Calculate fees and update a draft receipt with line items and totals.
     
@@ -190,12 +188,11 @@ def calculate_receipt_fees(fbo_id, receipt_id):
         # Calculate fees and update receipt
         receipt = receipt_service.calculate_and_update_draft(
             receipt_id=receipt_id,
-            fbo_location_id=fbo_id,
             additional_services=additional_services
         )
         
         # Fetch receipt with line items for response
-        receipt_with_line_items = receipt_service.get_receipt_by_id(receipt_id, fbo_id)
+        receipt_with_line_items = receipt_service.get_receipt_by_id(receipt_id)
         if not receipt_with_line_items:
             return jsonify({'error': 'Receipt not found'}), 404
 
@@ -222,9 +219,9 @@ def calculate_receipt_fees(fbo_id, receipt_id):
             return jsonify({'error': error_msg}), 400
 
 
-@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/<int:receipt_id>/generate', methods=['POST'])
+@receipt_bp.route('/api/receipts/<int:receipt_id>/generate', methods=['POST'])
 @require_permission_v2('generate_receipt')
-def generate_receipt(fbo_id, receipt_id):
+def generate_receipt(receipt_id):
     """
     Generate (finalize) a receipt, assigning a receipt number and changing status.
     
@@ -237,8 +234,7 @@ def generate_receipt(fbo_id, receipt_id):
     try:
         # Generate the receipt
         receipt = receipt_service.generate_receipt(
-            receipt_id=receipt_id,
-            fbo_location_id=fbo_id
+            receipt_id=receipt_id
         )
         
         # Serialize response
@@ -259,9 +255,9 @@ def generate_receipt(fbo_id, receipt_id):
             return jsonify({'error': error_msg}), 400
 
 
-@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/<int:receipt_id>/mark-paid', methods=['POST'])
+@receipt_bp.route('/api/receipts/<int:receipt_id>/mark-paid', methods=['POST'])
 @require_permission_v2('mark_receipt_paid')
-def mark_receipt_paid(fbo_id, receipt_id):
+def mark_receipt_paid(receipt_id):
     """
     Mark a generated receipt as paid.
     
@@ -272,8 +268,7 @@ def mark_receipt_paid(fbo_id, receipt_id):
     """
     try:
         receipt = receipt_service.mark_as_paid(
-            receipt_id=receipt_id,
-            fbo_location_id=fbo_id
+            receipt_id=receipt_id
         )
         
         response_data = {
@@ -291,9 +286,9 @@ def mark_receipt_paid(fbo_id, receipt_id):
             return jsonify({'error': error_msg}), 400
 
 
-@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/<int:receipt_id>/void', methods=['POST'])
+@receipt_bp.route('/api/receipts/<int:receipt_id>/void', methods=['POST'])
 @require_permission_v2('void_receipt')
-def void_receipt(fbo_id, receipt_id):
+def void_receipt(receipt_id):
     """
     Void a generated or paid receipt.
     
@@ -335,11 +330,11 @@ def void_receipt(fbo_id, receipt_id):
             return jsonify({'error': error_msg}), 400
 
 
-@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts', methods=['GET'])
+@receipt_bp.route('/api/receipts', methods=['GET'])
 @require_permission_v2('view_receipts')
-def list_receipts(fbo_id):
+def list_receipts():
     """
-    Get a paginated list of receipts for the FBO with optional filtering.
+    Get a paginated list of receipts with optional filtering.
     
     Query Parameters:
         status (str, optional): Filter by receipt status
@@ -365,7 +360,6 @@ def list_receipts(fbo_id):
         page = query_params.get('page', 1)
         per_page = query_params.get('per_page', 50)
         result = receipt_service.get_receipts(
-            fbo_location_id=fbo_id,
             filters=filters,
             page=page,
             per_page=per_page
@@ -380,9 +374,9 @@ def list_receipts(fbo_id):
         }), 400
 
 
-@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/<int:receipt_id>', methods=['GET'])
+@receipt_bp.route('/api/receipts/<int:receipt_id>', methods=['GET'])
 @require_permission_v2('view_receipts')
-def get_receipt_by_id(fbo_id, receipt_id):
+def get_receipt_by_id(receipt_id):
     """
     Get a single receipt by ID with line items.
     
@@ -391,10 +385,10 @@ def get_receipt_by_id(fbo_id, receipt_id):
         404: Receipt not found
     """
     try:
-        receipt = receipt_service.get_receipt_by_id(receipt_id, fbo_id)
+        receipt = receipt_service.get_receipt_by_id(receipt_id)
         
         if not receipt:
-            return jsonify({'error': f'Receipt {receipt_id} not found for FBO {fbo_id}'}), 404
+            return jsonify({'error': f'Receipt {receipt_id} not found'}), 404
         
         # Serialize receipt with line items
         receipt_dict = receipt.to_dict()
@@ -408,9 +402,9 @@ def get_receipt_by_id(fbo_id, receipt_id):
         return jsonify({'error': str(e)}), 400
 
 
-@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/<int:receipt_id>/line-items/<int:line_item_id>/toggle-waiver', methods=['POST'])
+@receipt_bp.route('/api/receipts/<int:receipt_id>/line-items/<int:line_item_id>/toggle-waiver', methods=['POST'])
 @require_permission_v2('update_receipt')
-def toggle_line_item_waiver(fbo_id, receipt_id, line_item_id):
+def toggle_line_item_waiver(receipt_id, line_item_id):
     """
     Toggle the waiver status of a fee line item manually.
     CSRs can manually waive or un-waive fees marked as potentially waivable.
@@ -429,14 +423,13 @@ def toggle_line_item_waiver(fbo_id, receipt_id, line_item_id):
         receipt = receipt_service.toggle_line_item_waiver(
             receipt_id=receipt_id,
             line_item_id=line_item_id,
-            fbo_location_id=fbo_id,
             user_id=user_id
         )
         
         # Fetch updated receipt with line items for response
-        updated_receipt = receipt_service.get_receipt_by_id(receipt_id, fbo_id)
+        updated_receipt = receipt_service.get_receipt_by_id(receipt_id)
         if not updated_receipt:
-            return jsonify({'error': f'Receipt {receipt_id} not found for FBO {fbo_id}'}), 404
+            return jsonify({'error': f'Receipt {receipt_id} not found'}), 404
         receipt_dict = updated_receipt.to_dict()
         # Ensure line_items is present and iterable
         line_items = getattr(updated_receipt, 'line_items', []) or []
@@ -462,9 +455,9 @@ def toggle_line_item_waiver(fbo_id, receipt_id, line_item_id):
             return jsonify({'error': error_msg}), 400
 
 
-@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/<int:receipt_id>/pdf', methods=['GET'])
+@receipt_bp.route('/api/receipts/<int:receipt_id>/pdf', methods=['GET'])
 @require_permission_v2('view_receipts')
-def download_receipt_pdf(fbo_id, receipt_id):
+def download_receipt_pdf(receipt_id):
     """
     Generate and download a PDF of the receipt.
     
@@ -478,7 +471,7 @@ def download_receipt_pdf(fbo_id, receipt_id):
         import io
         
         # Get receipt data
-        receipt = receipt_service.get_receipt_by_id(receipt_id, fbo_id)
+        receipt = receipt_service.get_receipt_by_id(receipt_id)
         if not receipt:
             return jsonify({'error': 'Receipt not found'}), 404
         
@@ -505,8 +498,8 @@ def download_receipt_pdf(fbo_id, receipt_id):
         return jsonify({'error': 'Failed to generate PDF'}), 500
 
 
-@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/health', methods=['GET'])
-def receipt_health_check(fbo_id):
+@receipt_bp.route('/api/receipts/health', methods=['GET'])
+def receipt_health_check():
     """
     Health check endpoint for receipt service.
     
@@ -516,14 +509,13 @@ def receipt_health_check(fbo_id):
     return jsonify({
         'status': 'healthy',
         'service': 'receipt_service',
-        'fbo_id': fbo_id,
         'timestamp': datetime.utcnow().isoformat()
     }), 200
 
 
-@receipt_bp.route('/api/fbo/<int:fbo_id>/receipts/available-services', methods=['GET'])
+@receipt_bp.route('/api/receipts/available-services', methods=['GET'])
 @require_permission_v2('view_receipts')
-def get_available_services(fbo_id):
+def get_available_services():
     """
     Get available additional services (fee rules) for receipt line items.
     
@@ -534,7 +526,7 @@ def get_available_services(fbo_id):
         500: Server error
     """
     try:
-        fee_rules = AdminFeeConfigService.get_fee_rules(fbo_id)
+        fee_rules = AdminFeeConfigService.get_fee_rules()
         
         # Transform fee rules into available services format
         available_services = [
@@ -558,5 +550,5 @@ def get_available_services(fbo_id):
         }), 200
         
     except Exception as e:
-        current_app.logger.error(f"Error fetching available services for FBO {fbo_id}: {str(e)}")
+        current_app.logger.error(f"Error fetching available services: {str(e)}")
         return jsonify({'error': 'Failed to fetch available services'}), 500 

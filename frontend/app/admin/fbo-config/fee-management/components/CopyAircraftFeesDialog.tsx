@@ -33,7 +33,6 @@ const copyFeesSchema = z.object({
 type CopyFeesForm = z.infer<typeof copyFeesSchema>
 
 interface CopyAircraftFeesDialogProps {
-  fboId: number
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess: (aircraftConfig: {
@@ -49,7 +48,6 @@ interface CopyAircraftFeesDialogProps {
 }
 
 export function CopyAircraftFeesDialog({
-  fboId,
   open,
   onOpenChange,
   onSuccess,
@@ -63,8 +61,8 @@ export function CopyAircraftFeesDialog({
 
   // Fetch aircraft configurations
   const { data: aircraftConfigs = [], isLoading } = useQuery({
-    queryKey: ['aircraft-configurations', fboId],
-    queryFn: () => getAircraftConfigurations(fboId),
+    queryKey: ['aircraft-configurations'],
+    queryFn: () => getAircraftConfigurations(),
     enabled: open, // Only fetch when dialog is open
   })
 

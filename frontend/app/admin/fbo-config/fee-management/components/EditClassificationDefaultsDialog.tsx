@@ -97,7 +97,7 @@ export function EditClassificationDefaultsDialog({
               ? { has_caa_override: true, caa_override_amount: amountNum }
               : { amount: amountNum };
           
-          return updateFeeRule(1, ruleIdNum, payload)
+          return updateFeeRule(ruleIdNum, payload)
         } else {
           // Create new classification-specific rule based on template
           const payload = {
@@ -118,7 +118,7 @@ export function EditClassificationDefaultsDialog({
             is_primary_fee: templateRule.is_primary_fee,
           }
           
-          return createFeeRule(1, payload)
+          return createFeeRule(payload)
         }
       })
       

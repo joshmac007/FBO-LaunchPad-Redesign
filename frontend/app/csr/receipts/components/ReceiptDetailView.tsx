@@ -63,11 +63,10 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
       setIsDownloading(true)
       
       // Use the standard API configuration
-      const { API_BASE_URL, getAuthHeaders, getCurrentUserFboId } = await import("@/app/services/api-config")
-      const fboId = getCurrentUserFboId()
+      const { API_BASE_URL, getAuthHeaders } = await import("@/app/services/api-config")
       
       // Call the PDF generation endpoint
-      const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receipt.id}/pdf`, {
+      const response = await fetch(`${API_BASE_URL}/receipts/${receipt.id}/pdf`, {
         method: 'GET',
         headers: getAuthHeaders(),
       })

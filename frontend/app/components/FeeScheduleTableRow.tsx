@@ -27,7 +27,6 @@ interface AircraftRowData {
 interface FeeScheduleTableRowProps {
   row: AircraftRowData
   feeColumns: Array<{ id: string; header: string }>
-  fboId: number
   viewMode: 'standard' | 'caa'
   onUpdateMinFuel: (aircraftTypeId: number, minFuel: number | null) => void
   onUpdateFee: (aircraftTypeId: number, feeRuleId: number, amount: number, isCaa?: boolean) => void
@@ -41,7 +40,6 @@ interface FeeScheduleTableRowProps {
 const FeeScheduleTableRow = memo(({
   row,
   feeColumns,
-  fboId,
   viewMode,
   onUpdateMinFuel,
   onUpdateFee,
@@ -57,9 +55,8 @@ const FeeScheduleTableRow = memo(({
       </TableCell>
       <TableCell>
         <EditableMinFuelCell
-          aircraftTypeId={row.aircraft_type_id}
-          initialValue={row.min_fuel_gallons}
-          onSave={onUpdateMinFuel}
+          value={row.min_fuel_gallons}
+          onSave={(newValue) => onUpdateMinFuel(row.aircraft_type_id, newValue)}
         />
       </TableCell>
       {feeColumns.map((column) => {
@@ -71,14 +68,10 @@ const FeeScheduleTableRow = memo(({
         return (
           <TableCell key={column.id}>
             <EditableFeeCell
-              aircraftTypeId={row.aircraft_type_id}
-              feeRuleId={feeData.fee_rule_id}
-              inheritedValue={viewMode === 'caa' ? feeData.caa_inherited_value || feeData.inherited_value : feeData.inherited_value}
-              overrideValue={viewMode === 'caa' ? feeData.caa_override_value : feeData.override_value}
+              value={viewMode === 'caa' ? feeData.caa_override_value || feeData.caa_inherited_value || feeData.inherited_value : feeData.override_value || feeData.inherited_value}
               isOverride={viewMode === 'caa' ? feeData.is_caa_override : feeData.is_override}
-              viewMode={viewMode}
               onSave={(amount) => onUpdateFee(row.aircraft_type_id, feeData.fee_rule_id, amount, viewMode === 'caa')}
-              onDelete={() => onDeleteOverride(row.aircraft_type_id, feeData.fee_rule_id, viewMode === 'caa')}
+              onRevert={() => onDeleteOverride(row.aircraft_type_id, feeData.fee_rule_id, viewMode === 'caa')}
             />
           </TableCell>
         )
@@ -98,8 +91,7 @@ const FeeScheduleTableRow = memo(({
     prevRow.aircraft_classification_id !== nextRow.aircraft_classification_id ||
     prevRow.aircraft_classification_name !== nextRow.aircraft_classification_name ||
     prevRow.min_fuel_gallons !== nextRow.min_fuel_gallons ||
-    prevProps.viewMode !== nextProps.viewMode ||
-    prevProps.fboId !== nextProps.fboId
+    prevProps.viewMode !== nextProps.viewMode
   ) {
     return false // Re-render
   }

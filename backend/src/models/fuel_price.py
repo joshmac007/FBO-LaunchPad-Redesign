@@ -29,7 +29,6 @@ class FuelPrice(db.Model):
     id = db.Column(db.Integer, primary_key=True)
 
     # Core Fields
-    fbo_location_id = db.Column(db.Integer, nullable=False, index=True)
     fuel_type_id = db.Column(db.Integer, db.ForeignKey('fuel_types.id'), nullable=False, index=True)
     price = db.Column(db.Numeric(10, 4), nullable=False)
     currency = db.Column(db.String(3), nullable=False, default='USD')
@@ -44,15 +43,14 @@ class FuelPrice(db.Model):
 
     # Constraints
     __table_args__ = (
-        UniqueConstraint('fbo_location_id', 'fuel_type_id', 'effective_date', 
-                        name='uq_fuel_price_fbo_fuel_date'),
+        UniqueConstraint('fuel_type_id', 'effective_date', 
+                        name='_fuel_price_uc'),
     )
 
     def to_dict(self):
         """Convert fuel price object to dictionary for JSON serialization."""
         return {
             'id': self.id,
-            'fbo_location_id': self.fbo_location_id,
             'fuel_type_id': self.fuel_type_id,
             'fuel_type_name': self.fuel_type.name if self.fuel_type else None,
             'fuel_type_code': self.fuel_type.code if self.fuel_type else None,
@@ -65,4 +63,4 @@ class FuelPrice(db.Model):
 
     def __repr__(self):
         fuel_type_name = self.fuel_type.name if self.fuel_type else f'ID:{self.fuel_type_id}'
-        return f'<FuelPrice {fuel_type_name} @ {self.price} for FBO {self.fbo_location_id}>'
+        return f'<FuelPrice {fuel_type_name} @ {self.price}>'

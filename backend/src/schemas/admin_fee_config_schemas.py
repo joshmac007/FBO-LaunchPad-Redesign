@@ -55,7 +55,6 @@ class UpdateAircraftClassificationSchema(Schema):
 class AircraftTypeMappingSchema(Schema):
     """Schema for aircraft type to classification mapping (deprecated)."""
     id = fields.Integer(dump_only=True)
-    fbo_location_id = fields.Integer(dump_only=True)
     aircraft_type_id = fields.Integer(required=True)
     aircraft_type_name = fields.String(dump_only=True)
     aircraft_classification_id = fields.Integer(required=True)
@@ -86,7 +85,6 @@ class CSVUploadResultSchema(Schema):
 class FeeRuleSchema(Schema):
     """Schema for fee rule."""
     id = fields.Integer(dump_only=True)
-    fbo_location_id = fields.Integer(dump_only=True)
     fee_name = fields.String(required=True, validate=validate.Length(min=1, max=100))
     fee_code = fields.String(required=True, validate=validate.Length(min=1, max=50))
     applies_to_aircraft_classification_id = fields.Integer(required=True)
@@ -239,7 +237,6 @@ class UpdateFeeRuleSchema(Schema):
 class WaiverTierSchema(Schema):
     """Schema for waiver tier."""
     id = fields.Integer(dump_only=True)
-    fbo_location_id = fields.Integer(dump_only=True)
     name = fields.String(required=True, validate=validate.Length(min=1, max=100))
     fuel_uplift_multiplier = fields.Decimal(
         required=True,
@@ -292,10 +289,9 @@ class CreateAircraftFeeSetupSchema(Schema):
     initial_ramp_fee_amount = fields.Float(allow_none=True, validate=validate.Range(min=0))
 
 
-class FBOAircraftTypeConfigSchema(Schema):
-    """Schema for FBO-specific aircraft type configuration."""
+class AircraftTypeConfigSchema(Schema):
+    """Schema for aircraft type configuration."""
     id = fields.Integer(dump_only=True)
-    fbo_location_id = fields.Integer(required=True)
     aircraft_type_id = fields.Integer(required=True)
     aircraft_type_name = fields.String(dump_only=True)
     base_min_fuel_gallons_for_waiver = fields.Decimal(
@@ -310,7 +306,6 @@ class FBOAircraftTypeConfigSchema(Schema):
 class FeeRuleOverrideSchema(Schema):
     """Schema for fee rule override."""
     id = fields.Integer(dump_only=True)
-    fbo_location_id = fields.Integer(required=True)
     aircraft_type_id = fields.Integer(required=True)
     fee_rule_id = fields.Integer(required=True)
     override_amount = fields.Decimal(

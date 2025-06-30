@@ -24,8 +24,6 @@ export function AircraftMappingsTable({ categoryId }: AircraftMappingsTableProps
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  // TODO: Get actual FBO ID from user context
-  const fboId = 1;
 
   useEffect(() => {
     loadMappings();
@@ -35,7 +33,7 @@ export function AircraftMappingsTable({ categoryId }: AircraftMappingsTableProps
     try {
       setLoading(true);
       setError(null);
-      const data = await getAircraftMappings(fboId, categoryId);
+      const data = await getAircraftMappings(categoryId);
       setMappings(data);
     } catch (error: any) {
       const errorMessage = `Failed to load aircraft mappings: ${error.message}`;
@@ -52,7 +50,7 @@ export function AircraftMappingsTable({ categoryId }: AircraftMappingsTableProps
 
     try {
       setUploading(true);
-      const result = await uploadAircraftMappings(fboId, file);
+      const result = await uploadAircraftMappings(file);
       toast.success(`Successfully processed: ${result.created} created, ${result.updated} updated`);
       loadMappings(); // Reload data after upload
     } catch (error: any) {

@@ -1,6 +1,6 @@
 // Admin Fee Configuration Service
 // Handles all API interactions for fee configuration management
-// Aircraft Classifications are global; Fee Rules are FBO-specific
+// All data is now global in single-tenant architecture
 
 import { API_BASE_URL, handleApiResponse, getAuthHeaders } from "./api-config"
 
@@ -12,7 +12,6 @@ export interface AircraftClassification {
 
 export interface FeeRule {
   id: number;
-  fbo_location_id: number;
   fee_name: string;
   fee_code: string;
   applies_to_aircraft_classification_id: number;
@@ -39,7 +38,6 @@ export interface AircraftMapping {
   aircraft_type_name: string;
   aircraft_classification_id: number;
   aircraft_classification_name: string;
-  fbo_location_id: number;
   created_at: string;
   updated_at: string;
 }
@@ -51,7 +49,6 @@ export interface WaiverTier {
   fees_waived_codes: string[];
   tier_priority: number;
   is_caa_specific_tier: boolean;
-  fbo_location_id: number;
   created_at: string;
   updated_at: string;
 }
@@ -59,7 +56,6 @@ export interface WaiverTier {
 // New interfaces for Phase 2 - Consolidated Fee Schedule
 export interface FeeRuleOverride {
   id: number;
-  fbo_location_id: number;
   aircraft_type_id: number;
   fee_rule_id: number;
   override_amount?: number;
@@ -68,9 +64,8 @@ export interface FeeRuleOverride {
   updated_at: string;
 }
 
-export interface FBOAircraftTypeConfig {
+export interface AircraftTypeConfig {
   id: number;
-  fbo_location_id: number;
   aircraft_type_id: number;
   aircraft_type_name: string;
   base_min_fuel_gallons_for_waiver: string | number;
@@ -84,7 +79,7 @@ export interface ConsolidatedFeeSchedule {
   rules: FeeRule[];
   mappings: AircraftMapping[];
   overrides: FeeRuleOverride[];
-  fbo_aircraft_config: FBOAircraftTypeConfig[];
+  aircraft_config: AircraftTypeConfig[];
 }
 
 // New global types for the simplified architecture
@@ -108,7 +103,6 @@ export interface GlobalAircraftType {
 
 export interface GlobalFeeRule {
   id: number;
-  fbo_location_id: number;
   fee_name: string;
   fee_code: string;
   applies_to_classification_id: number;
@@ -130,7 +124,6 @@ export interface GlobalFeeRule {
 
 export interface GlobalFeeRuleOverride {
   id: number;
-  fbo_location_id: number;
   aircraft_type_id: number;
   fee_rule_id: number;
   override_amount?: number;
@@ -278,22 +271,21 @@ export interface UpdateAircraftClassificationMappingResponse {
   updated_at: string;
 }
 
-// Using shared API configuration from api-config.ts
+// ========================================
+// API Functions
+// ========================================
 
-// Aircraft Classifications Service (Global)
+// Aircraft Classifications (Global)
 export const getAircraftClassifications = async (): Promise<AircraftClassification[]> => {
   const response = await fetch(`${API_BASE_URL}/admin/aircraft-classifications`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
-  
-  const result = await handleApiResponse<{ aircraft_classifications: AircraftClassification[] }>(response);
-  return result.aircraft_classifications;
+
+  return handleApiResponse<AircraftClassification[]>(response);
 };
 
-// @deprecated - Use getAircraftClassifications() instead
-export const getFeeCategories = async (fboId: number): Promise<AircraftClassification[]> => {
-  console.warn('getFeeCategories is deprecated. Use getAircraftClassifications() instead.');
+export const getFeeCategories = async (): Promise<AircraftClassification[]> => {
   return getAircraftClassifications();
 };
 
@@ -302,9 +294,8 @@ export const getAircraftClassificationById = async (classificationId: number): P
     method: 'GET',
     headers: getAuthHeaders(),
   });
-  
-  const result = await handleApiResponse<{ aircraft_classification: AircraftClassification }>(response);
-  return result.aircraft_classification;
+
+  return handleApiResponse<AircraftClassification>(response);
 };
 
 export const createAircraftClassification = async (data: CreateAircraftClassificationRequest): Promise<AircraftClassification> => {
@@ -313,7 +304,7 @@ export const createAircraftClassification = async (data: CreateAircraftClassific
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
-  
+
   return handleApiResponse<AircraftClassification>(response);
 };
 
@@ -323,7 +314,7 @@ export const updateAircraftClassification = async (classificationId: number, dat
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
-  
+
   return handleApiResponse<AircraftClassification>(response);
 };
 
@@ -332,8 +323,8 @@ export const deleteAircraftClassification = async (classificationId: number): Pr
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
-  
-  return handleApiResponse<void>(response);
+
+  await handleApiResponse<void>(response);
 };
 
 export const getGeneralAircraftClassification = async (): Promise<AircraftClassification> => {
@@ -341,22 +332,22 @@ export const getGeneralAircraftClassification = async (): Promise<AircraftClassi
     method: 'GET',
     headers: getAuthHeaders(),
   });
-  const result = await handleApiResponse<{ aircraft_classification: AircraftClassification }>(response);
-  return result.aircraft_classification;
+
+  return handleApiResponse<AircraftClassification>(response);
 };
 
-// Get all aircraft types (for autocomplete in Add Aircraft dialog)
-export const getAircraftTypes = async (fboId: number): Promise<{ id: number; name: string }[]> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/aircraft-types`, {
+// Aircraft Types
+export const getAircraftTypes = async (): Promise<{ id: number; name: string }[]> => {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-types`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
-  const result = await handleApiResponse<{ aircraft_types: any[] }>(response);
-  return result.aircraft_types.map(type => ({ id: type.id, name: type.name }));
+
+  const data = await handleApiResponse<{ aircraft_types: { id: number; name: string }[] }>(response);
+  return data.aircraft_types;
 };
 
-// Get aircraft configurations for copying fees
-export const getAircraftConfigurations = async (fboId: number): Promise<{
+export const getAircraftConfigurations = async (): Promise<{
   id: number;
   aircraft_type_name: string;
   aircraft_classification_id: number;
@@ -369,328 +360,307 @@ export const getAircraftConfigurations = async (fboId: number): Promise<{
     override_caa_amount?: number;
   }>;
 }[]> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/aircraft-configurations`, {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-configurations`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
-  const result = await handleApiResponse<{ aircraft_configurations: any[] }>(response);
-  return result.aircraft_configurations;
+
+  const data = await handleApiResponse<{
+    aircraft_configurations: {
+      id: number;
+      aircraft_type_name: string;
+      aircraft_classification_id: number;
+      aircraft_classification_name: string;
+      min_fuel_gallons: number;
+      fee_overrides: Array<{
+        fee_rule_id: number;
+        fee_name: string;
+        override_amount?: number;
+        override_caa_amount?: number;
+      }>;
+    }[]
+  }>(response);
+
+  return data.aircraft_configurations;
 };
 
-// Fee Rules Service
-export const getFeeRules = async (fboId: number, categoryId?: number): Promise<FeeRule[]> => {
-  const params = new URLSearchParams();
-  if (categoryId !== undefined) {
-    params.append('applies_to_aircraft_classification_id', categoryId.toString());
+// Fee Rules (Global)
+export const getFeeRules = async (categoryId?: number): Promise<FeeRule[]> => {
+  let url = `${API_BASE_URL}/admin/fee-rules`;
+  if (categoryId) {
+    url += `?category_id=${categoryId}`;
   }
-  
-  const queryString = params.toString();
-  const url = `${API_BASE_URL}/admin/fbo/${fboId}/fee-rules${queryString ? `?${queryString}` : ''}`;
-  
+
   const response = await fetch(url, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
-  
-  const result = await handleApiResponse<{ fee_rules: FeeRule[] }>(response);
-  return result.fee_rules;
+
+  const data = await handleApiResponse<{ fee_rules: FeeRule[] }>(response);
+  return data.fee_rules;
 };
 
-export const createFeeRule = async (fboId: number, data: CreateFeeRuleRequest): Promise<FeeRule> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-rules`, {
+export const createFeeRule = async (data: CreateFeeRuleRequest): Promise<FeeRule> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fee-rules`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
-  
+
   return handleApiResponse<FeeRule>(response);
 };
 
-export const updateFeeRule = async (fboId: number, ruleId: number, data: UpdateFeeRuleRequest): Promise<FeeRule> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-rules/${ruleId}`, {
+export const updateFeeRule = async (ruleId: number, data: UpdateFeeRuleRequest): Promise<FeeRule> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fee-rules/${ruleId}`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
-  
+
   return handleApiResponse<FeeRule>(response);
 };
 
-export const deleteFeeRule = async (fboId: number, ruleId: number): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-rules/${ruleId}`, {
+export const deleteFeeRule = async (ruleId: number): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fee-rules/${ruleId}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
-  
-  return handleApiResponse<void>(response);
+
+  await handleApiResponse<void>(response);
 };
 
-// Aircraft Type to Fee Category Mapping Service
-// @deprecated - Aircraft mapping table has been removed. Use getGlobalFeeSchedule() instead.
-export const getAircraftMappings = async (fboId: number, categoryId?: number): Promise<AircraftMapping[]> => {
-  console.warn('getAircraftMappings is deprecated. The aircraft mapping table has been removed. Use getGlobalFeeSchedule() instead.');
-  const params = new URLSearchParams();
-  if (categoryId !== undefined) {
-    params.append('aircraft_classification_id', categoryId.toString());
+// Aircraft Mappings (deprecated but kept for compatibility)
+export const getAircraftMappings = async (categoryId?: number): Promise<AircraftMapping[]> => {
+  let url = `${API_BASE_URL}/admin/aircraft-mappings`;
+  if (categoryId) {
+    url += `?category_id=${categoryId}`;
   }
-  
-  const queryString = params.toString();
-  const url = `${API_BASE_URL}/admin/fbo/${fboId}/aircraft-type-mappings${queryString ? `?${queryString}` : ''}`;
-  
+
   const response = await fetch(url, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
-  
-  return handleApiResponse<AircraftMapping[]>(response);
+
+  const data = await handleApiResponse<{ aircraft_mappings: AircraftMapping[] }>(response);
+  return data.aircraft_mappings;
 };
 
-// @deprecated - Aircraft mapping uploads are no longer supported. Aircraft types are now directly assigned to classifications.
-export const uploadAircraftMappings = async (fboId: number, csvFile: File): Promise<{ created: number; updated: number }> => {
-  console.warn('uploadAircraftMappings is deprecated. Aircraft mapping table has been removed.');
+export const uploadAircraftMappings = async (csvFile: File): Promise<{ created: number; updated: number }> => {
   const formData = new FormData();
-  formData.append('csv_file', csvFile);
-  
-  const authHeaders = getAuthHeaders();
-  const headers: Record<string, string> = {};
-  if (authHeaders['Authorization']) {
-    headers['Authorization'] = authHeaders['Authorization'];
-  }
-  
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/aircraft-mappings/upload`, {
+  formData.append('file', csvFile);
+
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-mappings/upload`, {
     method: 'POST',
-    headers,
+    headers: {
+      ...getAuthHeaders(),
+      // Don't set Content-Type for FormData, let browser set it with boundary
+    },
     body: formData,
   });
-  
+
   return handleApiResponse<{ created: number; updated: number }>(response);
 };
 
-// @deprecated - Aircraft classification mappings are no longer used. Aircraft types have direct classification_id relationships.
-export const deleteAircraftMapping = async (fboId: number, mappingId: number): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/aircraft-type-mappings/${mappingId}`, {
+export const deleteAircraftMapping = async (mappingId: number): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-mappings/${mappingId}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
-  return handleApiResponse(response);
-}
+
+  await handleApiResponse<void>(response);
+};
 
 export const updateAircraftTypeClassification = async (
   aircraftTypeId: number,
   classificationId: number
 ): Promise<UpdateAircraftClassificationMappingResponse> => {
-  const response = await fetch(
-    `${API_BASE_URL}/admin/aircraft-types/${aircraftTypeId}/classification`,
-    {
-      method: "PUT",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ classification_id: classificationId }),
-    }
-  );
-  return handleApiResponse(response);
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-types/${aircraftTypeId}/classification`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({
+      classification_id: classificationId,
+    }),
+  });
+
+  return handleApiResponse<UpdateAircraftClassificationMappingResponse>(response);
 };
 
-/**
- * @deprecated - Use updateAircraftTypeClassification instead. This function uses a legacy route.
- */
 export const updateAircraftClassificationMapping = async (
-  fboId: number, 
   aircraftTypeId: number, 
   data: UpdateAircraftClassificationMappingRequest
 ): Promise<UpdateAircraftClassificationMappingResponse> => {
-  console.warn('updateAircraftClassificationMapping is deprecated. Use updateAircraftTypeClassification instead.');
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/aircraft-classification-mappings/by-type/${aircraftTypeId}`, {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-types/${aircraftTypeId}/classification`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
-  
-  // The legacy endpoint returns the object nested under a 'mapping' key
-  const result = await handleApiResponse<{ mapping: UpdateAircraftClassificationMappingResponse }>(response);
-  return result.mapping;
+
+  return handleApiResponse<UpdateAircraftClassificationMappingResponse>(response);
 };
 
-// Waiver Tiers Service
-export const getWaiverTiers = async (fboId: number): Promise<WaiverTier[]> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/waiver-tiers`, {
+// Waiver Tiers
+export const getWaiverTiers = async (): Promise<WaiverTier[]> => {
+  const response = await fetch(`${API_BASE_URL}/admin/waiver-tiers`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
-  
-  const result = await handleApiResponse<{ waiver_tiers: WaiverTier[] }>(response);
-  return result.waiver_tiers;
+
+  const data = await handleApiResponse<{ waiver_tiers: WaiverTier[] }>(response);
+  return data.waiver_tiers;
 };
 
-export const createWaiverTier = async (fboId: number, data: CreateWaiverTierRequest): Promise<WaiverTier> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/waiver-tiers`, {
+export const createWaiverTier = async (data: CreateWaiverTierRequest): Promise<WaiverTier> => {
+  const response = await fetch(`${API_BASE_URL}/admin/waiver-tiers`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
-  
+
   return handleApiResponse<WaiverTier>(response);
 };
 
-export const updateWaiverTier = async (fboId: number, tierId: number, data: UpdateWaiverTierRequest): Promise<WaiverTier> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/waiver-tiers/${tierId}`, {
+export const updateWaiverTier = async (tierId: number, data: UpdateWaiverTierRequest): Promise<WaiverTier> => {
+  const response = await fetch(`${API_BASE_URL}/admin/waiver-tiers/${tierId}`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
-  
+
   return handleApiResponse<WaiverTier>(response);
 };
 
-export const deleteWaiverTier = async (fboId: number, tierId: number): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/waiver-tiers/${tierId}`, {
+export const deleteWaiverTier = async (tierId: number): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/admin/waiver-tiers/${tierId}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
-  
-  return handleApiResponse<void>(response);
+
+  await handleApiResponse<void>(response);
 };
 
-export const reorderWaiverTiers = async (fboId: number, tierUpdates: { tier_id: number; new_priority: number }[]): Promise<any> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/waiver-tiers/reorder`, {
+export const reorderWaiverTiers = async (tierUpdates: { tier_id: number; new_priority: number }[]): Promise<any> => {
+  const response = await fetch(`${API_BASE_URL}/admin/waiver-tiers/reorder`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify({ tier_updates: tierUpdates }),
   });
-  return handleApiResponse(response);
+
+  return handleApiResponse<any>(response);
 };
 
-// @deprecated - Use getGlobalFeeSchedule() instead. The consolidated endpoint is being phased out in favor of the global architecture.
-export const getConsolidatedFeeSchedule = async (fboId: number): Promise<ConsolidatedFeeSchedule> => {
-  console.warn('getConsolidatedFeeSchedule is deprecated. Use getGlobalFeeSchedule() instead for the new global architecture.');
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-schedule/consolidated`, {
+// Fee Schedules
+export const getConsolidatedFeeSchedule = async (): Promise<ConsolidatedFeeSchedule> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fee-schedule/consolidated`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
-  
+
   return handleApiResponse<ConsolidatedFeeSchedule>(response);
 };
 
-// New global fee schedule function (no FBO scope needed)
 export const getGlobalFeeSchedule = async (): Promise<GlobalFeeSchedule> => {
   const response = await fetch(`${API_BASE_URL}/admin/fee-schedule/global`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
-  
+
   return handleApiResponse<GlobalFeeSchedule>(response);
 };
 
-export const upsertFeeRuleOverride = async (fboId: number, data: UpsertFeeRuleOverrideRequest): Promise<FeeRuleOverride> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-rule-overrides`, {
-    method: 'PUT',
+// Fee Rule Overrides
+export const upsertFeeRuleOverride = async (data: UpsertFeeRuleOverrideRequest): Promise<FeeRuleOverride> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fee-rule-overrides`, {
+    method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
-  
+
   return handleApiResponse<FeeRuleOverride>(response);
 };
 
-export const deleteFeeRuleOverride = async (fboId: number, data: DeleteFeeRuleOverrideRequest): Promise<void> => {
-  const params = new URLSearchParams();
-  params.append('aircraft_type_id', data.aircraft_type_id.toString());
-  params.append('fee_rule_id', data.fee_rule_id.toString());
-
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fee-rule-overrides?${params.toString()}`, {
+export const deleteFeeRuleOverride = async (data: DeleteFeeRuleOverrideRequest): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fee-rule-overrides`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
+    body: JSON.stringify(data),
   });
 
-  return handleApiResponse<void>(response);
+  await handleApiResponse<void>(response);
 };
 
+// Aircraft Configuration
 export const updateMinFuelForAircraft = async (
-  fboId: number,
   aircraftTypeId: number,
   data: UpdateMinFuelRequest
-): Promise<any> => { // The response might be minimal, so `any` is fine for now.
-  const response = await fetch(
-    `${API_BASE_URL}/admin/fbo/${fboId}/aircraft-types/${aircraftTypeId}`,
-    {
-      method: "PUT",
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    }
-  );
-  return handleApiResponse(response);
-};
-
-export const uploadFeeOverridesCSV = async (fboId: number, file: File): Promise<any> => {
-  const formData = new FormData();
-  formData.append("file", file);
-
-  const authHeaders = getAuthHeaders();
-  // When using FormData, the browser automatically sets the Content-Type with the correct boundary.
-  // We need to remove it from our headers if it's present.
-  if (authHeaders instanceof Headers) {
-    authHeaders.delete('Content-Type');
-  } else if (authHeaders) {
-    delete authHeaders['Content-Type'];
-  }
-
-  const response = await fetch(
-    `${API_BASE_URL}/admin/fbo/${fboId}/fee-rule-overrides/upload-csv`,
-    {
-      method: "POST",
-      headers: authHeaders,
-      body: formData,
-    }
-  );
-  return handleApiResponse(response);
-};
-
-// @deprecated - Aircraft mapping table has been removed. Aircraft types are now directly assigned to classifications.
-export const addAircraftToFeeSchedule = async (fboId: number, data: AddAircraftToFeeScheduleRequest): Promise<any> => {
-  const response = await fetch(
-    `${API_BASE_URL}/admin/fbo/${fboId}/aircraft-fee-setup`,
-    {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    }
-  );
-  return handleApiResponse(response);
-}
-
-// Fuel Type Management
-export const getFuelTypes = async (fboId: number): Promise<FuelTypesResponse> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fuel-types`, {
-    method: 'GET',
-    headers: getAuthHeaders(),
-  });
-  
-  return handleApiResponse<FuelTypesResponse>(response);
-};
-
-// Fuel Price Management
-export const getFuelPrices = async (fboId: number): Promise<FuelPricesResponse> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fuel-prices`, {
-    method: 'GET',
-    headers: getAuthHeaders(),
-  });
-  
-  return handleApiResponse<FuelPricesResponse>(response);
-};
-
-export const setFuelPrices = async (fboId: number, data: SetFuelPricesRequest): Promise<{ success: boolean; updated_count: number; message: string }> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fbo/${fboId}/fuel-prices`, {
+): Promise<any> => {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-types/${aircraftTypeId}/min-fuel`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
-  
+
+  return handleApiResponse<any>(response);
+};
+
+export const uploadFeeOverridesCSV = async (file: File): Promise<any> => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE_URL}/admin/fee-rule-overrides/upload`, {
+    method: 'POST',
+    headers: {
+      ...getAuthHeaders(),
+      // Don't set Content-Type for FormData, let browser set it with boundary
+    },
+    body: formData,
+  });
+
+  return handleApiResponse<any>(response);
+};
+
+export const addAircraftToFeeSchedule = async (data: AddAircraftToFeeScheduleRequest): Promise<any> => {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-types`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  return handleApiResponse<any>(response);
+};
+
+// Fuel Management
+export const getFuelTypes = async (): Promise<FuelTypesResponse> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fuel-types`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  return handleApiResponse<FuelTypesResponse>(response);
+};
+
+export const getFuelPrices = async (): Promise<FuelPricesResponse> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fuel-prices`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  return handleApiResponse<FuelPricesResponse>(response);
+};
+
+export const setFuelPrices = async (data: SetFuelPricesRequest): Promise<{ success: boolean; updated_count: number; message: string }> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fuel-prices`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+
   return handleApiResponse<{ success: boolean; updated_count: number; message: string }>(response);
 };
 
-// Export all functions for easy importing
-export const AdminFeeConfigService = {
+export default {
   // Aircraft Classifications
   getAircraftClassifications,
-  getFeeCategories, // @deprecated
+  getFeeCategories,
   getAircraftClassificationById,
   createAircraftClassification,
   updateAircraftClassification,
@@ -736,6 +706,4 @@ export const AdminFeeConfigService = {
   // Fuel Price Management
   getFuelPrices,
   setFuelPrices,
-};
-
-export default AdminFeeConfigService; 
+}; 

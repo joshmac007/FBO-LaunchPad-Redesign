@@ -48,8 +48,6 @@ class User(db.Model):
     last_active = db.Column(db.DateTime, nullable=True)
     hire_date = db.Column(db.DateTime, nullable=True)
     
-    # FBO association for multi-tenancy
-    fbo_location_id = db.Column(db.Integer, nullable=True, index=True)
     
     roles = db.relationship(
         'Role',
@@ -87,7 +85,6 @@ class User(db.Model):
             'roles': [role.name for role in self.roles.all()],
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat(),
-            'fbo_id': self.fbo_location_id
         }
         
         # Add LST-specific fields if they exist

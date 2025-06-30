@@ -41,19 +41,13 @@ export default function AdditionalServicesForm({
   
   const { user } = usePermissions()
 
-  // Load available services when component mounts or user changes
+  // Load available services when component mounts
   useEffect(() => {
     const loadServices = async () => {
-      if (!user?.fbo_id) {
-        setServicesError("No FBO ID found for current user")
-        setIsLoadingServices(false)
-        return
-      }
-
       try {
         setIsLoadingServices(true)
         setServicesError(null)
-        const services = await getAvailableServices(user.fbo_id)
+        const services = await getAvailableServices()
         setAvailableServices(services)
       } catch (error) {
         console.error('Error loading available services:', error)
@@ -64,7 +58,7 @@ export default function AdditionalServicesForm({
     }
 
     loadServices()
-  }, [user?.fbo_id])
+  }, [])
 
   const handleAddService = async () => {
     if (!selectedService) return

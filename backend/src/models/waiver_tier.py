@@ -10,8 +10,7 @@ class WaiverTier(db.Model):
     __tablename__ = 'waiver_tiers'
 
     id = db.Column(db.Integer, primary_key=True)
-    fbo_location_id = db.Column(db.Integer, nullable=False, index=True)
-    name = db.Column(db.String(100), nullable=False)
+    name = db.Column(db.String(100), nullable=False, unique=True)
     fuel_uplift_multiplier = db.Column(db.Numeric(5, 2), nullable=False)
     fees_waived_codes = db.Column(JSON, nullable=False)  # Array of fee_code strings
     tier_priority = db.Column(db.Integer, nullable=False)  # Higher number = higher priority
@@ -23,7 +22,6 @@ class WaiverTier(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
-            'fbo_location_id': self.fbo_location_id,
             'name': self.name,
             'fuel_uplift_multiplier': str(self.fuel_uplift_multiplier),
             'fees_waived_codes': self.fees_waived_codes,
@@ -34,4 +32,4 @@ class WaiverTier(db.Model):
         }
 
     def __repr__(self):
-        return f'<WaiverTier {self.name} (FBO {self.fbo_location_id}) - Priority {self.tier_priority}>' 
+        return f'<WaiverTier {self.name} - Priority {self.tier_priority}>' 

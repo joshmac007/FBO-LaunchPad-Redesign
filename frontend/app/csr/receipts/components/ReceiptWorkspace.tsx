@@ -180,9 +180,8 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
   // Load available services
   useEffect(() => {
     const loadServices = async () => {
-      if (!user?.fbo_id) return
       try {
-        const services = await getAvailableServices(user.fbo_id)
+        const services = await getAvailableServices()
         setAvailableServices(services)
       } catch (error) {
         console.error('Error loading available services:', error)
@@ -190,7 +189,7 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
     }
 
     loadServices()
-  }, [user?.fbo_id])
+  }, [])
 
   // Auto-save when debounced pending updates change
   useEffect(() => {

@@ -41,7 +41,7 @@ export function FeeColumnsTab({}: FeeColumnsTabProps) {
   // Update fee rule mutation with optimistic updates
   const updateFeeRuleMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: UpdateFeeRuleRequest }) => 
-      updateFeeRule(1, id, data),  // TODO: Remove fboId when backend is fully global
+      updateFeeRule(id, data),
     onMutate: async ({ id, data }) => {
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['global-fee-schedule'] })

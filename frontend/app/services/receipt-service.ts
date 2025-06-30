@@ -1,5 +1,4 @@
 import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config"
-import { getCurrentUserFboId } from "./auth-service"
 
 // Receipt Line Item - Matches backend ReceiptLineItemSchema exactly
 export interface ReceiptLineItem {
@@ -19,7 +18,6 @@ export interface ReceiptLineItem {
 export interface Receipt {
   id: number
   receipt_number?: string | null
-  fbo_location_id: number
   fuel_order_id?: number | null
   customer_id: number
   
@@ -83,7 +81,6 @@ const mockReceipts: Receipt[] = [
   {
     id: 1,
     receipt_number: "RCP-2024-001",
-    fbo_location_id: 1,
     fuel_order_id: 1,
     customer_id: 1,
     fuel_subtotal: "2750.00",
@@ -101,7 +98,6 @@ const mockReceipts: Receipt[] = [
   {
     id: 2,
     receipt_number: "RCP-2024-002",
-    fbo_location_id: 1,
     fuel_order_id: 2,
     customer_id: 2,
     fuel_subtotal: "4125.00",
@@ -119,7 +115,6 @@ const mockReceipts: Receipt[] = [
   {
     id: 3,
     receipt_number: "RCP-2024-003",
-    fbo_location_id: 1,
     fuel_order_id: 3,
     customer_id: 3,
     fuel_subtotal: "1650.00",
@@ -137,7 +132,6 @@ const mockReceipts: Receipt[] = [
   {
     id: 4,
     receipt_number: "RCP-2024-004",
-    fbo_location_id: 1,
     fuel_order_id: 4,
     customer_id: 4,
     fuel_subtotal: "2475.00",
@@ -155,7 +149,6 @@ const mockReceipts: Receipt[] = [
   {
     id: 5,
     receipt_number: "RCP-2024-005",
-    fbo_location_id: 1,
     fuel_order_id: 5,
     customer_id: 5,
     fuel_subtotal: "3300.00",
@@ -173,7 +166,6 @@ const mockReceipts: Receipt[] = [
   {
     id: 6,
     receipt_number: "RCP-2024-006",
-    fbo_location_id: 1,
     fuel_order_id: 6,
     customer_id: 6,
     fuel_subtotal: "2200.00",
@@ -191,7 +183,6 @@ const mockReceipts: Receipt[] = [
   {
     id: 7,
     receipt_number: "RCP-2024-007",
-    fbo_location_id: 1,
     fuel_order_id: 7,
     customer_id: 7,
     fuel_subtotal: "1925.00",
@@ -201,66 +192,71 @@ const mockReceipts: Receipt[] = [
     grand_total_amount: "2000.00",
     status: "DRAFT",
     is_caa_applied: false,
-    created_at: "2024-01-18T10:45:00Z",
-    updated_at: "2024-01-18T10:45:00Z",
+    created_at: "2024-01-17T15:45:00Z",
+    updated_at: "2024-01-17T15:45:00Z",
     created_by_user_id: 7,
     updated_by_user_id: 7,
   },
   {
     id: 8,
     receipt_number: "RCP-2024-008",
-    fbo_location_id: 1,
     fuel_order_id: 8,
     customer_id: 8,
-    fuel_subtotal: "1512.50",
-    total_fees_amount: "50.00",
+    fuel_subtotal: "3850.00",
+    total_fees_amount: "175.00",
     total_waivers_amount: "0.00",
     tax_amount: "0.00",
-    grand_total_amount: "1562.50",
+    grand_total_amount: "4025.00",
     status: "PAID",
     is_caa_applied: false,
-    created_at: "2024-01-18T15:30:00Z",
-    updated_at: "2024-01-18T15:35:00Z",
+    created_at: "2024-01-18T09:30:00Z",
+    updated_at: "2024-01-18T09:35:00Z",
     created_by_user_id: 8,
     updated_by_user_id: 8,
   },
-]
-
-// Mock line items for testing
-const mockLineItems: ReceiptLineItem[] = [
   {
-    id: 1,
-    receipt_id: 1,
-    line_item_type: 'FUEL',
-    description: 'Jet A Fuel',
-    quantity: '500',
-    unit_price: '5.50',
-    amount: '2750.00',
-    created_at: "2024-01-15T10:30:00Z",
-    updated_at: "2024-01-15T10:35:00Z",
+    id: 9,
+    receipt_number: "RCP-2024-009",
+    fuel_order_id: 9,
+    customer_id: 9,
+    fuel_subtotal: "2640.00",
+    total_fees_amount: "125.00",
+    total_waivers_amount: "0.00",
+    tax_amount: "0.00",
+    grand_total_amount: "2765.00",
+    status: "PAID",
+    is_caa_applied: false,
+    created_at: "2024-01-18T12:15:00Z",
+    updated_at: "2024-01-18T12:20:00Z",
+    created_by_user_id: 9,
+    updated_by_user_id: 9,
   },
   {
-    id: 2,
-    receipt_id: 1,
-    line_item_type: 'FEE',
-    description: 'Ramp Fee',
-    fee_code_applied: 'RAMP_FEE',
-    quantity: '1',
-    unit_price: '100.00',
-    amount: '100.00',
-    created_at: "2024-01-15T10:30:00Z",
-    updated_at: "2024-01-15T10:35:00Z",
+    id: 10,
+    receipt_number: "RCP-2024-010",
+    fuel_order_id: 10,
+    customer_id: 10,
+    fuel_subtotal: "1815.00",
+    total_fees_amount: "100.00",
+    total_waivers_amount: "0.00",
+    tax_amount: "0.00",
+    grand_total_amount: "1915.00",
+    status: "GENERATED",
+    is_caa_applied: false,
+    created_at: "2024-01-19T08:00:00Z",
+    updated_at: "2024-01-19T08:05:00Z",
+    generated_at: "2024-01-19T08:05:00Z",
+    created_by_user_id: 10,
+    updated_by_user_id: 10,
   }
 ]
 
-// Initialize localStorage with mock data if not present
 function initializeMockData() {
-  if (!localStorage.getItem("fboReceipts")) {
+  if (typeof window !== 'undefined' && !localStorage.getItem("fboReceipts")) {
     localStorage.setItem("fboReceipts", JSON.stringify(mockReceipts))
   }
 }
 
-// Receipt list filters interface for API
 export interface ReceiptListFilters {
   status?: string
   customer_id?: number
@@ -271,7 +267,6 @@ export interface ReceiptListFilters {
   per_page?: number
 }
 
-// Receipt list response interface matching backend
 export interface ReceiptListResponse {
   receipts: Receipt[]
   total: number
@@ -282,8 +277,6 @@ export interface ReceiptListResponse {
 
 // Get receipts with server-side filtering and pagination
 export async function getReceipts(filters?: ReceiptListFilters): Promise<ReceiptListResponse> {
-  const fboId = getCurrentUserFboId();
-  
   // Build query string from filters
   const queryParams = new URLSearchParams()
   if (filters?.status && filters.status !== 'all') {
@@ -308,7 +301,7 @@ export async function getReceipts(filters?: ReceiptListFilters): Promise<Receipt
     queryParams.append('per_page', filters.per_page.toString())
   }
   
-  const url = `${API_BASE_URL}/fbo/${fboId}/receipts${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+  const url = `${API_BASE_URL}/receipts${queryParams.toString() ? '?' + queryParams.toString() : ''}`
   const response = await fetch(url, {
     method: "GET",
     headers: getAuthHeaders(),
@@ -320,8 +313,7 @@ export async function getReceipts(filters?: ReceiptListFilters): Promise<Receipt
 
 // Get recent receipts for dashboard display (limited to most recent ones)
 export async function getRecentReceipts(limit: number = 5): Promise<Receipt[]> {
-  const fboId = getCurrentUserFboId();
-  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts?per_page=${limit}&page=1`, {
+  const response = await fetch(`${API_BASE_URL}/receipts?per_page=${limit}&page=1`, {
     method: "GET",
     headers: getAuthHeaders(),
   })
@@ -334,9 +326,7 @@ export async function getRecentReceipts(limit: number = 5): Promise<Receipt[]> {
 
 // Get receipt by ID (alias for Plan 5 compatibility)
 export async function getReceiptById(id: number): Promise<ExtendedReceipt> {
-  const fboId = getCurrentUserFboId();
-
-  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${id}`, {
+  const response = await fetch(`${API_BASE_URL}/receipts/${id}`, {
     headers: getAuthHeaders(),
   });
 
@@ -375,7 +365,6 @@ export async function createReceipt(receiptData: CreateReceiptRequest): Promise<
     created_at: new Date().toISOString(),
     created_by_user_id: 1,
     updated_by_user_id: 1,
-    fbo_location_id: 0,
     customer_id: 0,
     fuel_subtotal: "",
     total_fees_amount: "",
@@ -464,8 +453,7 @@ export function filterReceipts(
         receipt.fuel_quantity_gallons_at_receipt_time?.toLowerCase().includes(searchLower) ||
         receipt.fuel_type_at_receipt_time?.toLowerCase().includes(searchLower) ||
         receipt.customer_id.toString().includes(searchLower) ||
-        receipt.created_by_user_id.toString().includes(searchLower) ||
-        receipt.fbo_location_id.toString().includes(searchLower)
+        receipt.created_by_user_id.toString().includes(searchLower)
 
       if (!matchesSearch) {
         return false
@@ -480,19 +468,14 @@ export function filterReceipts(
     // Filter by end date
     if (endDate) {
       const endDateTime = new Date(endDate)
-      endDateTime.setHours(23, 59, 59, 999) // End of the day
+      endDateTime.setHours(23, 59, 59, 999) // Set to end of day
       if (new Date(receipt.created_at) > endDateTime) {
         return false
       }
     }
 
     // Filter by status
-    if (status && status !== "ALL" && receipt.status !== status) {
-      return false
-    }
-
-    // Filter by payment method
-    if (paymentMethod && paymentMethod !== "ALL" && receipt.fuel_type_at_receipt_time !== paymentMethod) {
+    if (status && status !== "all" && receipt.status !== status) {
       return false
     }
 
@@ -503,41 +486,19 @@ export function filterReceipts(
 // Sort receipts
 export function sortReceipts(receipts: Receipt[], sortBy: string, sortOrder: "asc" | "desc"): Receipt[] {
   return [...receipts].sort((a, b) => {
-    let aValue: any
-    let bValue: any
+    let aValue: any = a[sortBy as keyof Receipt]
+    let bValue: any = b[sortBy as keyof Receipt]
 
-    switch (sortBy) {
-      case "receipt_number":
-        aValue = a.receipt_number
-        bValue = b.receipt_number
-        break
-      case "customer_id":
-        aValue = a.customer_id
-        bValue = b.customer_id
-        break
-      case "fuel_quantity_gallons_at_receipt_time":
-        aValue = a.fuel_quantity_gallons_at_receipt_time
-        bValue = b.fuel_quantity_gallons_at_receipt_time
-        break
-      case "fuel_type_at_receipt_time":
-        aValue = a.fuel_type_at_receipt_time
-        bValue = b.fuel_type_at_receipt_time
-        break
-      case "created_at":
-        aValue = new Date(a.created_at)
-        bValue = new Date(b.created_at)
-        break
-      case "fbo_location_id":
-        aValue = a.fbo_location_id
-        bValue = b.fbo_location_id
-        break
-      case "status":
-        aValue = a.status
-        bValue = b.status
-        break
-      default:
-        aValue = a.id
-        bValue = b.id
+    // Handle different data types
+    if (sortBy === "created_at" || sortBy === "updated_at" || sortBy === "generated_at" || sortBy === "paid_at") {
+      aValue = new Date(aValue || 0).getTime()
+      bValue = new Date(bValue || 0).getTime()
+    } else if (typeof aValue === "string") {
+      aValue = aValue.toLowerCase()
+      bValue = (bValue || "").toLowerCase()
+    } else if (typeof aValue === "number") {
+      aValue = aValue || 0
+      bValue = bValue || 0
     }
 
     if (aValue < bValue) {
@@ -553,57 +514,71 @@ export function sortReceipts(receipts: Receipt[], sortBy: string, sortOrder: "as
 // Convert receipts to CSV
 export function convertReceiptsToCSV(receipts: Receipt[]): string {
   if (receipts.length === 0) {
-    return ""
+    return "No receipts to export"
   }
 
-  // Define CSV headers
   const headers = [
-    "Receipt ID",
     "Receipt Number",
-    "Fuel Order ID",
-    "Fuel Quantity (Gallons)",
-    "Fuel Type",
+    "Status",
     "Customer ID",
-    "FBO Location ID",
+    "Fuel Order ID",
+    "Aircraft Type",
+    "Fuel Type", 
+    "Fuel Quantity (Gallons)",
+    "Fuel Unit Price",
+    "Fuel Subtotal",
+    "Total Fees",
+    "Total Waivers",
+    "Tax Amount",
+    "Grand Total",
+    "CAA Applied",
     "Created At",
     "Updated At",
+    "Generated At",
+    "Paid At",
+    "Created By User ID",
+    "Updated By User ID"
   ]
 
-  // Create CSV content
   const csvContent = [
     headers.join(","),
     ...receipts.map((receipt) =>
       [
-        receipt.id,
-        receipt.receipt_number,
-        receipt.fuel_order_id,
-        receipt.fuel_quantity_gallons_at_receipt_time,
-        receipt.fuel_type_at_receipt_time,
+        `"${receipt.receipt_number || ""}"`,
+        `"${receipt.status}"`,
         receipt.customer_id,
-        receipt.fbo_location_id,
-        receipt.created_at,
-        receipt.updated_at || "",
-      ].join(","),
-    ),
+        receipt.fuel_order_id || "",
+        `"${receipt.aircraft_type_at_receipt_time || ""}"`,
+        `"${receipt.fuel_type_at_receipt_time || ""}"`,
+        `"${receipt.fuel_quantity_gallons_at_receipt_time || ""}"`,
+        `"${receipt.fuel_unit_price_at_receipt_time || ""}"`,
+        `"${receipt.fuel_subtotal}"`,
+        `"${receipt.total_fees_amount}"`,
+        `"${receipt.total_waivers_amount}"`,
+        `"${receipt.tax_amount}"`,
+        `"${receipt.grand_total_amount}"`,
+        receipt.is_caa_applied,
+        `"${receipt.created_at}"`,
+        `"${receipt.updated_at}"`,
+        `"${receipt.generated_at || ""}"`,
+        `"${receipt.paid_at || ""}"`,
+        receipt.created_by_user_id,
+        receipt.updated_by_user_id
+      ].join(",")
+    )
   ].join("\n")
 
   return csvContent
 }
 
-// Download CSV
+// Download CSV file
 export function downloadReceiptsCSV(csvContent: string, filename: string): void {
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
   const link = document.createElement("a")
-
-  // Create a URL for the blob
   const url = URL.createObjectURL(blob)
-
-  // Set link properties
   link.setAttribute("href", url)
   link.setAttribute("download", filename)
   link.style.visibility = "hidden"
-
-  // Append to the document, click, and remove
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
@@ -611,50 +586,45 @@ export function downloadReceiptsCSV(csvContent: string, filename: string): void 
 
 // Get receipt statistics
 export function getReceiptStatistics(receipts: Receipt[]) {
-  const stats: {
-    total: number;
-    paid: number;
-    draft: number;
-    generated: number;
-    void: number;
-    totalAmount: number;
-  } = {
-    total: receipts.length,
-    paid: receipts.filter((r) => r.status === "PAID").length,
-    draft: receipts.filter((r) => r.status === "DRAFT").length,
-    generated: receipts.filter((r) => r.status === "GENERATED").length,
-    void: receipts.filter((r) => r.status === "VOID").length,
-    totalAmount: receipts.reduce((sum, r) => sum + parseFloat(r.grand_total_amount), 0),
-    // No "REFUNDED" status exists, so remove refunded/totalRefunded
-  };
+  const totalReceipts = receipts.length
+  const totalRevenue = receipts.reduce((sum, receipt) => {
+    const amount = parseFloat(receipt.grand_total_amount || "0")
+    return sum + amount
+  }, 0)
 
-  return stats;
+  const statusCounts = receipts.reduce((counts, receipt) => {
+    counts[receipt.status] = (counts[receipt.status] || 0) + 1
+    return counts
+  }, {} as Record<string, number>)
+
+  const averageReceiptValue = totalReceipts > 0 ? totalRevenue / totalReceipts : 0
+
+  return {
+    totalReceipts,
+    totalRevenue,
+    averageReceiptValue,
+    statusCounts
+  }
 }
-
-// Plan 5: New functions for receipt generation and editing workflow
 
 // Create draft receipt from fuel order
 export async function createDraftReceipt(fuel_order_id: number): Promise<ExtendedReceipt> {
-  const fboId = getCurrentUserFboId();
-
-  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/draft`, {
-    method: 'POST',
+  const response = await fetch(`${API_BASE_URL}/receipts/draft`, {
+    method: "POST",
     headers: getAuthHeaders(),
-    body: JSON.stringify({ fuel_order_id }),
-  });
+    body: JSON.stringify({ fuel_order_id })
+  })
 
-  const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response);
-  return data.receipt;
+  const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response)
+  return data.receipt
 }
 
 // Update draft receipt
 export async function updateDraftReceipt(receiptId: number, updateData: DraftUpdatePayload): Promise<ExtendedReceipt> {
-  const fboId = getCurrentUserFboId();
-
-  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receiptId}/draft`, {
+  const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}/draft`, {
     method: "PUT",
     headers: getAuthHeaders(),
-    body: JSON.stringify(updateData),
+    body: JSON.stringify(updateData)
   })
 
   const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response)
@@ -663,12 +633,10 @@ export async function updateDraftReceipt(receiptId: number, updateData: DraftUpd
 
 // Calculate fees for receipt
 export async function calculateFeesForReceipt(receiptId: number, additionalServices?: Array<{ fee_code: string, quantity: number }>): Promise<ExtendedReceipt> {
-  const fboId = getCurrentUserFboId();
-
-  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receiptId}/calculate-fees`, {
+  const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}/calculate-fees`, {
     method: "POST",
     headers: getAuthHeaders(),
-    body: JSON.stringify({ additional_services: additionalServices || [] }),
+    body: JSON.stringify({ additional_services: additionalServices })
   })
 
   const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response)
@@ -677,11 +645,9 @@ export async function calculateFeesForReceipt(receiptId: number, additionalServi
 
 // Generate final receipt
 export async function generateFinalReceipt(receiptId: number): Promise<ExtendedReceipt> {
-  const fboId = getCurrentUserFboId();
-
-  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receiptId}/generate`, {
+  const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}/generate`, {
     method: "POST",
-    headers: getAuthHeaders(),
+    headers: getAuthHeaders()
   })
 
   const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response)
@@ -690,11 +656,9 @@ export async function generateFinalReceipt(receiptId: number): Promise<ExtendedR
 
 // Mark receipt as paid
 export async function markReceiptAsPaid(receiptId: number): Promise<ExtendedReceipt> {
-  const fboId = getCurrentUserFboId();
-
-  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receiptId}/mark-paid`, {
+  const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}/mark-paid`, {
     method: "POST",
-    headers: getAuthHeaders(),
+    headers: getAuthHeaders()
   })
 
   const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response)
@@ -703,24 +667,21 @@ export async function markReceiptAsPaid(receiptId: number): Promise<ExtendedRece
 
 // Void receipt
 export async function voidReceipt(receiptId: number, reason?: string): Promise<Receipt> {
-  const fboId = getCurrentUserFboId();
-  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receiptId}/void`, {
-    method: 'POST',
+  const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}/void`, {
+    method: "POST",
     headers: getAuthHeaders(),
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify({ reason })
   })
 
   const data = await handleApiResponse<{ receipt: Receipt }>(response)
   return data.receipt
 }
 
-// Toggle waiver for a line item
+// Toggle line item waiver
 export async function toggleLineItemWaiver(receiptId: number, lineItemId: number): Promise<ExtendedReceipt> {
-  const fboId = getCurrentUserFboId();
-  
-  const response = await fetch(`${API_BASE_URL}/fbo/${fboId}/receipts/${receiptId}/line-items/${lineItemId}/toggle-waiver`, {
+  const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}/line-items/${lineItemId}/toggle-waiver`, {
     method: "POST",
-    headers: getAuthHeaders(),
+    headers: getAuthHeaders()
   })
 
   const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response)

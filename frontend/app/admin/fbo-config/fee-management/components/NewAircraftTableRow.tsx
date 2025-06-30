@@ -47,8 +47,8 @@ export function NewAircraftTableRow({
 
   // Fetch aircraft types for autocomplete
   const { data: aircraftTypes = [] } = useQuery({
-    queryKey: ['aircraft-types', 1],  // TODO: Remove fboId when backend is fully global
-    queryFn: () => getAircraftTypes(1),  // TODO: Remove fboId when backend is fully global
+    queryKey: ['aircraft-types'],
+    queryFn: () => getAircraftTypes(),
   })
 
   // Add aircraft mutation
@@ -60,12 +60,12 @@ export function NewAircraftTableRow({
         min_fuel_gallons: parseInt(minFuelGallons, 10),
       }
       
-      return addAircraftToFeeSchedule(1, payload)  // TODO: Remove fboId when backend is fully global
+      return addAircraftToFeeSchedule(payload)
     },
     onSuccess: () => {
       // Invalidate relevant queries to refresh the table
       queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
-      queryClient.invalidateQueries({ queryKey: ['aircraft-types', 1] })  // TODO: Remove fboId when backend is fully global
+      queryClient.invalidateQueries({ queryKey: ['aircraft-types'] })
       
       // Reset form
       setAircraftTypeName("")

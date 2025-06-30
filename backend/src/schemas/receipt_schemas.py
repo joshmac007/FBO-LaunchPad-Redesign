@@ -66,7 +66,6 @@ class ReceiptSchema(Schema):
     """Schema for receipt response."""
     id = fields.Integer(dump_only=True)
     receipt_number = fields.String(dump_only=True, allow_none=True)
-    fbo_location_id = fields.Integer(dump_only=True)
     fuel_order_id = fields.Integer(dump_only=True, allow_none=True)
     customer_id = fields.Integer(dump_only=True)
     

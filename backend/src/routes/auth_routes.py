@@ -167,8 +167,7 @@ def login():
             additional_claims={
                 'username': user.username,
                 'roles': [role.name for role in user.roles],
-                'is_active': user.is_active,
-                'fbo_id': user.fbo_location_id
+                'is_active': user.is_active
             }
         )
         
@@ -181,8 +180,7 @@ def login():
             'name': user.name,
             'roles': [role.name for role in user.roles], # Ensure roles is a list of strings
             'is_active': user.is_active,
-            'created_at': user.created_at.isoformat() if user.created_at else None,
-            'fbo_id': user.fbo_location_id
+            'created_at': user.created_at.isoformat() if user.created_at else None
         }
         
         response_schema = LoginSuccessResponseSchema()

@@ -26,7 +26,6 @@ import {
 import { FeeRuleDialog } from "./FeeRuleDialog"
 
 interface GeneralFeesTableProps {
-  fboId: number
   generalServiceRules: FeeRule[]
 }
 
@@ -38,7 +37,7 @@ interface EditableRow extends Partial<FeeRule> {
 
 const columnHelper = createColumnHelper<EditableRow>()
 
-export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTableProps) {
+export function GeneralFeesTable({ generalServiceRules }: GeneralFeesTableProps) {
   const [editingRows, setEditingRows] = useState<Set<string>>(new Set())
   const [newRows, setNewRows] = useState<EditableRow[]>([])
   const [editedValues, setEditedValues] = useState<Record<string, Partial<EditableRow>>>({})
@@ -47,8 +46,8 @@ export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTabl
 
   // Fetch general fee category
   const { data: generalCategory } = useQuery({
-    queryKey: ['general-fee-category', fboId],
-    queryFn: () => getGeneralAircraftClassification(fboId),
+    queryKey: ['general-fee-category'],
+    queryFn: () => getGeneralAircraftClassification(),
   })
 
   // Use the passed general service rules (already filtered by parent)
@@ -56,9 +55,9 @@ export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTabl
 
   // Create fee rule mutation
   const createFeeRuleMutation = useMutation({
-    mutationFn: (data: CreateFeeRuleRequest) => createFeeRule(fboId, data),
+    mutationFn: (data: CreateFeeRuleRequest) => createFeeRule(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['general-fee-rules', fboId, generalCategory?.id] })
+      queryClient.invalidateQueries({ queryKey: ['general-fee-rules', generalCategory?.id] })
       toast.success("Service fee created successfully")
     },
     onError: (error) => {
@@ -70,9 +69,9 @@ export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTabl
   // Update fee rule mutation
   const updateFeeRuleMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: UpdateFeeRuleRequest }) => 
-      updateFeeRule(fboId, id, data),
+      updateFeeRule(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['general-fee-rules', fboId, generalCategory?.id] })
+      queryClient.invalidateQueries({ queryKey: ['general-fee-rules', generalCategory?.id] })
       toast.success("Service fee updated successfully")
     },
     onError: (error) => {
@@ -83,9 +82,9 @@ export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTabl
 
   // Delete fee rule mutation
   const deleteFeeRuleMutation = useMutation({
-    mutationFn: (id: number) => deleteFeeRule(fboId, id),
+    mutationFn: (id: number) => deleteFeeRule(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['general-fee-rules', fboId, generalCategory?.id] })
+      queryClient.invalidateQueries({ queryKey: ['general-fee-rules', generalCategory?.id] })
       toast.success("Service fee deleted successfully")
     },
     onError: (error) => {
@@ -200,131 +199,140 @@ export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTabl
         
         await createFeeRuleMutation.mutateAsync(createData)
         
-        // Remove from new rows
-        setNewRows(prev => prev.filter(r => r.tempId !== row.tempId))
+        // Remove from new rows and stop editing
+        setNewRows(prev => prev.filter(r => r.tempId !== rowId))
+        setEditingRows(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(rowId)
+          return newSet
+        })
       } else {
-        // Update existing fee rule with edited values
-        const updateData: UpdateFeeRuleRequest = {
-          fee_name: getCurrentValue(row, 'fee_name') as string,
-          fee_code: getCurrentValue(row, 'fee_code') as string,
-          amount: getCurrentValue(row, 'amount') as number,
-          is_taxable: getCurrentValue(row, 'is_taxable') as boolean,
-        }
+        // Update existing fee rule
+        const editedData = editedValues[rowId] || {}
+        const updateData: UpdateFeeRuleRequest = {}
+        
+        // Only include fields that were actually edited
+        if ('fee_name' in editedData) updateData.fee_name = editedData.fee_name as string
+        if ('fee_code' in editedData) updateData.fee_code = editedData.fee_code as string
+        if ('amount' in editedData) updateData.amount = editedData.amount as number
+        if ('is_taxable' in editedData) updateData.is_taxable = editedData.is_taxable as boolean
         
         await updateFeeRuleMutation.mutateAsync({ id: row.id!, data: updateData })
         
-        // Clear edited values for this row
+        // Clear edited values and stop editing
         setEditedValues(prev => {
           const newValues = { ...prev }
           delete newValues[rowId]
           return newValues
         })
+        setEditingRows(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(rowId)
+          return newSet
+        })
       }
-      
-      // Stop editing
-      setEditingRows(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(rowId)
-        return newSet
-      })
-      
     } catch (error) {
-      // Error is handled by the mutation's onError
+      console.error('Error saving row:', error)
     }
   }
 
   // Delete row
   const deleteRow = async (row: EditableRow) => {
-    if (row.isNew) {
-      // Just remove from new rows
-      setNewRows(prev => prev.filter(r => r.tempId !== row.tempId))
-      setEditingRows(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(row.tempId!)
-        return newSet
-      })
-    } else {
-      // Delete from server
-      await deleteFeeRuleMutation.mutateAsync(row.id!)
+    if (!row.id) return
+    
+    try {
+      await deleteFeeRuleMutation.mutateAsync(row.id)
+    } catch (error) {
+      console.error('Error deleting row:', error)
     }
   }
 
+  const handleCreateDialogSuccess = () => {
+    setShowCreateDialog(false)
+    queryClient.invalidateQueries({ queryKey: ['general-fee-rules', generalCategory?.id] })
+  }
+
+  // Define columns
   const columns = useMemo(() => [
     columnHelper.accessor('fee_name', {
-      header: 'Service Name',
-      cell: ({ row, getValue }) => {
+      header: 'Fee Name',
+      cell: ({ row }) => {
         const isEditing = row.original.isEditing
         const rowId = row.original.isNew ? row.original.tempId! : row.original.id!.toString()
+        const currentValue = getCurrentValue(row.original, 'fee_name') as string
         
         if (isEditing) {
           return (
             <Input
-              value={String(getCurrentValue(row.original, 'fee_name') || '')}
+              value={currentValue || ''}
               onChange={(e) => updateRowData(rowId, 'fee_name', e.target.value)}
-              placeholder="Enter service name"
-              className="h-8"
+              placeholder="Enter fee name"
+              className="w-full"
             />
           )
         }
-        return getValue() || ''
+        return <span>{currentValue || ''}</span>
       },
     }),
     columnHelper.accessor('fee_code', {
       header: 'Fee Code',
-      cell: ({ row, getValue }) => {
+      cell: ({ row }) => {
         const isEditing = row.original.isEditing
         const rowId = row.original.isNew ? row.original.tempId! : row.original.id!.toString()
+        const currentValue = getCurrentValue(row.original, 'fee_code') as string
         
         if (isEditing) {
           return (
             <Input
-              value={String(getCurrentValue(row.original, 'fee_code') || '')}
+              value={currentValue || ''}
               onChange={(e) => updateRowData(rowId, 'fee_code', e.target.value)}
-              placeholder="Enter code"
-              className="h-8"
+              placeholder="Enter fee code"
+              className="w-full"
             />
           )
         }
-        return getValue() || ''
+        return <span>{currentValue || ''}</span>
       },
     }),
     columnHelper.accessor('amount', {
       header: 'Amount',
-      cell: ({ row, getValue }) => {
+      cell: ({ row }) => {
         const isEditing = row.original.isEditing
         const rowId = row.original.isNew ? row.original.tempId! : row.original.id!.toString()
+        const currentValue = getCurrentValue(row.original, 'amount') as number
         
         if (isEditing) {
           return (
             <Input
               type="number"
-              value={String(getCurrentValue(row.original, 'amount') || '')}
+              value={currentValue?.toString() || ''}
               onChange={(e) => updateRowData(rowId, 'amount', parseFloat(e.target.value) || 0)}
-              placeholder="0"
-              className="h-8"
+              placeholder="0.00"
+              className="w-full"
             />
           )
         }
-        return `$${getValue() || 0}`
+        return <span>${currentValue?.toFixed(2) || '0.00'}</span>
       },
     }),
     columnHelper.accessor('is_taxable', {
       header: 'Taxable',
-      cell: ({ row, getValue }) => {
+      cell: ({ row }) => {
         const isEditing = row.original.isEditing
         const rowId = row.original.isNew ? row.original.tempId! : row.original.id!.toString()
+        const currentValue = getCurrentValue(row.original, 'is_taxable') as boolean
         
         if (isEditing) {
           return (
             <Checkbox
-              checked={getCurrentValue(row.original, 'is_taxable') as boolean || false}
+              checked={currentValue || false}
               onCheckedChange={(checked) => updateRowData(rowId, 'is_taxable', checked)}
             />
           )
         }
         return (
           <Checkbox
-            checked={getValue() || false}
+            checked={currentValue || false}
             disabled
           />
         )
@@ -332,13 +340,14 @@ export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTabl
     }),
     columnHelper.display({
       id: 'actions',
+      header: 'Actions',
       cell: ({ row }) => {
         const isEditing = row.original.isEditing
         const rowId = row.original.isNew ? row.original.tempId! : row.original.id!.toString()
         
         if (isEditing) {
           return (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center space-x-2">
               <Button
                 size="sm"
                 variant="ghost"
@@ -351,6 +360,7 @@ export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTabl
                 size="sm"
                 variant="ghost"
                 onClick={() => cancelEditing(rowId)}
+                disabled={createFeeRuleMutation.isPending || updateFeeRuleMutation.isPending}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -359,7 +369,7 @@ export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTabl
         }
         
         return (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center space-x-2">
             <Button
               size="sm"
               variant="ghost"
@@ -379,7 +389,7 @@ export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTabl
         )
       },
     }),
-  ], [createFeeRuleMutation.isPending, updateFeeRuleMutation.isPending, deleteFeeRuleMutation.isPending, editedValues])
+  ], [getCurrentValue, updateRowData, saveRow, cancelEditing, startEditing, deleteRow, createFeeRuleMutation.isPending, updateFeeRuleMutation.isPending, deleteFeeRuleMutation.isPending])
 
   const table = useReactTable({
     data: tableData,
@@ -387,73 +397,87 @@ export function GeneralFeesTable({ fboId, generalServiceRules }: GeneralFeesTabl
     getCoreRowModel: getCoreRowModel(),
   })
 
-
   return (
-    <div className="border rounded-lg">
-      <Table>
-        <TableHeader>
-          {table.getHeaderGroups().map(headerGroup => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map(header => (
-                <TableHead key={header.id}>
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )}
-                </TableHead>
-              ))}
-            </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map(row => (
-              <TableRow key={row.id}>
-                {row.getVisibleCells().map(cell => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-medium">General Service Fees</h3>
+        <div className="flex items-center space-x-2">
+          <Button
+            size="sm"
+            onClick={addNewRow}
+            className="flex items-center space-x-2"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add Row</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowCreateDialog(true)}
+            className="flex items-center space-x-2"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add Fee Rule</span>
+          </Button>
+        </div>
+      </div>
+
+      <div className="border rounded-md">
+        <Table>
+          <TableHeader>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
+                  </TableHead>
                 ))}
               </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={columns.length} className="h-24 text-center">
-                No service fees configured.
-              </TableCell>
-            </TableRow>
-          )}
-          <TableRow>
-            <TableCell colSpan={columns.length} className="h-12">
-              <Button
-                variant="ghost"
-                onClick={() => setShowCreateDialog(true)}
-                className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
-                disabled={!generalCategory}
-              >
-                <Plus className="h-4 w-4" />
-                Add Service
-              </Button>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {table.getRowModel().rows?.length ? (
+              table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-24 text-center">
+                  No general service fees found.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
 
+      {/* Create Fee Rule Dialog */}
       <FeeRuleDialog
         isOpen={showCreateDialog}
         onClose={() => setShowCreateDialog(false)}
-        fboId={fboId}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['general-fee-rules', fboId, generalCategory?.id] })
-          toast.success("Service fee created successfully")
-        }}
+        onSuccess={handleCreateDialogSuccess}
+        availableCategories={generalCategory ? [{ id: generalCategory.id, name: generalCategory.name }] : []}
         defaultValues={{
-          is_primary_fee: false, // Default to general fee for this table
-          applies_to_aircraft_classification_id: generalCategory?.id,
+          applies_to_aircraft_classification_id: generalCategory?.id || 0,
+          calculation_basis: 'FIXED_PRICE',
+          waiver_strategy: 'NONE',
+          has_caa_override: false,
+          is_primary_fee: false,
         }}
-        availableCategories={generalCategory ? [generalCategory] : []}
       />
     </div>
   )

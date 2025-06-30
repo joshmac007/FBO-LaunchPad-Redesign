@@ -44,7 +44,7 @@ export function UploadFeesDialog({}: UploadFeesDialogProps) {
   const queryClient = useQueryClient()
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadFeeOverridesCSV(1, file),  // TODO: Remove fboId when backend is fully global
+    mutationFn: (file: File) => uploadFeeOverridesCSV(file),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["global-fee-schedule"] })
       toast.success("Fee overrides uploaded successfully.")

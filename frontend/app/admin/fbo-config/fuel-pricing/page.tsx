@@ -33,7 +33,6 @@ const createFuelPriceFormSchema = (fuelTypes: FuelType[]) => {
 type FuelPriceFormData = Record<string, string>
 
 export default function FuelPricingPage() {
-  const fboId = 1 // TODO: Get this from context/params
   const queryClient = useQueryClient()
 
   // Fetch fuel types
@@ -42,8 +41,8 @@ export default function FuelPricingPage() {
     isLoading: fuelTypesLoading, 
     isError: fuelTypesError 
   } = useQuery({
-    queryKey: ['fuel-types', fboId],
-    queryFn: () => getFuelTypes(fboId),
+    queryKey: ['fuel-types'],
+    queryFn: () => getFuelTypes(),
   })
 
   // Fetch current fuel prices
@@ -54,8 +53,8 @@ export default function FuelPricingPage() {
     error,
     refetch 
   } = useQuery({
-    queryKey: ['fuel-prices', fboId],
-    queryFn: () => getFuelPrices(fboId),
+    queryKey: ['fuel-prices'],
+    queryFn: () => getFuelPrices(),
   })
 
   const isLoading = fuelTypesLoading || fuelPricesLoading
@@ -97,11 +96,11 @@ export default function FuelPricingPage() {
         fuel_type_id: fuelType.id,
         price: Number(formData[`fuel_${fuelType.id}`])
       }))
-      return setFuelPrices(fboId, { fuel_prices: prices })
+      return setFuelPrices({ fuel_prices: prices })
     },
     onSuccess: () => {
       toast.success("Fuel prices saved successfully")
-      queryClient.invalidateQueries({ queryKey: ['fuel-prices', fboId] })
+      queryClient.invalidateQueries({ queryKey: ['fuel-prices'] })
     },
     onError: (error: Error) => {
       toast.error(`Failed to save prices: ${error.message}`)
