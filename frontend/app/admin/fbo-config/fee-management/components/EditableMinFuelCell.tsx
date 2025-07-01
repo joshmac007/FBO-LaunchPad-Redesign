@@ -31,6 +31,7 @@ export function EditableMinFuelCell({
   className
 }: EditableMinFuelCellProps) {
   const [isEditing, setIsEditing] = useState(false)
+  const [originalValue, setOriginalValue] = useState<number | null>(null)
 
   const form = useForm<MinFuelForm>({
     resolver: zodResolver(minFuelSchema),
@@ -42,12 +43,16 @@ export function EditableMinFuelCell({
   const handleClick = () => {
     if (disabled) return
     setIsEditing(true)
+    setOriginalValue(value)
     form.setValue("value", value?.toString() || "0")
   }
 
   const handleSubmit = (data: MinFuelForm) => {
     const numericValue = Number(data.value)
-    onSave(numericValue)
+    // Only call onSave if the value has actually changed
+    if (numericValue !== originalValue) {
+      onSave(numericValue)
+    }
     setIsEditing(false)
   }
 

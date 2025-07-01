@@ -566,21 +566,28 @@ def upsert_fee_rule_override():
 @require_permission_v2('manage_fbo_fee_schedules')
 def delete_fee_rule_override():
     """Delete a fee rule override using query parameters."""
-    # Get required parameters from query string
+    # Get parameters from query string
+    classification_id = request.args.get('classification_id', type=int)
     aircraft_type_id = request.args.get('aircraft_type_id', type=int)
     fee_rule_id = request.args.get('fee_rule_id', type=int)
     
-    # Validate that both parameters are present
-    if aircraft_type_id is None:
-        return jsonify({"error": "Missing required parameter: aircraft_type_id"}), 400
+    # Validate that fee_rule_id is present
     if fee_rule_id is None:
         return jsonify({"error": "Missing required parameter: fee_rule_id"}), 400
+    
+    # Validate that exactly one of classification_id or aircraft_type_id is present
+    has_classification = classification_id is not None
+    has_aircraft_type = aircraft_type_id is not None
+    
+    if not (has_classification ^ has_aircraft_type):  # XOR check
+        return jsonify({"error": "Must specify either classification_id OR aircraft_type_id, but not both"}), 400
 
     # Construct data dictionary for service call
-    data = {
-        'aircraft_type_id': aircraft_type_id,
-        'fee_rule_id': fee_rule_id
-    }
+    data = {'fee_rule_id': fee_rule_id}
+    if has_classification:
+        data['classification_id'] = classification_id
+    else:
+        data['aircraft_type_id'] = aircraft_type_id
 
     try:
         result = AdminFeeConfigService.delete_fee_rule_override(data)

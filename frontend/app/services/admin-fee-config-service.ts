@@ -56,7 +56,8 @@ export interface WaiverTier {
 // New interfaces for Phase 2 - Consolidated Fee Schedule
 export interface FeeRuleOverride {
   id: number;
-  aircraft_type_id: number;
+  classification_id?: number; // Now optional
+  aircraft_type_id?: number; // New optional field
   fee_rule_id: number;
   override_amount?: number;
   override_caa_amount?: number;
@@ -97,6 +98,7 @@ export interface GlobalAircraftType {
   classification_id: number;
   base_min_fuel_gallons_for_waiver: string | number;
   default_max_gross_weight_lbs?: string | number;
+  fees?: Record<string, FeeDetails>;
   created_at: string;
   updated_at: string;
 }
@@ -124,7 +126,8 @@ export interface GlobalFeeRule {
 
 export interface GlobalFeeRuleOverride {
   id: number;
-  aircraft_type_id: number;
+  classification_id?: number; // Now optional
+  aircraft_type_id?: number; // New optional field
   fee_rule_id: number;
   override_amount?: number;
   override_caa_amount?: number;
@@ -139,10 +142,24 @@ export interface GlobalFeeSchedule {
 }
 
 export interface UpsertFeeRuleOverrideRequest {
-  aircraft_type_id: number;
+  classification_id?: number; // Optional
+  aircraft_type_id?: number; // Optional
   fee_rule_id: number;
   override_amount?: number;
   override_caa_amount?: number;
+}
+
+// New interface for the detailed fee object from the backend
+export interface FeeDetails {
+  fee_rule_id: number;
+  final_display_value: number;
+  is_aircraft_override: boolean;
+  revert_to_value: number;
+  classification_default: number;
+  global_default: number;
+  final_caa_display_value: number;
+  is_caa_aircraft_override: boolean;
+  revert_to_caa_value: number;
 }
 
 export interface AddAircraftToFeeScheduleRequest {
@@ -192,7 +209,8 @@ export interface FuelTypesResponse {
 }
 
 export interface DeleteFeeRuleOverrideRequest {
-  aircraft_type_id: number;
+  classification_id?: number;
+  aircraft_type_id?: number;
   fee_rule_id: number;
 }
 
@@ -282,7 +300,8 @@ export const getAircraftClassifications = async (): Promise<AircraftClassificati
     headers: getAuthHeaders(),
   });
 
-  return handleApiResponse<AircraftClassification[]>(response);
+  const data = await handleApiResponse<{ aircraft_classifications: AircraftClassification[] }>(response);
+  return data.aircraft_classifications;
 };
 
 export const getFeeCategories = async (): Promise<AircraftClassification[]> => {
@@ -570,7 +589,7 @@ export const getGlobalFeeSchedule = async (): Promise<GlobalFeeSchedule> => {
 // Fee Rule Overrides
 export const upsertFeeRuleOverride = async (data: UpsertFeeRuleOverrideRequest): Promise<FeeRuleOverride> => {
   const response = await fetch(`${API_BASE_URL}/admin/fee-rule-overrides`, {
-    method: 'POST',
+    method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
@@ -579,10 +598,21 @@ export const upsertFeeRuleOverride = async (data: UpsertFeeRuleOverrideRequest):
 };
 
 export const deleteFeeRuleOverride = async (data: DeleteFeeRuleOverrideRequest): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fee-rule-overrides`, {
+  const queryParams = new URLSearchParams({
+    fee_rule_id: data.fee_rule_id.toString(),
+  });
+  
+  if (data.classification_id) {
+    queryParams.append('classification_id', data.classification_id.toString());
+  }
+  
+  if (data.aircraft_type_id) {
+    queryParams.append('aircraft_type_id', data.aircraft_type_id.toString());
+  }
+
+  const response = await fetch(`${API_BASE_URL}/admin/fee-rule-overrides?${queryParams}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
-    body: JSON.stringify(data),
   });
 
   await handleApiResponse<void>(response);
@@ -593,7 +623,7 @@ export const updateMinFuelForAircraft = async (
   aircraftTypeId: number,
   data: UpdateMinFuelRequest
 ): Promise<any> => {
-  const response = await fetch(`${API_BASE_URL}/admin/aircraft-types/${aircraftTypeId}/min-fuel`, {
+  const response = await fetch(`${API_BASE_URL}/admin/aircraft-types/${aircraftTypeId}`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),

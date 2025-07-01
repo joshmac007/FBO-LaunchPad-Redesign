@@ -47,6 +47,9 @@ class FeeRule(db.Model):
     caa_simple_waiver_multiplier_override = db.Column(db.Numeric(5, 2), nullable=True)
     
     # Primary fee flag for UI display
+    # NOTE: This column is deprecated. With the new override system using FeeRuleOverride,
+    # classification-specific defaults are stored as overrides rather than duplicate FeeRule records.
+    # This column can be removed in a future migration.
     is_primary_fee = db.Column(db.Boolean, nullable=False, default=False, server_default='f')
     
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

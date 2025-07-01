@@ -21,7 +21,7 @@ type FeeValueForm = z.infer<typeof feeValueSchema>
 
 interface EditableFeeCellProps {
   value: number | null
-  isOverride: boolean
+  isAircraftOverride: boolean
   onSave: (newValue: number) => void
   onRevert?: () => void
   disabled?: boolean
@@ -30,13 +30,14 @@ interface EditableFeeCellProps {
 
 export function EditableFeeCell({
   value,
-  isOverride,
+  isAircraftOverride,
   onSave,
   onRevert,
   disabled = false,
   className
 }: EditableFeeCellProps) {
   const [isEditing, setIsEditing] = useState(false)
+  const [originalValue, setOriginalValue] = useState<number | null>(null)
 
   const form = useForm<FeeValueForm>({
     resolver: zodResolver(feeValueSchema),
@@ -48,12 +49,16 @@ export function EditableFeeCell({
   const handleClick = () => {
     if (disabled) return
     setIsEditing(true)
+    setOriginalValue(value)
     form.setValue("value", value?.toString() || "0")
   }
 
   const handleSubmit = (data: FeeValueForm) => {
     const numericValue = Number(data.value)
-    onSave(numericValue)
+    // Only call onSave if the value has actually changed
+    if (numericValue !== originalValue) {
+      onSave(numericValue)
+    }
     setIsEditing(false)
   }
 
@@ -68,7 +73,7 @@ export function EditableFeeCell({
     }
   }
 
-  const displayValue = typeof value === 'number' ? `$${value.toFixed(2)}` : "$0.00"
+  const displayValue = typeof value === 'number' ? `$${Math.round(value)}` : "$0"
 
   if (isEditing) {
     return (
@@ -107,7 +112,7 @@ export function EditableFeeCell({
       <span 
         className={cn(
           "text-sm",
-          isOverride 
+          isAircraftOverride 
             ? "font-semibold text-foreground" 
             : "italic text-muted-foreground"
         )}
@@ -115,7 +120,7 @@ export function EditableFeeCell({
         {displayValue}
       </span>
       
-      {isOverride && onRevert && !disabled && (
+      {isAircraftOverride && onRevert && !disabled && (
         <Button
           variant="ghost"
           size="sm"

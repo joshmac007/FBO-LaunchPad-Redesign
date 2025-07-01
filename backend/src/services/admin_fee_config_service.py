@@ -760,60 +760,119 @@ class AdminFeeConfigService:
     @staticmethod
     def get_global_fee_schedule() -> Dict[str, Any]:
         """
-        Get the entire global fee schedule, structured for the UI.
-        This will be the single source of truth for the fee management page.
+        Get the entire global fee schedule with enhanced three-tiered fee logic.
         """
-        try:
-            classifications = AircraftClassification.query.order_by(AircraftClassification.name).all()
-            aircraft_types = AircraftType.query.order_by(AircraftType.name).all()
-            fee_rules = FeeRule.query.order_by(FeeRule.fee_name).all()
-            overrides = FeeRuleOverride.query.all()
-            
-            # Structure the data in a way the frontend can easily consume
-            # Group aircraft by their classification
-            schedule = []
-            classifications_map = {c.id: c.to_dict() for c in classifications}
-            
-            for classification in classifications:
-                classification_data = classification.to_dict()
-                classification_data['aircraft_types'] = [
-                    ac.to_dict() for ac in aircraft_types if ac.classification_id == classification.id
-                ]
-                schedule.append(classification_data)
+        classifications = AircraftClassification.query.order_by(AircraftClassification.name).all()
+        aircraft_types = AircraftType.query.order_by(AircraftType.name).all()
+        fee_rules = FeeRule.query.order_by(FeeRule.fee_name).all()
+        overrides = FeeRuleOverride.query.all()
+        aircraft_configs = AircraftTypeConfig.query.all()
 
-            return {
-                "schedule": schedule,  # Grouped data
-                "fee_rules": [rule.to_dict() for rule in fee_rules],
-                "overrides": [override.to_dict() for override in overrides]
-            }
-        except SQLAlchemyError as e:
-            current_app.logger.error(f"Error fetching global fee schedule: {str(e)}")
-            raise
+        classification_overrides_map = {
+            (o.classification_id, o.fee_rule_id): o.to_dict() for o in overrides if o.classification_id
+        }
+        aircraft_overrides_map = {
+            (o.aircraft_type_id, o.fee_rule_id): o.to_dict() for o in overrides if o.aircraft_type_id
+        }
+        aircraft_config_map = {
+            config.aircraft_type_id: config for config in aircraft_configs
+        }
+
+        schedule = []
+        for classification in classifications:
+            classification_data = classification.to_dict()
+            classification_data['aircraft_types'] = []
+            
+            classification_aircraft = [at for at in aircraft_types if at.classification_id == classification.id]
+            
+            for aircraft_type in classification_aircraft:
+                aircraft_data = aircraft_type.to_dict()
+                
+                # Override minimum fuel value with data from AircraftTypeConfig if available
+                aircraft_config = aircraft_config_map.get(aircraft_type.id)
+                if aircraft_config:
+                    aircraft_data['base_min_fuel_gallons_for_waiver'] = float(aircraft_config.base_min_fuel_gallons_for_waiver)
+                
+                aircraft_fees = {}
+                
+                for fee_rule in fee_rules:
+                    fee_code = fee_rule.fee_code
+                    
+                    global_default = float(fee_rule.amount)
+                    global_caa_default = float(fee_rule.caa_override_amount) if fee_rule.has_caa_override else global_default
+                    
+                    class_override = classification_overrides_map.get((classification.id, fee_rule.id))
+                    class_default = float(class_override['override_amount']) if class_override and class_override.get('override_amount') is not None else global_default
+                    class_caa_default = float(class_override['override_caa_amount']) if class_override and class_override.get('override_caa_amount') is not None else global_caa_default
+
+                    aircraft_override = aircraft_overrides_map.get((aircraft_type.id, fee_rule.id))
+                    
+                    is_aircraft_override = aircraft_override is not None and aircraft_override.get('override_amount') is not None
+                    is_caa_aircraft_override = aircraft_override is not None and aircraft_override.get('override_caa_amount') is not None
+
+                    final_display_value = float(aircraft_override['override_amount']) if is_aircraft_override else class_default
+                    final_caa_display_value = float(aircraft_override['override_caa_amount']) if is_caa_aircraft_override else class_caa_default
+
+                    aircraft_fees[str(fee_rule.id)] = {
+                        "fee_rule_id": fee_rule.id,
+                        "final_display_value": final_display_value,
+                        "is_aircraft_override": is_aircraft_override,
+                        "revert_to_value": class_default,
+                        "classification_default": class_default,
+                        "global_default": global_default,
+                        "final_caa_display_value": final_caa_display_value,
+                        "is_caa_aircraft_override": is_caa_aircraft_override,
+                        "revert_to_caa_value": class_caa_default,
+                    }
+
+                aircraft_data['fees'] = aircraft_fees
+                classification_data['aircraft_types'].append(aircraft_data)
+            
+            schedule.append(classification_data)
+
+        return {
+            "schedule": schedule,
+            "fee_rules": [rule.to_dict() for rule in fee_rules],
+            "overrides": [o.to_dict() for o in overrides]
+        }
 
     @staticmethod
     def upsert_fee_rule_override(data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Create or update a fee rule override.
+        Create or update a fee rule override for either classification-level or aircraft-specific overrides.
         """
-        required_fields = ["aircraft_type_id", "fee_rule_id"]
-        if not all(field in data for field in required_fields):
-            raise ValueError("Missing required fields for fee rule override upsert")
+        is_classification_override = 'classification_id' in data and data['classification_id'] is not None
+        is_aircraft_override = 'aircraft_type_id' in data and data['aircraft_type_id'] is not None
+
+        if not (is_classification_override ^ is_aircraft_override): # XOR check
+            raise ValueError("Override must have either classification_id OR aircraft_type_id, but not both.")
+        
+        if 'fee_rule_id' not in data:
+            raise ValueError("fee_rule_id is required for fee rule override upsert")
 
         try:
-            override = FeeRuleOverride.query.filter_by(
-                aircraft_type_id=data["aircraft_type_id"],
-                fee_rule_id=data["fee_rule_id"]
-            ).first()
+            if is_classification_override:
+                key_filter = {
+                    "classification_id": data['classification_id'],
+                    "fee_rule_id": data['fee_rule_id']
+                }
+            else: # is_aircraft_override
+                key_filter = {
+                    "aircraft_type_id": data['aircraft_type_id'],
+                    "fee_rule_id": data['fee_rule_id']
+                }
+
+            override = FeeRuleOverride.query.filter_by(**key_filter).first()
 
             if override:
-                # Update existing override
-                override.override_amount = data.get("override_amount")
-                override.override_caa_amount = data.get("override_caa_amount")
+                if 'override_amount' in data:
+                    override.override_amount = data['override_amount']
+                if 'override_caa_amount' in data:
+                    override.override_caa_amount = data['override_caa_amount']
             else:
-                # Create new override
                 override = FeeRuleOverride(**data)
                 db.session.add(override)
-
+            
             db.session.commit()
             return override.to_dict()
         except IntegrityError:
@@ -827,17 +886,30 @@ class AdminFeeConfigService:
     @staticmethod
     def delete_fee_rule_override(data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Delete a fee rule override.
+        Delete a fee rule override for either classification-level or aircraft-specific overrides.
         """
-        required_fields = ["aircraft_type_id", "fee_rule_id"]
-        if not all(field in data for field in required_fields):
-            raise ValueError("Missing required fields for fee rule override deletion")
+        is_classification_override = 'classification_id' in data and data['classification_id'] is not None
+        is_aircraft_override = 'aircraft_type_id' in data and data['aircraft_type_id'] is not None
+
+        if not (is_classification_override ^ is_aircraft_override): # XOR check
+            raise ValueError("Override deletion must specify either classification_id OR aircraft_type_id, but not both.")
+        
+        if 'fee_rule_id' not in data:
+            raise ValueError("fee_rule_id is required for fee rule override deletion")
 
         try:
-            override = FeeRuleOverride.query.filter_by(
-                aircraft_type_id=data["aircraft_type_id"],
-                fee_rule_id=data["fee_rule_id"]
-            ).first()
+            if is_classification_override:
+                key_filter = {
+                    "classification_id": data['classification_id'],
+                    "fee_rule_id": data['fee_rule_id']
+                }
+            else: # is_aircraft_override
+                key_filter = {
+                    "aircraft_type_id": data['aircraft_type_id'],
+                    "fee_rule_id": data['fee_rule_id']
+                }
+
+            override = FeeRuleOverride.query.filter_by(**key_filter).first()
 
             if override:
                 db.session.delete(override)
@@ -899,9 +971,10 @@ class AdminFeeConfigService:
                 db.session.add(config)
 
             # 5. Create initial FeeRuleOverride if parameters are provided
+            # Note: Override is now created for the classification, not the specific aircraft type
             if initial_ramp_fee_rule_id is not None and initial_ramp_fee_amount is not None:
                 override = FeeRuleOverride()
-                override.aircraft_type_id = aircraft_type.id
+                override.classification_id = aircraft_classification_id
                 override.fee_rule_id = initial_ramp_fee_rule_id
                 override.override_amount = initial_ramp_fee_amount
                 db.session.add(override)

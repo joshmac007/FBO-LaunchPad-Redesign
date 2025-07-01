@@ -15,18 +15,33 @@ branch_labels = None
 depends_on = None
 
 def upgrade():
-    # Drop the old unique constraint that includes fbo_location_id
-    op.drop_constraint('uq_fee_rule_fbo_code', 'fee_rules', type_='unique')
+    # Check if the constraint exists before trying to drop it
+    from sqlalchemy import inspect
+    connection = op.get_bind()
+    inspector = inspect(connection)
     
-    # Drop the fbo_location_id column
-    op.drop_column('fee_rules', 'fbo_location_id')
+    # Get existing constraints
+    constraints = inspector.get_unique_constraints('fee_rules')
+    constraint_names = [c['name'] for c in constraints]
     
-    # Create the new unique constraint without fbo_location_id
-    op.create_unique_constraint(
-        'uq_fee_rule_code_classification',
-        'fee_rules',
-        ['fee_code', 'applies_to_classification_id']
-    )
+    # Drop the old unique constraint if it exists
+    if 'uq_fee_rule_fbo_code' in constraint_names:
+        op.drop_constraint('uq_fee_rule_fbo_code', 'fee_rules', type_='unique')
+    
+    # Check if fbo_location_id column exists before trying to drop it
+    columns = inspector.get_columns('fee_rules')
+    column_names = [c['name'] for c in columns]
+    
+    if 'fbo_location_id' in column_names:
+        op.drop_column('fee_rules', 'fbo_location_id')
+    
+    # Create the new unique constraint if it doesn't already exist
+    if 'uq_fee_rule_code_classification' not in constraint_names:
+        op.create_unique_constraint(
+            'uq_fee_rule_code_classification',
+            'fee_rules',
+            ['fee_code', 'applies_to_classification_id']
+        )
 
 def downgrade():
     # Drop the new unique constraint

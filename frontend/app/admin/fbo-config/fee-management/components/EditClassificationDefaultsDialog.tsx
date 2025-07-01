@@ -26,7 +26,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Edit } from "lucide-react"
-import { GlobalFeeRule, updateFeeRule, createFeeRule } from "@/app/services/admin-fee-config-service"
+import { GlobalFeeRule, GlobalFeeRuleOverride, upsertFeeRuleOverride } from "@/app/services/admin-fee-config-service"
 
 const editClassificationDefaultsSchema = z.object({
   fees: z.record(z.string(), z.string().refine((val) => !isNaN(Number(val)) && Number(val) >= 0, {
@@ -40,14 +40,18 @@ interface EditClassificationDefaultsDialogProps {
   classificationId: number
   classificationName: string
   classificationRules: GlobalFeeRule[]
+  currentOverrides?: GlobalFeeRuleOverride[]
   viewMode: 'standard' | 'caa'
+  iconOnly?: boolean
 }
 
 export function EditClassificationDefaultsDialog({ 
   classificationId, 
   classificationName, 
   classificationRules,
-  viewMode 
+  currentOverrides = [],
+  viewMode,
+  iconOnly = false
 }: EditClassificationDefaultsDialogProps) {
   const [open, setOpen] = useState(false)
   const queryClient = useQueryClient()
@@ -59,67 +63,51 @@ export function EditClassificationDefaultsDialog({
     }
   })
 
-  // Get rules specific to this classification, or use all rules as templates
-  const classificationSpecificRules = classificationRules.filter(r => r.applies_to_classification_id === classificationId)
-  const rulesToShow = classificationSpecificRules.length > 0 ? classificationSpecificRules : classificationRules
+  // Helper function to find override for a specific fee rule
+  const findOverride = (feeRuleId: number) => {
+    return currentOverrides.find(o => o.classification_id === classificationId && o.fee_rule_id === feeRuleId)
+  }
 
-  // Initialize form with current fee values
+  // Initialize form with current fee values (from overrides or base rules)
   useEffect(() => {
-    if (open && rulesToShow.length > 0) {
+    if (open && classificationRules.length > 0) {
       const feeValues: Record<string, string> = {}
-      rulesToShow.forEach(rule => {
+      classificationRules.forEach(rule => {
+        const override = findOverride(rule.id)
         const value = viewMode === 'caa'
-          ? rule.caa_override_amount?.toString() ?? rule.amount.toString()
-          : rule.amount.toString()
+          ? (override?.override_caa_amount?.toString() ?? rule.caa_override_amount?.toString() ?? rule.amount.toString())
+          : (override?.override_amount?.toString() ?? rule.amount.toString())
         feeValues[rule.id.toString()] = value
       })
       form.reset({ fees: feeValues })
     }
-  }, [open, rulesToShow, form, viewMode])
+  }, [open, classificationRules, currentOverrides, form, viewMode, classificationId])
 
   const updateClassificationDefaultsMutation = useMutation({
     mutationFn: async (data: EditClassificationDefaultsForm) => {
       const updatePromises = Object.entries(data.fees).map(([ruleId, amountStr]) => {
         const ruleIdNum = parseInt(ruleId)
         const amountNum = Number(amountStr)
-        const templateRule = rulesToShow.find(r => r.id === ruleIdNum)
+        const baseRule = classificationRules.find(r => r.id === ruleIdNum)
         
-        if (!templateRule) {
+        if (!baseRule) {
           throw new Error(`Rule with ID ${ruleIdNum} not found`)
         }
 
-        // Check if this rule already exists for this classification
-        const existsForClassification = templateRule.applies_to_classification_id === classificationId
+        // Create or update an override for this classification and fee rule
+        const payload = viewMode === 'caa'
+          ? { 
+              classification_id: classificationId,
+              fee_rule_id: ruleIdNum,
+              override_caa_amount: amountNum
+            }
+          : { 
+              classification_id: classificationId,
+              fee_rule_id: ruleIdNum,
+              override_amount: amountNum
+            };
         
-        if (existsForClassification) {
-          // Update existing rule
-          const payload = viewMode === 'caa'
-              ? { has_caa_override: true, caa_override_amount: amountNum }
-              : { amount: amountNum };
-          
-          return updateFeeRule(ruleIdNum, payload)
-        } else {
-          // Create new classification-specific rule based on template
-          const payload = {
-            fee_name: templateRule.fee_name,
-            fee_code: templateRule.fee_code,
-            applies_to_aircraft_classification_id: classificationId,
-            amount: amountNum,
-            currency: templateRule.currency,
-            is_taxable: templateRule.is_taxable,
-            is_potentially_waivable_by_fuel_uplift: templateRule.is_potentially_waivable_by_fuel_uplift,
-            calculation_basis: templateRule.calculation_basis,
-            waiver_strategy: templateRule.waiver_strategy,
-            simple_waiver_multiplier: templateRule.simple_waiver_multiplier,
-            has_caa_override: viewMode === 'caa' ? true : templateRule.has_caa_override,
-            caa_override_amount: viewMode === 'caa' ? amountNum : templateRule.caa_override_amount,
-            caa_waiver_strategy_override: templateRule.caa_waiver_strategy_override,
-            caa_simple_waiver_multiplier_override: templateRule.caa_simple_waiver_multiplier_override,
-            is_primary_fee: templateRule.is_primary_fee,
-          }
-          
-          return createFeeRule(payload)
-        }
+        return upsertFeeRuleOverride(payload)
       })
       
       return Promise.all(updatePromises)
@@ -142,26 +130,28 @@ export function EditClassificationDefaultsDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="flex items-center gap-2">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className={iconOnly ? "h-8" : "flex items-center gap-2"}
+          title={iconOnly ? "Edit Class Defaults" : undefined}
+        >
           <Edit className="h-3 w-3" />
-          Edit Class Defaults
+          {!iconOnly && "Edit Class Defaults"}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Edit Class Defaults</DialogTitle>
           <DialogDescription>
-            {classificationSpecificRules.length > 0 
-              ? `Update the default fee amounts for the "${classificationName}" classification. These values will be inherited by all aircraft in this classification unless overridden.`
-              : `Set classification-specific default fee amounts for the "${classificationName}" classification. This will create new fee rules specific to this classification based on the global defaults.`
-            }
+            Update the default fee amounts for the "{classificationName}" classification. These values will override the base fee amounts for all aircraft in this classification.
           </DialogDescription>
         </DialogHeader>
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid gap-4 max-h-96 overflow-y-auto">
-              {rulesToShow.map((rule) => (
+              {classificationRules.map((rule) => (
                 <FormField
                   key={rule.id}
                   control={form.control}
@@ -174,8 +164,8 @@ export function EditClassificationDefaultsDialog({
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                           <Input 
                             type="number" 
-                            step="0.01"
-                            placeholder="0.00" 
+                            step="1"
+                            placeholder="0" 
                             className="pl-8"
                             {...field} 
                           />
