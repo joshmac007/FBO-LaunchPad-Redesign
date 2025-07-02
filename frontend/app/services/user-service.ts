@@ -1,4 +1,5 @@
 import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config" // Removed checkApiHealth
+import { UserPreferences } from "@/app/schemas/user-preferences.schema"
 
 // Updated User Interface
 export interface User {
@@ -9,6 +10,7 @@ export interface User {
   roles: Array<{ id: number; name: string }> // Standardized to match backend RoleBriefSchema
   is_active: boolean
   created_at?: string // Optional: ISO timestamp
+  preferences: UserPreferences
 }
 
 // Role Interface
@@ -192,4 +194,20 @@ export async function getAdminUserById(userId: number): Promise<User> {
   })
   const data = await handleApiResponse<UserResponse>(response)
   return data.user
+}
+
+// User Preferences Functions
+
+export interface UserPreferencesResponse {
+  message: string
+  preferences: UserPreferences
+}
+
+export async function updateUserPreferences(preferences: Partial<UserPreferences>): Promise<UserPreferencesResponse> {
+  const response = await fetch(`${API_BASE_URL}/users/me/preferences`, {
+    method: "PATCH",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(preferences),
+  })
+  return handleApiResponse<UserPreferencesResponse>(response)
 }

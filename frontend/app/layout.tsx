@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import StagewiseToolbarWrapper from "@/components/stagewise-toolbar"
 import { PermissionProvider } from "@/app/contexts/permission-context"
+import { UserPreferencesProviderWrapper } from "@/app/providers/user-preferences-provider"
 import { QueryProvider } from "@/app/providers/query-provider"
 
 const montserrat = Montserrat({
@@ -31,7 +32,9 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <QueryProvider>
             <PermissionProvider>
-              {children}
+              <UserPreferencesProviderWrapper>
+                {children}
+              </UserPreferencesProviderWrapper>
             </PermissionProvider>
           </QueryProvider>
           <Toaster />

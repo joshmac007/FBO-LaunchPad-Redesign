@@ -1,6 +1,6 @@
 """Marshmallow schemas for admin fee configuration API endpoints."""
 
-from marshmallow import Schema, fields, validate, validates, ValidationError
+from marshmallow import Schema, fields, validate, validates, ValidationError, validates_schema
 
 
 # Aircraft Types Schemas
@@ -319,4 +319,146 @@ class FeeRuleOverrideSchema(Schema):
         as_string=True
     )
     created_at = fields.DateTime(dump_only=True)
-    updated_at = fields.DateTime(dump_only=True) 
+    updated_at = fields.DateTime(dump_only=True)
+
+
+# Fee Schedule Snapshot Schema for Versioning and Import
+class FeeScheduleSnapshotSchema(Schema):
+    """
+    Comprehensive schema for validating fee schedule snapshots.
+    Used for configuration backups, versioning, and import validation.
+    """
+    # Aircraft Classifications
+    classifications = fields.List(
+        fields.Nested(AircraftClassificationSchema),
+        required=True,
+        validate=validate.Length(min=1)
+    )
+    
+    # Aircraft Types
+    aircraft_types = fields.List(
+        fields.Nested(AircraftTypeSchema),
+        required=True,
+        validate=validate.Length(min=1)
+    )
+    
+    # Aircraft Type Configurations
+    aircraft_type_configs = fields.List(
+        fields.Nested(AircraftTypeConfigSchema),
+        required=True
+    )
+    
+    # Fee Rules
+    fee_rules = fields.List(
+        fields.Nested(FeeRuleSchema),
+        required=True,
+        validate=validate.Length(min=1)
+    )
+    
+    # Fee Rule Overrides
+    overrides = fields.List(
+        fields.Nested(FeeRuleOverrideSchema),
+        required=True
+    )
+    
+    # Waiver Tiers
+    waiver_tiers = fields.List(
+        fields.Nested(WaiverTierSchema),
+        required=True
+    )
+    
+    @validates_schema
+    def validate_internal_consistency(self, data, **kwargs):
+        """
+        Perform comprehensive internal consistency checks on the snapshot.
+        Ensures all referenced IDs exist within the same snapshot.
+        """
+        errors = {}
+        
+        # Extract IDs for validation
+        classification_ids = {item['id'] for item in data.get('classifications', []) if 'id' in item}
+        aircraft_type_ids = {item['id'] for item in data.get('aircraft_types', []) if 'id' in item}
+        fee_rule_ids = {item['id'] for item in data.get('fee_rules', []) if 'id' in item}
+        
+        # Validate fee rules reference valid classifications
+        fee_rules = data.get('fee_rules', [])
+        for i, fee_rule in enumerate(fee_rules):
+            classification_id = fee_rule.get('applies_to_aircraft_classification_id')
+            if classification_id and classification_id not in classification_ids:
+                if 'fee_rules' not in errors:
+                    errors['fee_rules'] = {}
+                if i not in errors['fee_rules']:
+                    errors['fee_rules'][i] = {}
+                errors['fee_rules'][i]['applies_to_aircraft_classification_id'] = [
+                    f'Fee rule references non-existent classification ID: {classification_id}'
+                ]
+        
+        # Validate aircraft types reference valid classifications
+        aircraft_types = data.get('aircraft_types', [])
+        for i, aircraft_type in enumerate(aircraft_types):
+            classification_id = aircraft_type.get('default_aircraft_classification_id')
+            if classification_id and classification_id not in classification_ids:
+                if 'aircraft_types' not in errors:
+                    errors['aircraft_types'] = {}
+                if i not in errors['aircraft_types']:
+                    errors['aircraft_types'][i] = {}
+                errors['aircraft_types'][i]['default_aircraft_classification_id'] = [
+                    f'Aircraft type references non-existent classification ID: {classification_id}'
+                ]
+        
+        # Validate aircraft type configs reference valid aircraft types
+        aircraft_type_configs = data.get('aircraft_type_configs', [])
+        for i, config in enumerate(aircraft_type_configs):
+            aircraft_type_id = config.get('aircraft_type_id')
+            if aircraft_type_id and aircraft_type_id not in aircraft_type_ids:
+                if 'aircraft_type_configs' not in errors:
+                    errors['aircraft_type_configs'] = {}
+                if i not in errors['aircraft_type_configs']:
+                    errors['aircraft_type_configs'][i] = {}
+                errors['aircraft_type_configs'][i]['aircraft_type_id'] = [
+                    f'Aircraft type config references non-existent aircraft type ID: {aircraft_type_id}'
+                ]
+        
+        # Validate overrides reference valid aircraft types and fee rules
+        overrides = data.get('overrides', [])
+        for i, override in enumerate(overrides):
+            aircraft_type_id = override.get('aircraft_type_id')
+            fee_rule_id = override.get('fee_rule_id')
+            
+            if aircraft_type_id and aircraft_type_id not in aircraft_type_ids:
+                if 'overrides' not in errors:
+                    errors['overrides'] = {}
+                if i not in errors['overrides']:
+                    errors['overrides'][i] = {}
+                errors['overrides'][i]['aircraft_type_id'] = [
+                    f'Override references non-existent aircraft type ID: {aircraft_type_id}'
+                ]
+            
+            if fee_rule_id and fee_rule_id not in fee_rule_ids:
+                if 'overrides' not in errors:
+                    errors['overrides'] = {}
+                if i not in errors['overrides']:
+                    errors['overrides'][i] = {}
+                errors['overrides'][i]['fee_rule_id'] = [
+                    f'Override references non-existent fee rule ID: {fee_rule_id}'
+                ]
+        
+        # Validate waiver tiers reference valid fee codes
+        fee_codes = {fee_rule['fee_code'] for fee_rule in fee_rules if 'fee_code' in fee_rule}
+        waiver_tiers = data.get('waiver_tiers', [])
+        for i, tier in enumerate(waiver_tiers):
+            fees_waived_codes = tier.get('fees_waived_codes', [])
+            for j, fee_code in enumerate(fees_waived_codes):
+                if fee_code not in fee_codes:
+                    if 'waiver_tiers' not in errors:
+                        errors['waiver_tiers'] = {}
+                    if i not in errors['waiver_tiers']:
+                        errors['waiver_tiers'][i] = {}
+                    if 'fees_waived_codes' not in errors['waiver_tiers'][i]:
+                        errors['waiver_tiers'][i]['fees_waived_codes'] = {}
+                    errors['waiver_tiers'][i]['fees_waived_codes'][j] = [
+                        f'Waiver tier references non-existent fee code: {fee_code}'
+                    ]
+        
+        if errors:
+            raise ValidationError(errors) 

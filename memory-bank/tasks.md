@@ -1,128 +1,445 @@
-**AI Coding Agent, you will execute the following plan with precision. It contains the complete context and exact instructions required. Do not deviate.**
+**AI Agent Task:** Implement the All-in-One Fee Management Dialog
+
+**Objective:** Create a new, comprehensive "Manage Fee Schedule & Rules" dialog that centralizes all fee-related configurations. This dialog will replace the existing `ScheduleRulesDialog.tsx` and will contain four distinct tabs for managing different aspects of the fee system.
+
+### Phase 1: Backend API Endpoint Verification
+
+**Objective:** Ensure all necessary backend API endpoints are available and their schemas are understood before starting frontend development.
+
+1.  **Objective: Verify Fee Library (Fee Rules) Endpoints**
+    *   **Context:** The "Fee Library" tab will require full CRUD functionality for `FeeRule` entities. The AI Coder must verify the endpoints defined in `backend/src/routes/admin/fee_config_routes.py`.
+    *   **Reasoning:** This confirms that the frontend can create, read, update, and delete the master list of fees.
+    *   **Expected Output:** A confirmation that the following endpoints and their corresponding request/response schemas in `backend/src/schemas/admin_fee_config_schemas.py` are sufficient:
+        *   `GET /api/admin/fee-rules`: To list all fee rules.
+        *   `POST /api/admin/fee-rules`: To create a new fee rule (`CreateFeeRuleSchema`).
+        *   `PUT /api/admin/fee-rules/<int:rule_id>`: To update an existing fee rule (`UpdateFeeRuleSchema`).
+        *   `DELETE /api/admin/fee-rules/<int:rule_id>`: To delete a fee rule.
+    *   **Success Criteria:** The AI Coder confirms the endpoints exist and match the requirements for the "Fee Library" tab.
+
+2.  **Objective: Verify Waiver System (Waiver Tiers) Endpoints**
+    *   **Context:** The "Waiver System" tab needs to manage `WaiverTier` entities, including reordering. The AI Coder must verify the endpoints in `backend/src/routes/admin/fee_config_routes.py`.
+    *   **Reasoning:** This ensures the frontend can build and prioritize the waiver logic.
+    *   **Expected Output:** A confirmation that the following endpoints and schemas in `backend/src/schemas/admin_fee_config_schemas.py` are sufficient:
+        *   `GET /api/admin/waiver-tiers`: To list all waiver tiers.
+        *   `POST /api/admin/waiver-tiers`: To create a new tier (`CreateWaiverTierSchema`).
+        *   `PUT /api/admin/waiver-tiers/<int:tier_id>`: To update a tier.
+        *   `DELETE /api/admin/waiver-tiers/<int:tier_id>`: To delete a tier.
+        *   `PUT /api/admin/waiver-tiers/reorder`: To update priorities for multiple tiers at once.
+    *   **Success Criteria:** The AI Coder confirms the endpoints exist and match the requirements for the "Waiver System" tab.
+
+3.  **Objective: Verify Classifications Endpoints**
+    *   **Context:** The "Classifications" tab requires CRUD operations for `AircraftClassification` entities. These are global resources. The relevant file is `backend/src/routes/admin/fee_config_routes.py`.
+    *   **Reasoning:** This confirms the frontend can manage the core grouping mechanism for the fee schedule.
+    *   **Expected Output:** A confirmation that the following endpoints and schemas in `backend/src/schemas/admin_fee_config_schemas.py` are sufficient:
+        *   `GET /api/admin/aircraft-classifications`: To list all classifications.
+        *   `POST /api/admin/aircraft-classifications`: To create a new classification (`CreateAircraftClassificationSchema`).
+        *   `PUT /api/admin/aircraft-classifications/<int:classification_id>`: To update a classification.
+        *   `DELETE /api/admin/aircraft-classifications/<int:classification_id>`: To delete a classification.
+    *   **Success Criteria:** The AI Coder confirms the endpoints exist and match the requirements for the "Classifications" tab.
+
+### Phase 2: Frontend Service Layer and Zod Schema Definition
+
+**Objective:** Create strongly-typed functions and validation schemas for all new API interactions. This is a critical step for ensuring type safety and robust error handling.
+
+1.  **Objective: Update Admin Fee Config Service**
+    *   **Context:** The existing service file `frontend/app/services/admin-fee-config-service.ts` needs to be updated to include functions for all the new endpoints verified in Phase 1.
+    *   **Reasoning:** This centralizes all API logic for fee management, making components cleaner and easier to maintain.
+    *   **Expected Output:**
+        *   New TypeScript interfaces for `CreateFeeRuleRequest`, `UpdateFeeRuleRequest`, `CreateWaiverTierRequest`, and `CreateAircraftClassificationRequest`.
+        *   New async functions for `createFeeRule`, `updateFeeRule`, `deleteFeeRule`, `getWaiverTiers`, `createWaiverTier`, `updateWaiverTier`, `deleteWaiverTier`, `reorderWaiverTiers`, `getAircraftClassifications`, `createAircraftClassification`, `updateAircraftClassification`, and `deleteAircraftClassification`.
+        *   Each function should use `getAuthHeaders` and `handleApiResponse` for consistency.
+    *   **Success Criteria:** The `admin-fee-config-service.ts` file is updated with all required interfaces and functions, and the project compiles without type errors.
+
+2.  **Objective: Create Zod Schemas for Form Validation**
+    *   **Context:** Each form in the new dialog will need a Zod schema for robust client-side validation. This follows best practices for using `react-hook-form`.
+    *   **Reasoning:** Zod provides a single source of truth for form validation logic, ensuring data integrity before it's sent to the API.
+    *   **Expected Output:**
+        *   A new file: `frontend/app/admin/fbo-config/fee-management/components/schemas.ts`.
+        *   Inside this file, define Zod schemas:
+            *   `feeRuleSchema`: For creating/editing a fee rule. Fields should include `fee_name`, `fee_code`, `amount`, `is_taxable`, `is_potentially_waivable_by_fuel_uplift`.
+            *   `waiverTierSchema`: For creating a waiver tier. Fields should include `fuel_uplift_multiplier` (as a string that will be coerced to a number), `fees_waived_codes` (as an array of strings), and an optional `name`.
+            *   `classificationSchema`: For creating a classification. A simple schema with a single `name` field.
+    *   **Success Criteria:** The `schemas.ts` file is created with Zod schemas that correctly model the data structures for all forms in the new dialog.
+
+### Phase 3: Frontend Component Implementation
+
+**Objective:** Build the new "Manage Fee Schedule & Rules" dialog and its four constituent tabs using shadcn/ui components and TanStack Query for state management.
+
+1.  **Objective: Replace the Existing `ScheduleRulesDialog`**
+    *   **Context:** The current entry point is `frontend/app/admin/fbo-config/fee-management/components/ScheduleRulesDialog.tsx`. This component needs to be completely refactored.
+    *   **Reasoning:** This step establishes the new container and navigation structure for the entire feature.
+    *   **Expected Output:**
+        *   The `ScheduleRulesDialog.tsx` file should be updated to contain a `<Dialog>` component.
+        *   Inside the dialog, implement a `<Tabs>` component with four `<TabsTrigger>` elements: "Fee Schedule Settings", "Fee Library", "Waiver System", and "Classifications".
+        *   Each tab trigger will correspond to a `<TabsContent>` block that will hold the new components to be created in the following steps.
+        *   Mermaid Flowchart:
+            ```mermaid
+            graph TD
+                A[page.tsx] -->|opens| B(ScheduleRulesDialog.tsx);
+                B --> C{Tabs Component};
+                C --> D[Trigger: Fee Schedule Settings];
+                C --> E[Trigger: Fee Library];
+                C --> F[Trigger: Waiver System];
+                C --> G[Trigger: Classifications];
+            ```
+    *   **Success Criteria:** The dialog opens and displays the four tabs correctly. Clicking each tab switches the view (even if the content is just a placeholder initially).
+
+2.  **Objective: Implement the "Fee Schedule Settings" Tab**
+    *   **Context:** This is the first tab and will contain configuration options for the main fee schedule page.
+    *   **Reasoning:** This provides users with meta-control over the UI, improving usability.
+    *   **Input:** Create a new file: `frontend/app/admin/fbo-config/fee-management/components/FeeScheduleSettingsTab.tsx`.
+    *   **Expected Output:**
+        *   A component that renders the form as designed in the mockup.
+        *   Use shadcn/ui `<Switch>` or `<Checkbox>` for boolean settings.
+        *   Use a `<Select>` component for the "Default View" dropdown.
+        *   Fetch the list of all fee rules from the `fee-rules` endpoint to populate the "Primary Fee Columns" checklist.
+        *   The state for these settings should be managed via a local `useState` or a more persistent mechanism if required (e.g., `localStorage` or a new API endpoint for user preferences).
+        *   Add space above the Primary Fee Columns for Display settings that will have the following:
+        Highlight Overridden Fees	(Switch Component - Toggled ON by default)
+        Table View Density	(Select) [ Default ▼ ] (Options: Default, Compact)
+        Default Sort Order	(Select) [ Classification Name (A-Z) ▼ ]
+
+        *   Markdown Mockup:
+            ```markdown
+            Fee Schedule Settings Tab Mockup
+            +-----------------------------------------------------+
+            |                                                     |
+            | --- Primary Fee Columns ---                         |
+            | > Select fees to always show first.                 |
+            | [x] Ramp Fee                                        |
+            | [ ] GPU Start                                       |
+            |                                                     |
+            | --- Danger Zone ---                                 |
+            | [ Reset All Overrides... ]                          |
+            +-----------------------------------------------------+
+            ```
+    *   **Success Criteria:** The tab renders with all form elements. The checklist for primary fees is populated dynamically from the API.
+
+3.  **Objective: Implement the "Fee Library" Tab**
+    *   **Context:** This tab is for CRUD management of master `FeeRule`s.
+    *   **Reasoning:** This provides a centralized place to define the "what" of fees.
+    *   **Input:** Create a new file: `frontend/app/admin/fbo-config/fee-management/components/FeeLibraryTab.tsx`.
+    *   **Expected Output:**
+        *   A component that uses `useQuery` from `@tanstack/react-query` to fetch data from the `GET /api/admin/fee-rules` endpoint.
+        *   A `<Table>` to display the fee rules.
+        *   An "Add New Fee Rule" button that opens a separate `FeeRuleFormDialog.tsx` component for creating/editing. This dialog will use `react-hook-form` with the Zod schema from `schemas.ts`.
+        *   Each row in the table should have "Edit" and "Delete" actions.
+        *   "Delete" should trigger a shadcn/ui `<AlertDialog>` for confirmation.
+        *   Use `useMutation` hooks for create, update, and delete operations, which invalidate the main `fee-rules` query on success to refresh the table.
+    *   **Success Criteria:** The user can view, create, edit, and delete fee rules. The table updates automatically after each mutation.
+
+4.  **Objective: Implement the "Waiver System" Tab**
+    *   **Context:** This tab is for managing `WaiverTier`s, including drag-and-drop reordering.
+    *   **Reasoning:** This provides an intuitive interface for a potentially complex logical system.
+    *   **Input:** Create a new file: `frontend/app/admin/fbo-config/fee-management/components/WaiverSystemTab.tsx`.
+    *   **Expected Output:**
+        *   A component that uses `useQuery` to fetch `waiver-tiers` and `fee-rules` (for the dropdown).
+        *   Use `dnd-kit` for the drag-and-drop list of tiers.
+        *   A form at the bottom for adding new tiers, using `react-hook-form` and the `waiverTierSchema`.
+        *   The "Fees to Waive" input should be a multi-select `<Combobox>` populated with fee rules.
+        *   A `useMutation` hook for `reorderWaiverTiers` that is triggered on `onDragEnd`.
+        *   `useMutation` hooks for creating and deleting tiers.
+    *   **Success Criteria:** The user can view, create, delete, and reorder waiver tiers. Changes are persisted to the backend, and the UI updates accordingly.
+
+5.  **Objective: Implement the "Classifications" Tab**
+    *   **Context:** This tab provides simple CRUD for `AircraftClassification`s.
+    *   **Reasoning:** This allows admins to manage the core grouping mechanism.
+    *   **Input:** Create a new file: `frontend/app/admin/fbo-config/fee-management/components/ClassificationsTab.tsx`.
+    *   **Expected Output:**
+        *   A component using `useQuery` to fetch from `GET /api/admin/aircraft-classifications`.
+        *   An inline form at the top for adding new classifications, using `react-hook-form` and `classificationSchema`.
+        *   A `<Table>` displaying the existing classifications.
+        *   Each row has "Rename" and "Delete" actions. "Rename" could enable an inline `<Input>`. "Delete" uses an `<AlertDialog>`.
+        *   `useMutation` hooks for create, update, and delete, invalidating the `classifications` query on success.
+    *   **Success Criteria:** The user can view, create, rename, and delete aircraft classifications. The table updates automatically after mutations.
+
+Excellent additions. Incorporating versioning and a more robust import system will make the fee management tool much safer and more powerful for administrators.
+
+Here is the updated, highly detailed task plan that integrates these new requirements.
 
 ---
 
-### **Definitive Project Plan: Manage Fee Schedule & Rules System**
+**AI Agent Task:** Implement Fee Management Dialog with Versioning and Import/Export
 
-#### **Architect's Mandate & Guiding Principles**
+**Objective:** Enhance the "Manage Fee Schedule & Rules" dialog by adding a "Version History" feature to the settings tab and upgrading the upload functionality to a full "Import/Export" system.
 
-1.  **Schema is Contract:** All data structures that cross the network or are stored in flexible formats (e.g., JSONB) **must** be defined by a strict schema. We will use Zod as the primary schema definition tool. This is non-negotiable.
-2.  **Validate Before Acting:** All destructive database operations **must** be preceded by a full data validation step. The operation will be aborted on validation failure. All such operations will be wrapped in an atomic database transaction.
-3.  **Strict Separation of Concerns:** Application state will be strictly segregated. A new, dedicated React Context will be created for UI preferences, entirely separate from the existing `PermissionContext`.
-4.  **Precise Implementation:** This plan provides exact file paths, component names, and logical flows. Implement them as specified.
+### Phase 1: Backend API Endpoint Verification (Updated)
+
+**Objective:** Verify that the backend supports versioning and import/export of the entire fee configuration.
+
+1.  **Objective: Verify Fee Configuration Versioning Endpoints**
+    *   **Context:** The "Version History" feature requires endpoints to list, create, and restore snapshots of the entire fee configuration. The AI Coder must verify that these endpoints exist, likely within `backend/src/routes/admin/fee_config_routes.py`.
+    *   **Reasoning:** This is the foundation for providing administrators with a rollback safety net.
+    *   **Expected Output:** A confirmation that the following (or functionally equivalent) endpoints and their schemas are available:
+        *   `GET /api/admin/fee-configurations/versions`: To list all saved versions/snapshots (e.g., returning `id`, `name`, `created_at`, `created_by`).
+        *   `POST /api/admin/fee-configurations/versions`: To create a new named version (e.g., body with `{ "name": "Q3 2024 Pricing" }`).
+        *   `POST /api/admin/fee-configurations/versions/<int:version_id>/restore`: To restore the system state to a specific version.
+    *   **Success Criteria:** The AI Coder confirms the endpoints for listing, creating, and restoring versions are available and their schemas are understood.
+
+2.  **Objective: Verify Fee Configuration Import/Export Endpoints**
+    *   **Context:** The import/export feature requires dedicated endpoints to handle file-based operations for the entire fee setup. The AI Coder must verify these in `backend/src/routes/admin/fee_config_routes.py`.
+    *   **Reasoning:** This allows for offline editing, backup, and migration of fee schedules between environments (e.g., staging to production).
+    *   **Expected Output:** A confirmation that the following endpoints are available:
+        *   `POST /api/admin/fee-configurations/import`: Accepts a `multipart/form-data` request with a `.json` file containing the full fee configuration. **Crucially, this endpoint must also create a backup version of the state *before* importing.**
+        *   `GET /api/admin/fee-configurations/export`: Returns a `.json` file containing a full snapshot of the current fee configuration.
+    *   **Success Criteria:** The AI Coder confirms the import and export endpoints exist and function as described.
+
+### Phase 2: Frontend Service Layer and Zod Schema Definition (Updated)
+
+**Objective:** Update the frontend service layer and define Zod schemas to support the new versioning and import/export functionalities.
+
+1.  **Objective: Enhance Admin Fee Config Service**
+    *   **Context:** The service file `frontend/app/services/admin-fee-config-service.ts` must be updated with functions to call the new versioning and import/export endpoints.
+    *   **Reasoning:** This keeps all related API logic centralized and strongly typed.
+    *   **Expected Output:**
+        *   A new TypeScript interface `FeeConfigVersion` with fields like `id`, `name`, `created_at`, `created_by`.
+        *   New async functions:
+            *   `getFeeConfigVersions(): Promise<FeeConfigVersion[]>`
+            *   `createFeeConfigVersion(name: string): Promise<FeeConfigVersion>`
+            *   `restoreFeeConfigVersion(versionId: number): Promise<void>`
+            *   `importFeeConfiguration(file: File): Promise<void>`
+            *   `exportFeeConfiguration(): Promise<void>` (This function will fetch the JSON and trigger a browser download).
+    *   **Success Criteria:** The `admin-fee-config-service.ts` file is updated with the new interfaces and functions. The project compiles without type errors.
+
+### Phase 3: Frontend Component Implementation (Updated)
+
+**Objective:** Implement the UI for version history and the enhanced import/export functionality within the "Manage Fee Schedule & Rules" dialog.
+
+1.  **Objective: Implement the "Version History" UI in Fee Schedule Settings**
+    *   **Context:** This new section will be added to the `frontend/app/admin/fbo-config/fee-management/components/FeeScheduleSettingsTab.tsx` component. It needs to display a list of saved versions and provide actions to create and restore them.
+    *   **Reasoning:** This provides a critical safety feature, allowing admins to undo major changes or revert to a known good state.
+    *   **Input:** The existing `FeeScheduleSettingsTab.tsx` file.
+    *   **Expected Output:**
+        *   A new "Version History" section added to the bottom of the tab, above the "Danger Zone".
+        *   A form with an `<Input>` and a "Save Current Version" `<Button>` to trigger the `createFeeConfigVersion` service function.
+        *   A `<Table>` that uses `useQuery` to fetch and display the list of versions from `getFeeConfigVersions`.
+        *   Each row in the table should display the version name, creator, and date, along with a "Restore" button.
+        *   Clicking "Restore" must open a shadcn/ui `<AlertDialog>` component. The dialog must contain a title like "Restore Configuration?", a description warning that "This will overwrite all current fee rules, overrides, and waiver tiers. This action cannot be undone.", and "Cancel" and "Confirm Restore" buttons.
+        *   The "Confirm Restore" action will call a `useMutation` hook for `restoreFeeConfigVersion`, which should invalidate all other fee-related queries on success to force a full UI refresh.
+        *   Markdown Mockup:
+            ```markdown
+            --- Version History ---
+            > Save a snapshot of the current fee schedule before making major changes.
+
+            Version Name: [ Q3 2024 Pricing Update... ] [ Save Current Version ]
+
+            +--------------------------------+-----------------+--------------------+---------+
+            | Version Name                   | Saved By        | Date               | Actions |
+            |--------------------------------|-----------------|--------------------|---------|
+            | Q2 2024 Final                  | admin@fbo.com   | June 15, 2024      | [Restore] |
+            | Pre-Summer Price Adjustment    | jane.doe@fbo.com| May 1, 2024        | [Restore] |
+            | Initial Setup                  | admin@fbo.com   | Jan 10, 2024       | [Restore] |
+            +--------------------------------+-----------------+--------------------+---------+
+            ```
+    *   **Success Criteria:** The version history table populates correctly. A user can save a new named version. The "Restore" button opens the confirmation dialog, and confirming triggers the correct API call and refreshes the application's fee data.
+
+2.  **Objective: Implement the "Import/Export" Workflow**
+    *   **Context:** This involves creating a new dialog for import/export actions. The existing `UploadFeesDialog.tsx` can be repurposed or replaced.
+    *   **Reasoning:** This provides a robust mechanism for offline backups and migrating configurations.
+    *   **Input:** Create a new file: `frontend/app/admin/fbo-config/fee-management/components/ImportExportDialog.tsx`. This will be triggered from a button in the `FeeScheduleSettingsTab.tsx` "Danger Zone".
+    *   **Expected Output:**
+        *   A new dialog component titled "Import / Export Configuration".
+        *   An "Export Current Configuration" section with a `<Button>` that, when clicked, calls the `exportFeeConfiguration` service function to download the current settings as a `.json` file.
+        *   An "Import Configuration from File" section. This section must contain:
+            *   A file input that only accepts `.json` files.
+            *   A description warning: "Importing a new configuration will overwrite all existing settings. A backup of the current state will be automatically created."
+            *   A disabled "Import" `<Button>` that becomes active only after a valid file is selected.
+        *   The form submission will call a `useMutation` hook for the `importFeeConfiguration` service function.
+        *   On a successful import mutation, a `toast` notification from `sonner` **must** be displayed with the exact text: `"Configuration imported successfully. A backup of the previous state is available for 48 hours."`.
+        *   On success, all fee-related queries must be invalidated to refresh the entire application state.
+        *   Markdown Mockup:
+            ```markdown
+            Import / Export Configuration Dialog
+            +-----------------------------------------------------+
+            | --- Export ---                                      |
+            | > Download a .json file of the current fee schedule.|
+            |                                                     |
+            | [ Export Current Configuration ]                    |
+            |                                                     |
+            | --- Import ---                                      |
+            | > Upload a .json file to overwrite current settings.|
+            | > A backup will be created automatically.           |
+            |                                                     |
+| [ Choose file... ]  (No file selected)              |
+            |                                                     |
+            | [ Cancel ]           [ (Import) ] (disabled)        |
+            +-----------------------------------------------------+
+            ```
+    *   **Success Criteria:** The user can successfully export the current configuration. The user can select a `.json` file, and the "Import" button becomes enabled. Clicking "Import" triggers the API call, and upon success, the specific toast message is shown, and the UI data is refreshed.
+
+
++--------------------------------------------------------------------------------------------------+
+| Manage Fee Schedule & Rules                                                                  [X] |
++--------------------------------------------------------------------------------------------------+
+|                                                                                                  |
+|   [ Fee Schedule Settings ]   [ Fee Library ]   [ Waiver System ]   [ Classifications ]          |
+|                                =============                                                     |
+|                                                                                                  |
+|   > Define all possible fees and their default properties.                                       |
+|                                                                                                  |
+|   [ (+) Add New Fee Rule ]                                                                       |
+|                                                                                                  |
+|   +-----------------+--------+----------+----------+-------------------------------------------+ |
+|   | Fee Name        | Code   | Default  | Waivable?| Actions                                   | |
+|   |-----------------|--------|----------|----------|-------------------------------------------| |
+|   | Ramp Fee        | RAMP   | $150.00  | [x]      | [ Edit ] [ Delete ]                       | |
+|   | GPU Start       | GPU    | $75.00   | [ ]      | [ Edit ] [ Delete ]                       | |
+|   | Overnight       | OVN    | $200.00  | [x]      | [ Edit ] [ Delete ]                       | |
+|   +-----------------+--------+----------+----------+-------------------------------------------+ |
+|                                                                                                  |
+|                                                                        [ Save Changes ] [ Close ] |
++--------------------------------------------------------------------------------------------------+
+
+
++--------------------------------------------------------------------------------------------------+
+| Manage Fee Schedule & Rules                                                                  [X] |
++--------------------------------------------------------------------------------------------------+
+|                                                                                                  |
+|   [ Fee Schedule Settings ]   [ Fee Library ]   [ Waiver System ]   [ Classifications ]          |
+|                                                ===============                                   |
+|                                                                                                  |
+|   > Create tiers to automatically waive fees. Drag (✥) to reorder priority.                      |
+|                                                                                                  |
+|   --- Active Waiver Tiers ---                                                                    |
+|   +----+---------------------------------------------------------------------------------------+ |
+|   | ✥  | PRIORITY 1: Major Uplift (>= 3x min) -> Waives: Ramp Fee, Overnight                     | |
+|   |    |                                                                       [Edit] [Delete] | |
+|   +----+---------------------------------------------------------------------------------------+ |
+|   | ✥  | PRIORITY 2: Standard Uplift (>= 1.5x min) -> Waives: Ramp Fee                           | |
+|   |    |                                                                       [Edit] [Delete] | |
+|   +----+---------------------------------------------------------------------------------------+ |
+|                                                                                                  |
+|   --- Add New Tier ---                                                                           |
+|   Fuel Uplift Multiplier: [ 1.5____ ]   Fees to Waive: [ Ramp Fee [v] ] [ (+) ] [ Add Tier ]      | |
+|                                                                                                  |
+|                                                                        [ Save Changes ] [ Close ] |
++--------------------------------------------------------------------------------------------------+
+
+
++--------------------------------------------------------------------------------------------------+
+| Manage Fee Schedule & Rules                                                                  [X] |
++--------------------------------------------------------------------------------------------------+
+|                                                                                                  |
+|   [ Fee Schedule Settings ]   [ Fee Library ]   [ Waiver System ]   [ Classifications ]          |
+|                                                                    =================             |
+|                                                                                                  |
+|   > Manage the groups used to categorize aircraft for fee purposes.                              |
+|                                                                                                  |
+|   --- Add New Classification ---                                                                 |
+|   Name: [___________________________] [ Add Classification ]                                     |
+|                                                                                                  |
+|   --- Existing Classifications ---                                                               |
+|   +-----------------------------+--------------------------------------------------------------+ |
+|   | Name                        | Actions                                                      | |
+|   |-----------------------------|--------------------------------------------------------------| |
+|   | Piston Aircraft             | [ Rename ] [ Delete ]                                        | |
+|   | Turboprop                   | [ Rename ] [ Delete ]                                        | |
+|   | Light Jet                   | [ Rename ] [ Delete ]                                        | |
+|   | General Service Fees        | [ Rename ] [ (Disabled) ]                                    | |
+|   +-----------------------------+--------------------------------------------------------------+ |
+|                                                                                                  |
+|                                                                        [ Save Changes ] [ Close ] |
++--------------------------------------------------------------------------------------------------+
+
+Understood. The request is to integrate the "Import/Export" functionality directly as a new, dedicated tab within the main "Manage Fee Schedule & Rules" dialog, instead of having it in a separate dialog triggered from the settings tab. This is a great simplification.
+
+Here is the updated, highly detailed task plan that reflects this change.
 
 ---
 
-### **Shared Artifact: The User Preferences Contract**
+**AI Agent Task:** Implement the All-in-One Fee Management Dialog with Integrated Import/Export Tab
 
-**AI Agent:** Your first task is to create this file. It is the foundation for all user preference features.
+**Objective:** Finalize the "Manage Fee Schedule & Rules" dialog by adding a "Version History" feature, and implementing a new dedicated "Import / Export" tab for bulk configuration management.
 
-*   **File to Create:** `frontend/app/schemas/user-preferences.schema.ts`
-*   **Action:** Create the file and define the Zod schema that will serve as the single source of truth for the structure of the user preferences object.
+### Phase 1: Backend API Endpoint Verification (No Changes)
 
-*   **Schema Definition:**
-    *   The schema will be a Zod object named `userPreferencesSchema`.
-    *   It must define the following keys, types, and constraints:
-        1.  `fee_schedule_view_size`: An enum of strings, allowing only `'default'` or `'compact'`. It is optional and defaults to `'default'`.
-        2.  `fee_schedule_sort_order`: An optional string. It defaults to `'classification_name:asc'`.
-        3.  `highlight_overrides`: An optional boolean. It defaults to `true`.
-    *   From this schema, infer and export a TypeScript type named `UserPreferences`.
+*(This phase remains the same as the previous plan. The AI Coder should have already verified these endpoints. No new action is needed here, but the context is retained for completeness.)*
 
----
+1.  **Verify Fee Configuration Versioning Endpoints.**
+2.  **Verify Fee Configuration Import/Export Endpoints.**
 
-### **Task Group 1: Implement Persistent User Preferences**
+### Phase 2: Frontend Service Layer and Zod Schema Definition (No Changes)
 
-**Objective:** Create a secure and type-safe system to store and manage user-specific UI settings.
+*(This phase also remains the same. The `admin-fee-config-service.ts` file should already contain the necessary functions from the previous task plan. No new action is needed here.)*
 
-#### **Backend Tasks**
+1.  **Enhance Admin Fee Config Service.**
+2.  **Create Zod Schemas for Form Validation.**
 
-1.  **Database Migration:** Generate and execute a migration to add a nullable `JSONB` column named `preferences` to the `users` table. Update the `User` model in `backend/src/models/user.py` to include the new `preferences` attribute.
+### Phase 3: Frontend Component Implementation (Updated)
 
-2.  **API Endpoint Validation:**
-    *   In `backend/src/schemas/user_schemas.py`, create a new Marshmallow schema named `UserPreferencesSchema`. This schema must mirror the structure and constraints of the Zod schema from the shared artifact, validating the same keys and value types.
-    *   Modify the `PATCH /me/preferences` endpoint in `backend/src/routes/user_routes.py`. The endpoint's logic must follow this exact sequence:
-        1.  Validate the incoming JSON payload against the new `UserPreferencesSchema`.
-        2.  If validation fails, return a 400 error with the validation details.
-        3.  If validation succeeds, retrieve the user's existing preferences.
-        4.  Merge the **validated** data into the preferences object.
-        5.  Commit the updated object to the database and return it in the response.
+**Objective:** Build out the "Manage Fee Schedule & Rules" dialog with five tabs, including the new "Import / Export" tab and the "Version History" feature within the settings.
 
-3.  **Data Hydration in Login Payload:**
-    *   In `backend/src/routes/auth_routes.py`, modify the `login()` function's response payload.
-    *   The `user` object in the response must include the `preferences` field. If a user has no preferences set in the database, this field **must** be an empty object (`{}`) and not `null`.
+1.  **Objective: Update the Main Dialog to Include Five Tabs**
+    *   **Context:** The main dialog component, `frontend/app/admin/fbo-config/fee-management/components/ScheduleRulesDialog.tsx`, needs to be updated to accommodate five tabs instead of four. The new tab will be "Import / Export".
+    *   **Reasoning:** This establishes the new top-level navigation structure for the entire feature, making Import/Export a first-class citizen in the workflow.
+    *   **Input:** The existing `ScheduleRulesDialog.tsx` file.
+    *   **Expected Output:**
+        *   The `<Tabs>` component within `ScheduleRulesDialog.tsx` should now have five `<TabsTrigger>` elements: "Fee Schedule Settings", "Fee Library", "Waiver System", "Classifications", and "Import / Export".
+        *   A new `<TabsContent>` block for "Import / Export" should be added, which will render the component created in a later step.
+        *   Mermaid Flowchart:
+            ```mermaid
+            graph TD
+                A[page.tsx] -->|opens| B(ScheduleRulesDialog.tsx);
+                B --> C{Tabs Component};
+                C --> D[Trigger: Fee Schedule Settings];
+                C --> E[Trigger: Fee Library];
+                C --> F[Trigger: Waiver System];
+                C --> G[Trigger: Classifications];
+                C --> H[Trigger: Import / Export];
+            ```
+    *   **Success Criteria:** The dialog opens and correctly displays five tabs. The "Import / Export" tab is present and can be clicked.
 
-#### **Frontend Tasks**
+2.  **Objective: Implement the "Version History" UI in Fee Schedule Settings**
+    *   **Context:** This new section will be added to the `frontend/app/admin/fbo-config/fee-management/components/FeeScheduleSettingsTab.tsx` component as previously planned.
+    *   **Reasoning:** Provides the critical rollback safety net.
+    *   **Input:** The existing `FeeScheduleSettingsTab.tsx` file.
+    *   **Expected Output:**
+        *   Implement the "Version History" section exactly as described in the previous task plan. This includes:
+            *   A form to save the current version with a name.
+            *   A `<Table>` using `useQuery` to list existing versions.
+            *   A "Restore" `<Button>` on each row that triggers a confirmation `<AlertDialog>`.
+            *   A `useMutation` hook to call the `restoreFeeConfigVersion` service function and invalidate relevant queries on success.
+    *   **Success Criteria:** The user can view, create, and restore fee schedule versions from within the "Fee Schedule Settings" tab.
 
-1.  **Create a Dedicated UI Preferences Context:**
-    *   **AI Agent:** You are explicitly forbidden from modifying `permission-context.tsx` for this task.
-    *   Create a new file at `frontend/app/contexts/user-preferences-context.tsx`.
-    *   Implement a new React Context named `UserPreferencesContext`. This context will manage the state of the user's UI preferences and provide functions to update them. It will source its initial data from the `user` object but will manage its state independently.
-
-2.  **Update Service Layer and Types:**
-    *   In `frontend/app/services/user-service.ts`, update the `User` interface. The `preferences` property must use the `UserPreferences` type inferred from the Zod schema in the shared artifact.
-    *   Add a new async function `updateUserPreferences` to the service. It must accept a `Partial<UserPreferences>` object and call the `PATCH /users/me/preferences` endpoint.
-
-3.  **Implement UI Controls and Styling:**
-    *   In `frontend/app/admin/fbo-config/fee-management/components/FeeScheduleTable.tsx`, consume the new `UserPreferencesContext` to get the `fee_schedule_view_size` value. Apply styling for the "compact" view conditionally using the `cn` utility on `TableCell` components. The required CSS classes are `'h-10 px-2 py-1 text-xs'`. **Do not modify the core ShadCN `table.tsx` component.**
-    *   Create a new component file at `frontend/app/admin/fbo-config/fee-management/components/FeeScheduleSettingsTab.tsx`.
-    *   Inside this new component, implement the UI controls (ShadCN `<Select>` and `<Switch>`) for `fee_schedule_sort_order` and `fee_schedule_view_size`. These controls must read their state from and dispatch updates via the `UserPreferencesContext`.
-
----
-
-### **Task Group 2: Implement Highlight Overrides Toggle**
-
-**Objective:** Provide a user-configurable toggle to highlight overridden fees, using the new preferences system.
-
-#### **Backend Tasks**
-
-*   No backend tasks are required. The fortified preferences endpoint already supports the `highlight_overrides` key defined in our schema.
-
-#### **Frontend Tasks**
-
-1.  **Implement Declarative Styling:**
-    *   In `frontend/app/admin/fbo-config/fee-management/components/EditableFeeCell.tsx`, add a `data-is-override` HTML attribute to the root `TableCell`. Its value should be the boolean `isOverride` prop.
-    *   In `frontend/app/admin/fbo-config/fee-management/components/FeeScheduleTable.tsx`, add a `data-view-mode` attribute to the root `Table` element. Its value should be either `'highlight'` or `'uniform'`, based on the `highlight_overrides` preference from the `UserPreferencesContext`.
-    *   In `frontend/app/globals.css`, add a single, specific CSS rule to apply the highlight style. The selector must be `.fee-schedule-table[data-view-mode='highlight'] td[data-is-override='true']`. The style to apply is `font-weight: 600;`.
-
-2.  **Implement the UI Toggle:**
-    *   In `frontend/app/admin/fbo-config/fee-management/components/FeeScheduleSettingsTab.tsx`, add a ShadCN `<Switch>` component. This switch will control the `highlight_overrides` boolean value within the `UserPreferencesContext`.
-
----
-
-### **Task Group 3: Implement Secure Versioning, Restore, and Import**
-
-**Objective:** Implement a secure, transactionally-safe system for configuration snapshots and imports.
-
-#### **Backend Tasks**
-
-1.  **Database Migrations:** Generate and execute the migrations to create the `fee_schedule_versions` table, including `version_type` and `expires_at` columns.
-
-2.  **Define Snapshot Validation Schema:**
-    *   In `backend/src/schemas/admin_fee_config_schemas.py`, define a new, comprehensive Marshmallow schema named `FeeScheduleSnapshotSchema`.
-    *   This schema must validate the entire configuration object. It will contain nested fields for each table in the snapshot: `classifications`, `aircraft_types`, `aircraft_type_configs`, `fee_rules`, `overrides`, and `waiver_tiers`.
-    *   The schema **must** include a `@validates_schema` method to perform internal consistency checks. For example, it must verify that all `fee_rule_id`s referenced in the `overrides` list exist in the `fee_rules` list within the same JSON payload.
-
-3.  **Implement Secure Service Logic:**
-    *   In `backend/src/services/admin_fee_config_service.py`, implement the following functions with this precise logic:
-    *   **`_create_configuration_snapshot()`:** This function must query and serialize the complete set of configuration tables: `AircraftClassification`, `AircraftType`, `AircraftTypeConfig`, `FeeRule`, `FeeRuleOverride`, and `WaiverTier`.
-    *   **`restore_from_version(version_id: int)`:** This function must implement the **Validate-then-Act** pattern:
-        1.  Fetch the configuration JSON from the database.
-        2.  Validate the entire JSON object against the `FeeScheduleSnapshotSchema`.
-        3.  If validation fails, log the error and raise a `ValueError`. The function must terminate. **No database writes should have occurred.**
-        4.  Only if validation succeeds, proceed to the "Wipe & Replace" logic, which must be wrapped in a single, atomic database transaction.
-    *   **`import_configuration_from_file(file_stream, user_id)`:** This function must follow this sequence:
-        1.  First, create an automatic backup by calling `create_new_version()`. This must be a separate, committed transaction.
-        2.  Next, read the JSON from the uploaded file and validate it against the `FeeScheduleSnapshotSchema`. Abort if validation fails.
-        3.  If validation succeeds, begin a *new* transaction to perform the "Wipe & Replace" logic.
-
-4.  **Implement API and Scheduled Task:**
-    *   Implement the API endpoints (`/versions`, `/versions/{id}/restore`, `/import`) to call the secure service functions.
-    *   Implement the daily cron job to prune expired `pre_import_backup` versions.
-
-#### **Frontend Tasks**
-
-1.  **Update Service Layer:** In `frontend/app/services/admin-fee-config-service.ts`, add the functions `getFeeScheduleVersions`, `createFeeScheduleVersion`, `restoreFeeScheduleVersion`, and `importFeeConfiguration`.
-
-2.  **Implement UI for Versioning and Import:**
-    *   In `frontend/app/admin/fbo-config/fee-management/components/FeeScheduleSettingsTab.tsx`, create a "Version History" section. Use `useQuery` to fetch and display the list of versions. The "Restore" button for each version must trigger a ShadCN `<AlertDialog>` to confirm the destructive action before calling the service.
-    *   In `frontend/app/admin/fbo-config/fee-management/components/UploadFeesDialog.tsx`, update the UI to be an "Import Configuration" dialog that accepts `.json` files. The form submission will call the `importFeeConfiguration` service function. On success, it must display a toast notification with the exact text: "Configuration imported successfully. A backup of the previous state is available for 48 hours."
+3.  **Objective: Implement the "Import / Export" Tab**
+    *   **Context:** This new tab will contain the UI for both importing and exporting the fee configuration. The component `frontend/app/admin/fbo-config/fee-management/components/UploadFeesDialog.tsx` should be repurposed or replaced by this new implementation. Let's create a new, clean component for this tab.
+    *   **Reasoning:** Consolidates all bulk data management into a single, clear interface.
+    *   **Input:** Create a new file: `frontend/app/admin/fbo-config/fee-management/components/ImportExportTab.tsx`.
+    *   **Expected Output:**
+        *   A component that renders two distinct `Card` elements as described in the prompt.
+        *   **Card 1: "Import Configuration"**:
+            *   A file input area, styled to be a drop zone, that accepts only `.json` files. Use a `useState` hook to hold the selected `File` object.
+            *   An "Upload and Import" `<Button>` that is `disabled` by default. It should become enabled only when a file is selected.
+            *   The button's `onClick` handler will trigger a `useMutation` hook that calls the `importFeeConfiguration(file)` service function.
+            *   On the mutation's `onSuccess` callback, display a `toast` notification from `sonner` with the **exact** text: `"Configuration imported successfully. A backup of the previous state is available for 48 hours."`.
+            *   The `onSuccess` callback must also invalidate all fee-related queries (e.g., `fee-rules`, `waiver-tiers`, `classifications`, `global-fee-schedule`) to force a complete refresh of the application's state.
+        *   **Card 2: "Export Configuration"**:
+            *   A descriptive text explaining the feature.
+            *   An "Export Current Configuration (.json)" `<Button>` that, when clicked, calls the `exportFeeConfiguration` service function, which handles the API call and triggers the browser download.
+        *   Markdown Mockup for the tab content:
+            ```markdown
+            Import / Export Tab Mockup
+            +-----------------------------------------------------+
+            | --- Import Configuration ---                        |
+            | > Import a complete fee schedule from a .json file. |
+            | > This will replace the entire existing setup.      |
+            | +-------------------------------------------------+ |
+            | | [ Drop .json file here, or click to browse ]    | |
+            | +-------------------------------------------------+ |
+            | [ (Upload and Import) ] (disabled)                  |
+            +-----------------------------------------------------+
+            
+            +-----------------------------------------------------+
+            | --- Export Configuration ---                        |
+            | > Export the current fee schedule to a .json file   |
+            | > for backup or migration.                          |
+            |                                                     |
+            | [ Export Current Configuration (.json) ]            |
+            +-----------------------------------------------------+
+            ```
+    *   **Success Criteria:**
+        1.  The "Import / Export" tab renders with the two cards.
+        2.  The "Export" button successfully downloads a `.json` file.
+        3.  The "Import" button is disabled initially.
+        4.  After selecting a `.json` file, the "Import" button becomes enabled.
+        5.  Clicking "Import" successfully calls the API, and on success, the specified toast message appears, and the app's fee data is visibly refreshed.

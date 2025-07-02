@@ -37,6 +37,9 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    # User preferences stored as JSONB
+    preferences = db.Column(db.JSON, nullable=True)
+    
     # LST-specific fields
     employee_id = db.Column(db.String(20), nullable=True, unique=True, index=True)
     status = db.Column(db.String(20), nullable=True, default='active', index=True)
@@ -85,6 +88,7 @@ class User(db.Model):
             'roles': [role.name for role in self.roles.all()],
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat(),
+            'preferences': self.preferences or {},
         }
         
         # Add LST-specific fields if they exist

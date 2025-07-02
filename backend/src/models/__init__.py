@@ -23,6 +23,7 @@ from .receipt import Receipt, ReceiptStatus
 from .receipt_line_item import ReceiptLineItem, LineItemType
 from .audit_log import AuditLog
 from .fee_rule_override import FeeRuleOverride
+from .fee_schedule_version import FeeScheduleVersion
 
 __all__ = [
     'Base',
@@ -57,5 +58,6 @@ __all__ = [
     'ReceiptLineItem',
     'LineItemType',
     'AuditLog',
-    'FeeRuleOverride'
+    'FeeRuleOverride',
+    'FeeScheduleVersion'
 ]

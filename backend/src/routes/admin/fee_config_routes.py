@@ -6,6 +6,8 @@ from marshmallow import ValidationError
 from typing import Dict, Any, cast
 
 from ...services.admin_fee_config_service import AdminFeeConfigService
+from ...models.fee_schedule_version import FeeScheduleVersion
+from ...extensions import db
 from ...schemas.admin_fee_config_schemas import (
     AircraftTypeSchema, UpdateAircraftTypeFuelWaiverSchema,
     AircraftClassificationSchema, CreateAircraftClassificationSchema, UpdateAircraftClassificationSchema,
@@ -14,7 +16,7 @@ from ...schemas.admin_fee_config_schemas import (
     FeeRuleSchema, CreateFeeRuleSchema, UpdateFeeRuleSchema,
     WaiverTierSchema, CreateWaiverTierSchema, UpdateWaiverTierSchema,
     CreateAircraftFeeSetupSchema, AircraftTypeConfigSchema, 
-    FeeRuleOverrideSchema
+    FeeRuleOverrideSchema, FeeScheduleSnapshotSchema
 )
 from ...utils.enhanced_auth_decorators_v2 import require_permission_v2
 
@@ -713,5 +715,118 @@ def set_fuel_prices():
         current_app.logger.error(f"Error setting fuel prices: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
+
+# ==========================================
+# Fee Schedule Versioning & Configuration Management
+# ==========================================
+
+@admin_fee_config_bp.route('/api/admin/fee-schedule/versions', methods=['GET'])
+@require_permission_v2('manage_fbo_fee_schedules')
+def get_fee_schedule_versions():
+    """Get all fee schedule versions."""
+    try:
+        versions = FeeScheduleVersion.query.order_by(FeeScheduleVersion.created_at.desc()).all()
+        versions_data = [version.to_dict() for version in versions]
+        return jsonify({'versions': versions_data}), 200
+    except Exception as e:
+        current_app.logger.error(f"Error fetching fee schedule versions: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@admin_fee_config_bp.route('/api/admin/fee-schedule/versions', methods=['POST'])
+@require_permission_v2('manage_fbo_fee_schedules')
+def create_fee_schedule_version():
+    """Create a new manual fee schedule version (snapshot)."""
+    try:
+        if not request.json:
+            return jsonify({'error': 'Invalid JSON in request body'}), 400
+        
+        data = request.json
+        version_name = data.get('version_name')
+        description = data.get('description', '')
+        
+        if not version_name:
+            return jsonify({'error': 'version_name is required'}), 400
+        
+        # Get current user ID from request context 
+        # This assumes user_id is available in the Flask request context
+        from flask import g
+        user_id = getattr(g, 'current_user_id', None)
+        if not user_id:
+            return jsonify({'error': 'User authentication required'}), 401
+        
+        # Create configuration snapshot
+        snapshot_data = AdminFeeConfigService._create_configuration_snapshot()
+        
+        # Create version record
+        version = FeeScheduleVersion(
+            version_name=version_name,
+            description=description,
+            configuration_data=snapshot_data,
+            version_type='manual',
+            created_by_user_id=user_id
+        )
+        
+        db.session.add(version)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Version created successfully',
+            'version': version.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error creating fee schedule version: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@admin_fee_config_bp.route('/api/admin/fee-schedule/versions/<int:version_id>/restore', methods=['POST'])
+@require_permission_v2('manage_fbo_fee_schedules')
+def restore_fee_schedule_version(version_id):
+    """Restore fee configuration from a specific version."""
+    try:
+        AdminFeeConfigService.restore_from_version(version_id)
+        return jsonify({'message': 'Configuration restored successfully'}), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        current_app.logger.error(f"Error restoring fee schedule version: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@admin_fee_config_bp.route('/api/admin/fee-schedule/import', methods=['POST'])
+@require_permission_v2('manage_fbo_fee_schedules')
+def import_fee_configuration():
+    """Import fee configuration from uploaded JSON file."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '' or file.filename is None:
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not file.filename.lower().endswith('.json'):
+            return jsonify({'error': 'File must be a JSON file'}), 400
+        
+        # Get current user ID from request context
+        from flask import g
+        user_id = getattr(g, 'current_user_id', None)
+        if not user_id:
+            return jsonify({'error': 'User authentication required'}), 401
+        
+        # Import configuration
+        AdminFeeConfigService.import_configuration_from_file(file.stream, user_id)
+        
+        return jsonify({
+            'message': 'Configuration imported successfully. A backup of the previous state is available for 48 hours.'
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        current_app.logger.error(f"Error importing fee configuration: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
  

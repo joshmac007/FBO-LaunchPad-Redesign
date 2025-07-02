@@ -12,6 +12,8 @@ All configurations are now globally managed in the single-tenant architecture.
 
 import csv
 import io
+import json
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple
 from flask import current_app
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -22,10 +24,15 @@ from ..extensions import db
 from ..models import (
     AircraftType, AircraftClassification,
     FeeRule, WaiverTier, CalculationBasis, WaiverStrategy,
-    AircraftTypeConfig, FeeRuleOverride, FuelPrice, FuelTypeEnum, FuelType
+    AircraftTypeConfig, FeeRuleOverride, FuelPrice, FuelTypeEnum, FuelType,
+    FeeScheduleVersion
 )
 from ..schemas.fuel_type_schemas import (
     FuelTypeSchema, SetFuelPricesRequestSchema, FuelPriceEntrySchema
+)
+from ..schemas.admin_fee_config_schemas import (
+    FeeScheduleSnapshotSchema, AircraftClassificationSchema, AircraftTypeSchema,
+    FeeRuleSchema, WaiverTierSchema, AircraftTypeConfigSchema, FeeRuleOverrideSchema
 )
 from marshmallow import ValidationError as MarshmallowValidationError
 from .aircraft_service import AircraftService
@@ -1227,4 +1234,263 @@ class AdminFeeConfigService:
         except SQLAlchemyError as e:
             db.session.rollback()
             current_app.logger.error(f"Error updating aircraft type classification: {str(e)}")
-            raise 
+            raise
+
+    # ==========================================
+    # Fee Schedule Versioning & Configuration Management
+    # ==========================================
+
+    @staticmethod
+    def _create_configuration_snapshot() -> Dict[str, Any]:
+        """
+        Create a complete snapshot of the current fee configuration.
+        
+        This function queries and serializes all configuration tables:
+        - AircraftClassification
+        - AircraftType
+        - AircraftTypeConfig
+        - FeeRule
+        - FeeRuleOverride
+        - WaiverTier
+        
+        Returns:
+            Dict containing the complete configuration snapshot
+        """
+        try:
+            # Initialize schemas for serialization
+            classification_schema = AircraftClassificationSchema(many=True)
+            aircraft_type_schema = AircraftTypeSchema(many=True)
+            aircraft_type_config_schema = AircraftTypeConfigSchema(many=True)
+            fee_rule_schema = FeeRuleSchema(many=True)
+            fee_rule_override_schema = FeeRuleOverrideSchema(many=True)
+            waiver_tier_schema = WaiverTierSchema(many=True)
+            
+            # Query all configuration data
+            classifications = AircraftClassification.query.all()
+            aircraft_types = AircraftType.query.all()
+            aircraft_type_configs = AircraftTypeConfig.query.all()
+            fee_rules = FeeRule.query.all()
+            fee_rule_overrides = FeeRuleOverride.query.all()
+            waiver_tiers = WaiverTier.query.all()
+            
+            # Serialize all data
+            snapshot = {
+                'classifications': classification_schema.dump(classifications),
+                'aircraft_types': aircraft_type_schema.dump(aircraft_types),
+                'aircraft_type_configs': aircraft_type_config_schema.dump(aircraft_type_configs),
+                'fee_rules': fee_rule_schema.dump(fee_rules),
+                'overrides': fee_rule_override_schema.dump(fee_rule_overrides),
+                'waiver_tiers': waiver_tier_schema.dump(waiver_tiers)
+            }
+            
+            current_app.logger.info(f"Created configuration snapshot with {len(classifications)} classifications, "
+                                  f"{len(aircraft_types)} aircraft types, {len(fee_rules)} fee rules, "
+                                  f"{len(fee_rule_overrides)} overrides, {len(waiver_tiers)} waiver tiers")
+            
+            return snapshot
+            
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Error creating configuration snapshot: {str(e)}")
+            raise
+
+    @staticmethod
+    def restore_from_version(version_id: int) -> None:
+        """
+        Restore fee configuration from a specific version.
+        
+        Implements the Validate-then-Act pattern:
+        1. Fetch the configuration JSON from the database
+        2. Validate the entire JSON against FeeScheduleSnapshotSchema
+        3. If validation fails, log error and raise ValueError (no DB writes)
+        4. If validation succeeds, perform Wipe & Replace in atomic transaction
+        
+        Args:
+            version_id: The ID of the version to restore from
+            
+        Raises:
+            ValueError: If version not found or validation fails
+        """
+        try:
+            # Step 1: Fetch the version
+            version = FeeScheduleVersion.query.get(version_id)
+            if not version:
+                raise ValueError(f"Version {version_id} not found")
+            
+            configuration_data = version.configuration_data
+            current_app.logger.info(f"Fetched version {version_id}: {version.version_name}")
+            
+            # Step 2: Validate the configuration data
+            snapshot_schema = FeeScheduleSnapshotSchema()
+            try:
+                validated_data = snapshot_schema.load(configuration_data)
+                current_app.logger.info(f"Configuration data validation successful for version {version_id}")
+            except MarshmallowValidationError as e:
+                error_msg = f"Configuration validation failed for version {version_id}: {e.messages}"
+                current_app.logger.error(error_msg)
+                raise ValueError(error_msg)
+            
+            # Step 3: Perform Wipe & Replace in atomic transaction
+            with db.session.begin():
+                current_app.logger.info(f"Starting atomic restore operation for version {version_id}")
+                
+                # Delete existing data in dependency order
+                FeeRuleOverride.query.delete()
+                AircraftTypeConfig.query.delete()
+                WaiverTier.query.delete()
+                FeeRule.query.delete()
+                AircraftType.query.delete()
+                AircraftClassification.query.delete()
+                
+                # Insert new data in dependency order
+                # 1. Aircraft Classifications (no dependencies)
+                for classification_data in validated_data['classifications']:
+                    classification = AircraftClassification(**classification_data)
+                    db.session.add(classification)
+                
+                db.session.flush()  # Get IDs for foreign keys
+                
+                # 2. Aircraft Types (depend on classifications)
+                for aircraft_type_data in validated_data['aircraft_types']:
+                    aircraft_type = AircraftType(**aircraft_type_data)
+                    db.session.add(aircraft_type)
+                
+                db.session.flush()  # Get IDs for foreign keys
+                
+                # 3. Fee Rules (depend on classifications)
+                for fee_rule_data in validated_data['fee_rules']:
+                    fee_rule = FeeRule(**fee_rule_data)
+                    db.session.add(fee_rule)
+                
+                db.session.flush()  # Get IDs for foreign keys
+                
+                # 4. Aircraft Type Configs (depend on aircraft types)
+                for config_data in validated_data['aircraft_type_configs']:
+                    config = AircraftTypeConfig(**config_data)
+                    db.session.add(config)
+                
+                # 5. Fee Rule Overrides (depend on aircraft types and fee rules)
+                for override_data in validated_data['overrides']:
+                    override = FeeRuleOverride(**override_data)
+                    db.session.add(override)
+                
+                # 6. Waiver Tiers (no foreign key dependencies)
+                for waiver_tier_data in validated_data['waiver_tiers']:
+                    waiver_tier = WaiverTier(**waiver_tier_data)
+                    db.session.add(waiver_tier)
+                
+                current_app.logger.info(f"Successfully restored configuration from version {version_id}")
+                
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error during restore from version {version_id}: {str(e)}")
+            raise ValueError(f"Database error during restore: {str(e)}")
+
+    @staticmethod
+    def import_configuration_from_file(file_stream, user_id: int) -> None:
+        """
+        Import fee configuration from an uploaded JSON file.
+        
+        Follows this sequence:
+        1. Create automatic backup (separate committed transaction)
+        2. Read and validate JSON from file against FeeScheduleSnapshotSchema
+        3. If validation succeeds, perform Wipe & Replace in new transaction
+        
+        Args:
+            file_stream: File-like object containing JSON configuration
+            user_id: ID of the user performing the import
+            
+        Raises:
+            ValueError: If file parsing or validation fails
+        """
+        try:
+            # Step 1: Create automatic backup (separate transaction)
+            current_app.logger.info(f"Creating pre-import backup for user {user_id}")
+            backup_snapshot = AdminFeeConfigService._create_configuration_snapshot()
+            
+            backup_version = FeeScheduleVersion(
+                version_name=f"Pre-import backup {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}",
+                description="Automatic backup created before configuration import",
+                configuration_data=backup_snapshot,
+                version_type='pre_import_backup',
+                created_by_user_id=user_id,
+                expires_at=datetime.utcnow() + timedelta(hours=48)  # 48 hour expiry
+            )
+            
+            db.session.add(backup_version)
+            db.session.commit()  # Commit backup separately
+            current_app.logger.info(f"Created backup version {backup_version.id}")
+            
+            # Step 2: Read and validate JSON from file
+            try:
+                file_content = file_stream.read()
+                if isinstance(file_content, bytes):
+                    file_content = file_content.decode('utf-8')
+                
+                import_data = json.loads(file_content)
+                current_app.logger.info("Successfully parsed JSON from uploaded file")
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                raise ValueError(f"Invalid JSON file: {str(e)}")
+            
+            # Validate against schema
+            snapshot_schema = FeeScheduleSnapshotSchema()
+            try:
+                validated_data = snapshot_schema.load(import_data)
+                current_app.logger.info("Import data validation successful")
+            except MarshmallowValidationError as e:
+                error_msg = f"Import validation failed: {e.messages}"
+                current_app.logger.error(error_msg)
+                raise ValueError(error_msg)
+            
+            # Step 3: Perform Wipe & Replace in new transaction
+            with db.session.begin():
+                current_app.logger.info("Starting atomic import operation")
+                
+                # Delete existing data in dependency order
+                FeeRuleOverride.query.delete()
+                AircraftTypeConfig.query.delete()
+                WaiverTier.query.delete()
+                FeeRule.query.delete()
+                AircraftType.query.delete()
+                AircraftClassification.query.delete()
+                
+                # Insert new data in dependency order
+                # 1. Aircraft Classifications (no dependencies)
+                for classification_data in validated_data['classifications']:
+                    classification = AircraftClassification(**classification_data)
+                    db.session.add(classification)
+                
+                db.session.flush()  # Get IDs for foreign keys
+                
+                # 2. Aircraft Types (depend on classifications)
+                for aircraft_type_data in validated_data['aircraft_types']:
+                    aircraft_type = AircraftType(**aircraft_type_data)
+                    db.session.add(aircraft_type)
+                
+                db.session.flush()  # Get IDs for foreign keys
+                
+                # 3. Fee Rules (depend on classifications)
+                for fee_rule_data in validated_data['fee_rules']:
+                    fee_rule = FeeRule(**fee_rule_data)
+                    db.session.add(fee_rule)
+                
+                db.session.flush()  # Get IDs for foreign keys
+                
+                # 4. Aircraft Type Configs (depend on aircraft types)
+                for config_data in validated_data['aircraft_type_configs']:
+                    config = AircraftTypeConfig(**config_data)
+                    db.session.add(config)
+                
+                # 5. Fee Rule Overrides (depend on aircraft types and fee rules)
+                for override_data in validated_data['overrides']:
+                    override = FeeRuleOverride(**override_data)
+                    db.session.add(override)
+                
+                # 6. Waiver Tiers (no foreign key dependencies)
+                for waiver_tier_data in validated_data['waiver_tiers']:
+                    waiver_tier = WaiverTier(**waiver_tier_data)
+                    db.session.add(waiver_tier)
+                
+                current_app.logger.info("Successfully imported configuration from file")
+                
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error during import: {str(e)}")
+            raise ValueError(f"Database error during import: {str(e)}") 

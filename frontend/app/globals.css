@@ -515,3 +515,8 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Fee Schedule Override Highlighting */
+.fee-schedule-table[data-view-mode='highlight'] td[data-is-override='true'] {
+  font-weight: 600;
+}

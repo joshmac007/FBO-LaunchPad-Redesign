@@ -204,6 +204,32 @@ export interface SetFuelPricesRequest {
   }>;
 }
 
+// Fee Schedule Versioning interfaces
+export interface FeeScheduleVersion {
+  id: number;
+  version_name: string;
+  description: string;
+  version_type: 'manual' | 'pre_import_backup';
+  created_by_user_id: number;
+  created_at: string;
+  expires_at?: string;
+  created_by_username?: string;
+}
+
+export interface CreateFeeScheduleVersionRequest {
+  version_name: string;
+  description?: string;
+}
+
+export interface FeeScheduleVersionsResponse {
+  versions: FeeScheduleVersion[];
+}
+
+export interface CreateFeeScheduleVersionResponse {
+  message: string;
+  version: FeeScheduleVersion;
+}
+
 export interface FuelTypesResponse {
   fuel_types: FuelType[];
 }
@@ -665,6 +691,53 @@ export const addAircraftToFeeSchedule = async (data: AddAircraftToFeeScheduleReq
   return handleApiResponse<any>(response);
 };
 
+// Fee Schedule Versioning & Configuration Management
+export const getFeeScheduleVersions = async (): Promise<FeeScheduleVersion[]> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fee-schedule/versions`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  const data = await handleApiResponse<FeeScheduleVersionsResponse>(response);
+  return data.versions;
+};
+
+export const createFeeScheduleVersion = async (data: CreateFeeScheduleVersionRequest): Promise<FeeScheduleVersion> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fee-schedule/versions`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  const result = await handleApiResponse<CreateFeeScheduleVersionResponse>(response);
+  return result.version;
+};
+
+export const restoreFeeScheduleVersion = async (versionId: number): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fee-schedule/versions/${versionId}/restore`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  await handleApiResponse<{ message: string }>(response);
+};
+
+export const importFeeConfiguration = async (file: File): Promise<{ message: string }> => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE_URL}/admin/fee-schedule/import`, {
+    method: 'POST',
+    headers: {
+      ...getAuthHeaders(),
+      // Don't set Content-Type for FormData, let browser set it with boundary
+    },
+    body: formData,
+  });
+
+  return handleApiResponse<{ message: string }>(response);
+};
+
 // Fuel Management
 export const getFuelTypes = async (): Promise<FuelTypesResponse> => {
   const response = await fetch(`${API_BASE_URL}/admin/fuel-types`, {
@@ -743,4 +816,10 @@ export default {
   // Fuel Price Management
   getFuelPrices,
   setFuelPrices,
+  
+  // Fee Schedule Versioning & Configuration Management
+  getFeeScheduleVersions,
+  createFeeScheduleVersion,
+  restoreFeeScheduleVersion,
+  importFeeConfiguration,
 }; 

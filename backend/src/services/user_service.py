@@ -755,4 +755,41 @@ class UserService:
         except Exception as e:
             from flask import current_app
             current_app.logger.error(f"Error migrating role to permissions: {str(e)}")
-            return False, f"Migration failed: {str(e)}", 500 
+            return False, f"Migration failed: {str(e)}", 500
+
+    @classmethod
+    def update_user_preferences(cls, user_id: int, preferences: Dict[str, Any]) -> Tuple[Optional[Dict], str, int]:
+        """Update a user's preferences.
+        
+        Args:
+            user_id (int): ID of user to update preferences for
+            preferences (Dict[str, Any]): Dictionary containing validated preference data
+            
+        Returns:
+            Tuple[Optional[Dict], str, int]: A tuple containing:
+                - Updated preferences dict if successful, None if error
+                - Message describing the result
+                - HTTP status code
+        """
+        try:
+            user = User.query.get(user_id)
+            if not user:
+                return None, f"User with ID {user_id} not found", 404
+            
+            # Get existing preferences or initialize empty dict
+            existing_preferences = user.preferences or {}
+            
+            # Merge validated data into existing preferences
+            updated_preferences = {**existing_preferences, **preferences}
+            
+            # Update user preferences in database
+            user.preferences = updated_preferences
+            db.session.commit()
+            
+            return updated_preferences, "User preferences updated successfully", 200
+            
+        except Exception as e:
+            db.session.rollback()
+            from flask import current_app
+            current_app.logger.error(f"Error updating user preferences for user {user_id}: {e}")
+            return None, f"Error updating user preferences: {str(e)}", 500 

@@ -10,7 +10,7 @@ from ..schemas import (
     UserListResponseSchema,
     ErrorResponseSchema
 )
-from ..schemas.user_schemas import UserDetailSchema, UserBriefSchema
+from ..schemas.user_schemas import UserDetailSchema, UserBriefSchema, UserPreferencesSchema
 
 # Create blueprint for user routes
 user_bp = Blueprint('user_bp', __name__, url_prefix='/api/users')
@@ -408,4 +408,92 @@ def get_user(user_id):
     except Exception as e:
         from flask import current_app
         current_app.logger.error(f"Error getting user {user_id}: {e}")
+        return jsonify({"error": "Server error"}), 500
+
+@user_bp.route('/me/preferences', methods=['PATCH'])
+@require_permission_v2('view_profile')
+def update_user_preferences():
+    """Update current user's preferences.
+    Requires view_profile permission.
+    ---
+    tags:
+      - Users
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: UserPreferencesSchema
+    responses:
+      200:
+        description: User preferences updated successfully
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                preferences:
+                  type: object
+      400:
+        description: Bad Request (validation error)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      401:
+        description: Unauthorized
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      403:
+        description: Forbidden (missing permission)
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+      500:
+        description: Server error
+        content:
+          application/json:
+            schema: ErrorResponseSchema
+    """
+    try:
+        # Get current user from token
+        current_user = g.current_user
+        if not current_user:
+            return jsonify({"error": "User not found"}), 401
+        
+        # Load and validate request data
+        schema = UserPreferencesSchema()
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        try:
+            validated_data = schema.load(data)
+        except ValidationError as e:
+            return jsonify({
+                "error": "Validation error",
+                "details": e.messages
+            }), 400
+        
+        # Update user preferences using service
+        preferences, message, status_code = UserService.update_user_preferences(
+            current_user.id, 
+            validated_data
+        )
+        
+        if preferences is not None:
+            return jsonify({
+                "message": message,
+                "preferences": preferences
+            }), status_code
+        else:
+            return jsonify({"error": message}), status_code
+            
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error updating user preferences: {e}")
         return jsonify({"error": "Server error"}), 500 

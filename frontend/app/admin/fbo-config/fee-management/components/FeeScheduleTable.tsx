@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent } from "@/components/ui/card"
 import { Trash2, Plus, MoreHorizontal, Move, AlertCircle, Loader2, ChevronDown, ChevronUp, Eye } from "lucide-react"
+import { useUserPreferences } from "@/app/contexts/user-preferences-context"
+import { cn } from "@/lib/utils"
 import {
   useReactTable,
   getCoreRowModel,
@@ -83,6 +85,7 @@ export function FeeScheduleTable({
   globalData
 }: FeeScheduleTableProps) {
   const queryClient = useQueryClient()
+  const { preferences } = useUserPreferences()
   const [addingToCategory, setAddingToCategory] = useState<number | null>(null)
   const [showCreateClassificationDialog, setShowCreateClassificationDialog] = useState(false)
   const [showMoveAircraftDialog, setShowMoveAircraftDialog] = useState(false)
@@ -739,7 +742,9 @@ export function FeeScheduleTable({
 
   return (
     <div className="border rounded-lg">
-      <Table className="w-full table-fixed"
+      <Table 
+        className="fee-schedule-table w-full table-fixed"
+        data-view-mode={preferences.highlight_overrides ? 'highlight' : 'uniform'}
         style={{
           tableLayout: 'fixed',
           width: '100%'
@@ -810,8 +815,29 @@ export function FeeScheduleTable({
                     cellStyle = { width: '14%' }
                   }
                   
+                  // Check if this is a fee column and if it has override data
+                  const isFeeColumn = cell.column.id.startsWith('fee_')
+                  const isOverride = isFeeColumn && row.original.type === 'aircraft' 
+                    ? (() => {
+                        const rowData = row.original as AircraftRowData
+                        const feeRuleId = cell.column.id.replace('fee_', '')
+                        const feeDetail = rowData.fees?.[feeRuleId]
+                        return viewMode === 'caa' 
+                          ? feeDetail?.is_caa_aircraft_override 
+                          : feeDetail?.is_aircraft_override
+                      })()
+                    : false
+
                   return (
-                    <TableCell key={cell.id} className={cellClassName} style={cellStyle}>
+                    <TableCell 
+                      key={cell.id} 
+                      className={cn(
+                        cellClassName,
+                        preferences.fee_schedule_view_size === 'compact' && 'h-10 px-2 py-1 text-xs'
+                      )}
+                      style={cellStyle}
+                      data-is-override={isOverride}
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   )
