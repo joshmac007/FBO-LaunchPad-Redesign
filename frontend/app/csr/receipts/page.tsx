@@ -268,7 +268,7 @@ function ReceiptsPageInternal() {
 
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
       {/* Header with Stats */}
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">

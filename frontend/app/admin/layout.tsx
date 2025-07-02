@@ -11,10 +11,8 @@ import AppSidebar from "@/components/layout/app-sidebar"
 import AccessDenied from "@/app/components/access-denied"
 import { PERMISSION_GROUPS } from "@/app/constants/permissions"
 import {
-  Sidebar,
   SidebarInset,
   SidebarProvider,
-  SidebarRail,
 } from "@/components/ui/sidebar"
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -100,10 +98,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <SidebarProvider>
-      <Sidebar>
-        <AppSidebar userRole="admin" />
-        <SidebarRail />
-      </Sidebar>
+      <AppSidebar />
       <SidebarInset>
         <main className="p-4 md:p-6 lg:pr-8 lg:py-8">
           <div className="mx-auto max-w-7xl">{children}</div>

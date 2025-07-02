@@ -28,19 +28,19 @@ interface FuelOrderTableRowProps {
 const getStatusBadge = (status: string) => {
   switch (status) {
     case "COMPLETED":
-      return <Badge variant="secondary" className="bg-green-100 text-green-800">Completed</Badge>
+      return <Badge variant="success">Completed</Badge>
     case "EN_ROUTE":
-      return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">En Route</Badge>
+      return <Badge variant="info">En Route</Badge>
     case "FUELING":
-      return <Badge className="bg-cyan-100 text-cyan-800 hover:bg-cyan-100">Fueling</Badge>
+      return <Badge variant="info">Fueling</Badge>
     case "PENDING":
-      return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>
+      return <Badge variant="warning">Pending</Badge>
     case "CANCELLED":
-      return <Badge variant="secondary" className="bg-gray-200 text-gray-700">Cancelled</Badge>
+      return <Badge variant="secondary">Cancelled</Badge>
     case "REVIEWED":
-      return <Badge variant="secondary" className="bg-purple-100 text-purple-800">Reviewed</Badge>
+      return <Badge variant="secondary">Reviewed</Badge>
     case "ACKNOWLEDGED":
-      return <Badge variant="secondary" className="bg-indigo-100 text-indigo-800">Assigned</Badge>
+      return <Badge variant="info">Assigned</Badge>
     default:
       return <Badge variant="outline">{status}</Badge>
   }
@@ -51,7 +51,7 @@ const getPriorityBadge = (priority: string) => {
     case "urgent":
       return <Badge variant="destructive" className="text-xs">Urgent</Badge>
     case "high":
-      return <Badge variant="secondary" className="bg-orange-100 text-orange-800 text-xs">High</Badge>
+      return <Badge variant="warning" className="text-xs">High</Badge>
     case "normal":
       return <Badge variant="outline" className="text-xs">Normal</Badge>
     default:

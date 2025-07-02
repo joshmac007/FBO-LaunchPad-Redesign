@@ -488,11 +488,11 @@ def seed_data():
             existing_rules = FeeRule.query.first()
             if not existing_rules:
                 # Create Default Primary Fee Rules
-                # Note: Order is reversed because frontend displays in descending order
+                # Ordered as requested: Ramp, Overnight, Hangar O/N
                 default_rules = [
-                    {'fee_name': 'Hangar O/N', 'fee_code': 'HGR-OVN', 'amount': 0.00, 'is_primary_fee': True},
-                    {'fee_name': 'Overnight', 'fee_code': 'OVN', 'amount': 0.00, 'is_primary_fee': True},
                     {'fee_name': 'Ramp', 'fee_code': 'RAMP', 'amount': 0.00, 'is_primary_fee': True},
+                    {'fee_name': 'Overnight', 'fee_code': 'OVN', 'amount': 0.00, 'is_primary_fee': True},
+                    {'fee_name': 'Hangar O/N', 'fee_code': 'HGR-OVN', 'amount': 0.00, 'is_primary_fee': True},
                 ]
 
                 rules_created = 0

@@ -283,7 +283,7 @@ function EnhancedFuelOrdersPageInternal() {
 
     setIsCanceling(true)
     try {
-      await cancelFuelOrder(parseInt(cancelOrderDialog.order.id))
+      await cancelFuelOrder(cancelOrderDialog.order.id)
       refetch()
       toast.success(`Order #${cancelOrderDialog.order.orderNumber} has been cancelled.`)
     } catch (error) {
@@ -332,19 +332,19 @@ function EnhancedFuelOrdersPageInternal() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "COMPLETED":
-        return <Badge variant="secondary" className="bg-green-100 text-green-800">Completed</Badge>
+        return <Badge variant="success">Completed</Badge>
       case "EN_ROUTE":
-        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">En Route</Badge>
+        return <Badge variant="info">En Route</Badge>
       case "FUELING":
-        return <Badge className="bg-cyan-100 text-cyan-800 hover:bg-cyan-100">Fueling</Badge>
+        return <Badge variant="info">Fueling</Badge>
       case "PENDING":
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>
+        return <Badge variant="warning">Pending</Badge>
       case "CANCELLED":
-        return <Badge variant="secondary" className="bg-gray-200 text-gray-700">Cancelled</Badge>
+        return <Badge variant="secondary">Cancelled</Badge>
       case "REVIEWED":
-        return <Badge variant="secondary" className="bg-purple-100 text-purple-800">Reviewed</Badge>
+        return <Badge variant="secondary">Reviewed</Badge>
       case "ACKNOWLEDGED":
-        return <Badge variant="secondary" className="bg-indigo-100 text-indigo-800">Assigned</Badge>
+        return <Badge variant="info">Assigned</Badge>
       default:
         return <Badge variant="outline">{status}</Badge>
     }
@@ -355,7 +355,7 @@ function EnhancedFuelOrdersPageInternal() {
       case "urgent":
         return <Badge variant="destructive" className="text-xs">Urgent</Badge>
       case "high":
-        return <Badge variant="secondary" className="bg-orange-100 text-orange-800 text-xs">High</Badge>
+        return <Badge variant="warning" className="text-xs">High</Badge>
       case "normal":
         return <Badge variant="outline" className="text-xs">Normal</Badge>
       default:
@@ -470,7 +470,7 @@ function EnhancedFuelOrdersPageInternal() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
       {/* Header with Stats */}
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -541,38 +541,36 @@ function EnhancedFuelOrdersPageInternal() {
         )}
       </div>
 
-      {/* Action Bar */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex gap-2">
-          <Button onClick={() => setIsNewOrderDialogOpen(true)} className="gap-2">
-            <Plus className="h-4 w-4" />
-            New Fuel Order
-          </Button>
-
-          {selectedOrders.length > 0 && (
-            <Button variant="destructive" onClick={handleBulkCancel}>
-              Cancel Selected ({selectedOrders.length})
-            </Button>
-          )}
-        </div>
-
-        <div className="flex gap-2">
-          <Button onClick={exportToCSV} variant="outline" className="gap-2">
-            <Download className="h-4 w-4" />
-            Export CSV
-          </Button>
-        </div>
-      </div>
-
-      {/* Advanced Filters */}
+      {/* Filters Card */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Advanced Filters
-          </CardTitle>
+          <CardTitle>Filters & Actions</CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Action Bar */}
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+            <div className="flex gap-2">
+              <Button onClick={() => setIsNewOrderDialogOpen(true)} className="gap-2">
+                <Plus className="h-4 w-4" />
+                New Fuel Order
+              </Button>
+
+              {selectedOrders.length > 0 && (
+                <Button variant="destructive" onClick={handleBulkCancel}>
+                  Cancel Selected ({selectedOrders.length})
+                </Button>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Button onClick={exportToCSV} variant="outline" className="gap-2">
+                <Download className="h-4 w-4" />
+                Export CSV
+              </Button>
+            </div>
+          </div>
+
+          {/* Advanced Filters */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
             <div className="lg:col-span-2">
               <Label htmlFor="search">Search Orders</Label>
@@ -766,6 +764,15 @@ function EnhancedFuelOrdersPageInternal() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* New Fuel Order Dialog */}
+      <NewFuelOrderDialog
+        isOpen={isNewOrderDialogOpen}
+        onOpenChange={setIsNewOrderDialogOpen}
+        onOrderCreated={() => {
+          refetch()
+        }}
+      />
     </div>
   )
 }

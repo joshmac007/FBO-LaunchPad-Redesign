@@ -7,10 +7,8 @@ import AppSidebar from "@/components/layout/app-sidebar"
 import AccessDenied from "@/app/components/access-denied"
 import { QueryProvider } from "@/app/providers/query-provider"
 import {
-  Sidebar,
   SidebarInset,
   SidebarProvider,
-  SidebarRail,
 } from "@/components/ui/sidebar"
 
 const CSRLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -45,13 +43,10 @@ const CSRLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <QueryProvider>
       <SidebarProvider>
-        <Sidebar>
-          <AppSidebar />
-          <SidebarRail />
-        </Sidebar>
+        <AppSidebar />
         <SidebarInset>
-          <main className="p-4 sm:p-6 lg:p-8">
-            <div className="mx-auto max-w-7xl">{children}</div>
+          <main className="flex-1 overflow-y-auto p-4 md:p-6">
+            {children}
           </main>
         </SidebarInset>
       </SidebarProvider>

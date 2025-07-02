@@ -77,16 +77,16 @@ export function EditableMinFuelCell({
             <Input
               {...form.register("value")}
               type="text"
-              className="w-20 h-8 pr-8 text-sm"
+              className="w-16 h-7 pr-6 text-sm"
               autoFocus
               onBlur={form.handleSubmit(handleSubmit)}
               onKeyDown={handleKeyDown}
             />
-            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">gal</span>
+            <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">gal</span>
           </div>
         </form>
         {form.formState.errors.value && (
-          <div className="absolute z-10 mt-1 text-xs text-red-500 bg-white border rounded px-2 py-1 shadow-md">
+          <div className="absolute z-10 mt-1 text-xs text-red-500 bg-white border rounded px-1.5 py-0.5 shadow-md">
             {form.formState.errors.value.message}
           </div>
         )}
@@ -97,13 +97,13 @@ export function EditableMinFuelCell({
   return (
     <div 
       className={cn(
-        "flex items-center cursor-pointer hover:bg-muted/50 rounded px-2 py-1 min-h-8",
+        "flex items-center cursor-pointer hover:bg-muted/50 rounded px-1.5 py-0.5 min-h-7",
         disabled && "cursor-not-allowed opacity-50",
         className
       )}
       onClick={handleClick}
     >
-      <span className="text-sm font-semibold text-foreground">
+      <span className="text-sm text-foreground">
         {displayValue}
       </span>
     </div>

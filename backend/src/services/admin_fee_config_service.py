@@ -34,6 +34,39 @@ from .aircraft_service import AircraftService
 class AdminFeeConfigService:
     """Service for managing fee configurations (global aircraft classifications and rules)."""
 
+    # Define the standard aircraft classification sort order
+    AIRCRAFT_CLASSIFICATION_SORT_ORDER = [
+        "Piston Single Engine",
+        "Piston Multi Engine", 
+        "Turboprop Single Engine",
+        "Turboprop Multi Engine",
+        "Light Jet",
+        "Medium Jet",
+        "Super-Mid Jet",
+        "Large Jet",
+        "Heavy Jet",
+        "Super Heavy Jet",
+        "Helicopter",
+        "Military"
+    ]
+
+    @staticmethod
+    def _sort_aircraft_classifications(classifications):
+        """
+        Sort aircraft classifications according to the standard hierarchy.
+        Classifications not in the standard order will appear at the end, sorted alphabetically.
+        """
+        def classification_sort_key(classification):
+            name = classification.name
+            try:
+                # Return the index from our sort order (lower index = higher priority)
+                return (0, AdminFeeConfigService.AIRCRAFT_CLASSIFICATION_SORT_ORDER.index(name))
+            except ValueError:
+                # Not in our standard order, sort alphabetically at the end
+                return (1, name.lower())
+        
+        return sorted(classifications, key=classification_sort_key)
+
     @staticmethod
     def get_aircraft_types() -> List[Dict[str, Any]]:
         """Get all aircraft types with their base min fuel for waiver."""
@@ -111,6 +144,7 @@ class AdminFeeConfigService:
         """Get all aircraft classifications."""
         try:
             classifications = AircraftClassification.query.all()
+            sorted_classifications = AdminFeeConfigService._sort_aircraft_classifications(classifications)
             return [
                 {
                     'id': classification.id,
@@ -118,13 +152,11 @@ class AdminFeeConfigService:
                     'created_at': classification.created_at.isoformat(),
                     'updated_at': classification.updated_at.isoformat()
                 }
-                for classification in classifications
+                for classification in sorted_classifications
             ]
         except SQLAlchemyError as e:
             current_app.logger.error(f"Error fetching aircraft classifications: {str(e)}")
             raise
-
-
 
     @staticmethod
     def get_aircraft_classification_by_id(classification_id: int) -> Optional[Dict[str, Any]]:
@@ -343,8 +375,6 @@ class AdminFeeConfigService:
             db.session.rollback()
             current_app.logger.error(f"Error updating aircraft type classification: {str(e)}")
             raise
-
-
 
     @staticmethod
     def upload_aircraft_type_mappings_csv(csv_content: str) -> Dict[str, Any]:
@@ -762,7 +792,8 @@ class AdminFeeConfigService:
         """
         Get the entire global fee schedule with enhanced three-tiered fee logic.
         """
-        classifications = AircraftClassification.query.order_by(AircraftClassification.name).all()
+        classifications = AircraftClassification.query.all()
+        sorted_classifications = AdminFeeConfigService._sort_aircraft_classifications(classifications)
         aircraft_types = AircraftType.query.order_by(AircraftType.name).all()
         fee_rules = FeeRule.query.order_by(FeeRule.fee_name).all()
         overrides = FeeRuleOverride.query.all()
@@ -779,7 +810,7 @@ class AdminFeeConfigService:
         }
 
         schedule = []
-        for classification in classifications:
+        for classification in sorted_classifications:
             classification_data = classification.to_dict()
             classification_data['aircraft_types'] = []
             

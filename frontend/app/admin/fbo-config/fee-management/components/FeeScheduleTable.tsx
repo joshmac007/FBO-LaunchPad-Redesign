@@ -5,14 +5,18 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { Trash2, Plus, MoreHorizontal, Move, AlertCircle, ArrowRight, Loader2, ChevronDown, ChevronUp } from "lucide-react"
+import { Trash2, Plus, MoreHorizontal, Move, AlertCircle, Loader2, ChevronDown, ChevronUp, Eye } from "lucide-react"
+import {
+  useReactTable,
+  getCoreRowModel,
+  createColumnHelper,
+  flexRender,
+} from "@tanstack/react-table"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -31,17 +35,39 @@ import { EditClassificationDefaultsDialog } from "./EditClassificationDefaultsDi
 import { NewAircraftTableRow } from "./NewAircraftTableRow"
 import { CreateClassificationDialog } from "./CreateClassificationDialog"
 import { MoveAircraftDialog } from "./MoveAircraftDialog"
+import { ViewAircraftDetailsDialog } from "./ViewAircraftDetailsDialog"
 import {
   GlobalFeeSchedule,
-  GlobalAircraftClassification,
   GlobalFeeRule,
-  GlobalFeeRuleOverride,
   upsertFeeRuleOverride,
   deleteFeeRuleOverride,
   updateMinFuelForAircraft,
 } from "@/app/services/admin-fee-config-service"
 import { deleteAircraftType } from "@/app/services/aircraft-service"
 import React from "react"
+
+// Row data types for react-table
+export interface ClassificationRowData {
+  id: string;
+  type: 'classification';
+  classification_id: number;
+  classification_name: string;
+  aircraft_count: number;
+  aircraft_types: any[];
+}
+
+export interface AircraftRowData {
+  id: string;
+  type: 'aircraft';
+  aircraft_type_id: number;
+  aircraft_type_name: string;
+  classification_id: number;
+  classification_name: string;
+  base_min_fuel_gallons_for_waiver: string | number;
+  fees: Record<string, any>;
+}
+
+export type TableRowData = ClassificationRowData | AircraftRowData;
 
 interface FeeScheduleTableProps {
   viewMode: 'standard' | 'caa'
@@ -74,6 +100,8 @@ export function FeeScheduleTable({
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [isDeletingAircraft, setIsDeletingAircraft] = useState(false)
   const [collapsedClassifications, setCollapsedClassifications] = useState<Record<number, boolean>>({})
+  const [showViewAircraftDialog, setShowViewAircraftDialog] = useState(false)
+  const [selectedAircraftToView, setSelectedAircraftToView] = useState<AircraftRowData | null>(null)
 
   // Use the global data passed from parent
   const data = globalData
@@ -96,9 +124,41 @@ export function FeeScheduleTable({
     )
   }, [data?.schedule, searchTerm])
 
-  // Helper function to find override for specific classification and fee rule
-  // Note: This function is no longer needed with the enhanced backend data structure
-  // that provides complete fee details directly on each aircraft
+  // Create mixed data structure with classifications and aircraft for react-table
+  const tableData = useMemo(() => {
+    const rows: TableRowData[] = []
+    
+    filteredSchedule.forEach(classification => {
+      // Add classification header row
+      rows.push({
+        id: `classification-${classification.id}`,
+        type: 'classification',
+        classification_id: classification.id,
+        classification_name: classification.name,
+        aircraft_count: classification.aircraft_types.length,
+        aircraft_types: classification.aircraft_types
+      })
+      
+      // Add aircraft rows under this classification (only if not collapsed)
+      if (!collapsedClassifications[classification.id]) {
+        classification.aircraft_types.forEach(aircraft => {
+          rows.push({
+            id: `aircraft-${aircraft.id}`,
+            type: 'aircraft',
+            aircraft_type_id: aircraft.id,
+            aircraft_type_name: aircraft.name,
+            classification_id: classification.id,
+            classification_name: classification.name,
+            base_min_fuel_gallons_for_waiver: aircraft.base_min_fuel_gallons_for_waiver,
+            fees: aircraft.fees || {}
+          })
+        })
+      }
+    })
+    
+    return rows
+  }, [filteredSchedule, collapsedClassifications])
+
 
   // Mutations for optimistic updates
   const upsertOverrideMutation = useMutation({
@@ -110,14 +170,53 @@ export function FeeScheduleTable({
       return upsertFeeRuleOverride(payload);
     },
     onMutate: async (variables) => {
-      // Optimistic update logic would go here
+      // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['global-fee-schedule'] })
-      // Return context for rollback
-      return { variables }
+      
+      // Snapshot the previous value
+      const previousData = queryClient.getQueryData<GlobalFeeSchedule>(['global-fee-schedule'])
+      
+      // Optimistically update the cache
+      if (previousData) {
+        const newData = { ...previousData }
+        
+        // Find and update the specific aircraft's fee
+        newData.schedule = newData.schedule.map(classification => ({
+          ...classification,
+          aircraft_types: classification.aircraft_types.map(aircraft => {
+            if (aircraft.id === variables.aircraftTypeId) {
+              const updatedFees = { ...aircraft.fees }
+              const feeKey = variables.feeRuleId.toString()
+              
+              if (updatedFees[feeKey]) {
+                updatedFees[feeKey] = {
+                  ...updatedFees[feeKey],
+                  ...(viewMode === 'caa' ? {
+                    final_caa_display_value: variables.amount,
+                    is_caa_aircraft_override: true
+                  } : {
+                    final_display_value: variables.amount,
+                    is_aircraft_override: true
+                  })
+                }
+              }
+              
+              return { ...aircraft, fees: updatedFees }
+            }
+            return aircraft
+          })
+        }))
+        
+        queryClient.setQueryData(['global-fee-schedule'], newData)
+      }
+      
+      return { previousData, variables }
     },
-    onError: (_error, _variables, _context) => {
+    onError: (error, variables, context) => {
       // Rollback optimistic update
-      queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
+      if (context?.previousData) {
+        queryClient.setQueryData(['global-fee-schedule'], context.previousData)
+      }
       toast.error("Failed to update fee override")
     },
     onSuccess: () => {
@@ -130,11 +229,53 @@ export function FeeScheduleTable({
     mutationFn: (params: { aircraft_type_id: number; fee_rule_id: number }) =>
       deleteFeeRuleOverride(params),
     onMutate: async (variables) => {
+      // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['global-fee-schedule'] })
-      return { variables }
+      
+      // Snapshot the previous value
+      const previousData = queryClient.getQueryData<GlobalFeeSchedule>(['global-fee-schedule'])
+      
+      // Optimistically update the cache
+      if (previousData) {
+        const newData = { ...previousData }
+        
+        // Find and revert the specific aircraft's fee to default
+        newData.schedule = newData.schedule.map(classification => ({
+          ...classification,
+          aircraft_types: classification.aircraft_types.map(aircraft => {
+            if (aircraft.id === variables.aircraft_type_id) {
+              const updatedFees = { ...aircraft.fees }
+              const feeKey = variables.fee_rule_id.toString()
+              
+              if (updatedFees[feeKey]) {
+                updatedFees[feeKey] = {
+                  ...updatedFees[feeKey],
+                  ...(viewMode === 'caa' ? {
+                    final_caa_display_value: updatedFees[feeKey].revert_to_caa_value,
+                    is_caa_aircraft_override: false
+                  } : {
+                    final_display_value: updatedFees[feeKey].revert_to_value,
+                    is_aircraft_override: false
+                  })
+                }
+              }
+              
+              return { ...aircraft, fees: updatedFees }
+            }
+            return aircraft
+          })
+        }))
+        
+        queryClient.setQueryData(['global-fee-schedule'], newData)
+      }
+      
+      return { previousData, variables }
     },
     onError: (error, variables, context) => {
-      queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
+      // Rollback optimistic update
+      if (context?.previousData) {
+        queryClient.setQueryData(['global-fee-schedule'], context.previousData)
+      }
       toast.error("Failed to remove fee override")
     },
     onSuccess: () => {
@@ -146,15 +287,35 @@ export function FeeScheduleTable({
   const updateMinFuelMutation = useMutation({
     mutationFn: ({ aircraftTypeId, minFuel }: { aircraftTypeId: number; minFuel: number }) =>
       updateMinFuelForAircraft(aircraftTypeId, { base_min_fuel_gallons_for_waiver: minFuel }),
-    onMutate: async () => {
-      // Optimistically update the UI
+    onMutate: async (variables) => {
+      // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ["global-fee-schedule"] });
+      
+      // Snapshot the previous value
       const previousData = queryClient.getQueryData<GlobalFeeSchedule>(["global-fee-schedule"]);
 
-      // Logic to update the specific aircraft's min fuel in the cache
-      // This is complex, so for now, we'll rely on the onSuccess invalidation.
+      // Optimistically update the cache
+      if (previousData) {
+        const newData = { ...previousData }
+        
+        // Find and update the specific aircraft's min fuel
+        newData.schedule = newData.schedule.map(classification => ({
+          ...classification,
+          aircraft_types: classification.aircraft_types.map(aircraft => {
+            if (aircraft.id === variables.aircraftTypeId) {
+              return {
+                ...aircraft,
+                base_min_fuel_gallons_for_waiver: variables.minFuel
+              }
+            }
+            return aircraft
+          })
+        }))
+        
+        queryClient.setQueryData(["global-fee-schedule"], newData)
+      }
 
-      return { previousData };
+      return { previousData, variables };
     },
     onError: (err, variables, context) => {
       // Rollback on error
@@ -170,12 +331,328 @@ export function FeeScheduleTable({
     },
   });
 
+  // Column helper
+  const columnHelper = createColumnHelper<TableRowData>()
+
+  // Create columns for react-table
+  const columns = useMemo(() => [
+    // Expander column
+    columnHelper.display({
+      id: 'expander',
+      header: () => null,
+      cell: ({ row }) => {
+        const rowData = row.original;
+        
+        // Classification rows have their own collapse/expand logic
+        if (rowData.type === 'classification') {
+          return (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => toggleClassificationCollapse(rowData.classification_id)}
+              className="h-8 w-8"
+              aria-label="Toggle classification"
+            >
+              {collapsedClassifications[rowData.classification_id] ? 
+                <ChevronDown className="h-4 w-4" /> : 
+                <ChevronUp className="h-4 w-4" />
+              }
+            </Button>
+          );
+        }
+        
+        // Aircraft rows don't have expanders anymore
+        if (rowData.type === 'aircraft') {
+          return null;
+        }
+        
+        return null;
+      },
+    }),
+    // Aircraft Type / Classification Name column
+    columnHelper.display({
+      id: 'name',
+      header: 'Aircraft Type',
+      cell: ({ row }) => {
+        const rowData = row.original;
+        
+        if (rowData.type === 'classification') {
+          return (
+            <div className="font-semibold">
+              {rowData.classification_name}
+              <span className="text-sm text-muted-foreground font-normal ml-2">
+                ({rowData.aircraft_count} aircraft)
+              </span>
+            </div>
+          );
+        }
+        
+        if (rowData.type === 'aircraft') {
+          return <span>{rowData.aircraft_type_name}</span>;
+        }
+        
+        return null;
+      },
+    }),
+    // Min Fuel column
+    columnHelper.display({
+      id: 'min_fuel',
+      header: 'Min Fuel',
+      cell: ({ row }) => {
+        const rowData = row.original;
+        
+        if (rowData.type === 'classification') {
+          return null;
+        }
+        
+        if (rowData.type === 'aircraft') {
+          return (
+            <EditableMinFuelCell 
+              value={Number(rowData.base_min_fuel_gallons_for_waiver)}
+              onSave={(newValue) => updateMinFuelMutation.mutate({ 
+                aircraftTypeId: rowData.aircraft_type_id, 
+                minFuel: newValue 
+              })}
+            />
+          );
+        }
+        
+        return null;
+      },
+    }),
+    // Dynamic fee columns
+    ...primaryFeeRules.map(rule => 
+      columnHelper.display({
+        id: `fee_${rule.id}`,
+        header: () => (
+          <>
+            {rule.fee_name}
+            {viewMode === 'caa' && rule.has_caa_override && ' (CAA)'}
+          </>
+        ),
+        cell: ({ row }) => {
+          const rowData = row.original;
+          
+          // Classification rows span multiple columns - return empty
+          if (rowData.type === 'classification') {
+            return null;
+          }
+          
+          if (rowData.type === 'aircraft') {
+            const feeDetail = rowData.fees?.[rule.id.toString()];
+            
+            if (!feeDetail) {
+              console.warn(`Missing fee detail for aircraft ${rowData.aircraft_type_name}, rule ${rule.id}`);
+              return (
+                <EditableFeeCell
+                  value={Number(rule.amount)}
+                  isAircraftOverride={false}
+                  onSave={(newValue) => {
+                    upsertOverrideMutation.mutate({
+                      aircraftTypeId: rowData.aircraft_type_id,
+                      feeRuleId: rule.id,
+                      amount: newValue
+                    });
+                  }}
+                />
+              );
+            }
+
+            const displayValue = viewMode === 'caa' 
+              ? feeDetail.final_caa_display_value 
+              : feeDetail.final_display_value;
+            const isOverride = viewMode === 'caa'
+              ? feeDetail.is_caa_aircraft_override
+              : feeDetail.is_aircraft_override;
+
+            return (
+              <EditableFeeCell
+                value={displayValue}
+                isAircraftOverride={isOverride}
+                onSave={(newValue) => {
+                  upsertOverrideMutation.mutate({
+                    aircraftTypeId: rowData.aircraft_type_id,
+                    feeRuleId: rule.id,
+                    amount: newValue
+                  });
+                }}
+                onRevert={isOverride ? () => {
+                  deleteOverrideMutation.mutate({
+                    aircraft_type_id: rowData.aircraft_type_id,
+                    fee_rule_id: rule.id
+                  });
+                } : undefined}
+              />
+            );
+          }
+          
+          return null;
+        },
+      })
+    ),
+    // Actions column
+    columnHelper.display({
+      id: 'actions',
+      header: 'Actions',
+      cell: ({ row }) => {
+        const rowData = row.original;
+        
+        // Classification rows have edit defaults and add aircraft buttons
+        if (rowData.type === 'classification') {
+          return (
+            <div className="flex items-center gap-1 justify-end">
+              <EditClassificationDefaultsDialog
+                classificationId={rowData.classification_id}
+                classificationName={rowData.classification_name}
+                classificationRules={primaryFeeRules}
+                currentOverrides={data?.overrides || []}
+                viewMode={viewMode}
+                iconOnly={true}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setAddingToCategory(rowData.classification_id)
+                }}
+                disabled={addingToCategory !== null}
+                className="h-7"
+                title="Add Aircraft"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          );
+        }
+        
+        // Aircraft rows have actions dropdown
+        if (rowData.type === 'aircraft') {
+          return (
+            <div className="flex justify-end">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSelectedAircraftToView(rowData)
+                    setShowViewAircraftDialog(true)
+                  }}
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  View Details
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSelectedAircraftToMove({
+                      aircraft_type_id: rowData.aircraft_type_id,
+                      aircraft_type_name: rowData.aircraft_type_name,
+                      classification_id: rowData.classification_id
+                    })
+                    setShowMoveAircraftDialog(true)
+                  }}
+                >
+                  <Move className="mr-2 h-4 w-4" />
+                  Move to Category
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSelectedAircraftToDelete({
+                      aircraft_type_id: rowData.aircraft_type_id,
+                      aircraft_type_name: rowData.aircraft_type_name
+                    })
+                    setDeleteDialogView('confirm')
+                    setDeleteError(null)
+                    setShowDeleteDialog(true)
+                  }}
+                  className="text-red-600"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            </div>
+          );
+        }
+        
+        return null;
+      },
+    }),
+  ], [primaryFeeRules, viewMode, updateMinFuelMutation, upsertOverrideMutation, deleteOverrideMutation, collapsedClassifications, data?.overrides, addingToCategory])
+
+  // Configure the table
+  const table = useReactTable({
+    data: tableData,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  })
+
+
   // Handler for MoveAircraftDialog success
   const handleMoveAircraftSuccess = () => {
     // The dialog already handles query invalidation, so we just need to close it
     setShowMoveAircraftDialog(false)
     setSelectedAircraftToMove(null)
   }
+
+  // Delete aircraft mutation with optimistic updates
+  const deleteAircraftMutation = useMutation({
+    mutationFn: (aircraftTypeId: number) => deleteAircraftType(aircraftTypeId),
+    onMutate: async (aircraftTypeId) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['global-fee-schedule'] })
+      
+      // Snapshot the previous value
+      const previousData = queryClient.getQueryData(['global-fee-schedule'])
+      
+      // Optimistically remove the aircraft from the cache
+      if (previousData) {
+        const newData = { ...(previousData as GlobalFeeSchedule) }
+        
+        newData.schedule = newData.schedule.map(classification => ({
+          ...classification,
+          aircraft_types: classification.aircraft_types.filter(
+            aircraft => aircraft.id !== aircraftTypeId
+          )
+        }))
+        
+        queryClient.setQueryData(['global-fee-schedule'], newData)
+      }
+      
+      // Close dialog and show success immediately
+      setShowDeleteDialog(false)
+      setSelectedAircraftToDelete(null)
+      setIsDeletingAircraft(false)
+      toast.success("Aircraft deleted successfully!")
+      
+      return { previousData, aircraftTypeId }
+    },
+    onError: (error: any, aircraftTypeId, context) => {
+      // Rollback optimistic update
+      if (context?.previousData) {
+        queryClient.setQueryData(['global-fee-schedule'], context.previousData)
+      }
+      
+      // Show error state
+      console.error("Failed to delete aircraft:", error)
+      setDeleteError(error.message || "An unknown error occurred. Please try again.")
+      setDeleteDialogView('error')
+      setShowDeleteDialog(true)
+      setIsDeletingAircraft(false)
+      
+      // Override the success toast with error
+      toast.error("Failed to delete aircraft. Changes have been reverted.")
+    },
+    onSuccess: () => {
+      // Invalidate to get fresh data from server
+      queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
+    }
+  })
 
   // Delete handler functions
   const handleConfirmDelete = async () => {
@@ -187,19 +664,8 @@ export function FeeScheduleTable({
     setDeleteError(null)
     setIsDeletingAircraft(true)
 
-    try {
-      await deleteAircraftType(selectedAircraftToDelete.aircraft_type_id)
-      toast.success("Aircraft deleted successfully!")
-      queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
-      setShowDeleteDialog(false)
-      setSelectedAircraftToDelete(null)
-    } catch (error: any) {
-      console.error("Failed to delete aircraft:", error)
-      setDeleteError(error.message || "An unknown error occurred. Please try again.")
-      setDeleteDialogView('error')
-    } finally {
-      setIsDeletingAircraft(false)
-    }
+    // Use optimistic mutation
+    deleteAircraftMutation.mutate(selectedAircraftToDelete.aircraft_type_id)
   }
 
   const resetDeleteState = () => {
@@ -220,8 +686,8 @@ export function FeeScheduleTable({
   // Loading state
   if (isLoading) {
     return (
-      <div className="border rounded-lg p-8">
-        <div className="text-center space-y-2">
+      <div className="border rounded-lg p-6">
+        <div className="text-center space-y-1.5">
           <div className="text-muted-foreground">Loading fee schedule...</div>
         </div>
       </div>
@@ -231,10 +697,10 @@ export function FeeScheduleTable({
   // Error state
   if (error) {
     return (
-      <div className="border rounded-lg p-8">
-        <div className="text-center space-y-4">
+      <div className="border rounded-lg p-6">
+        <div className="text-center space-y-3">
           <div className="text-destructive">Failed to load fee schedule</div>
-          <Button onClick={() => window.location.reload()} variant="outline">
+          <Button onClick={() => window.location.reload()} variant="outline" className="h-7">
             Try Again
           </Button>
         </div>
@@ -243,17 +709,17 @@ export function FeeScheduleTable({
   }
 
   // Handle empty state
-  if (filteredSchedule.length === 0) {
+  if (tableData.length === 0) {
     return (
       <>
         <Card>
-          <CardContent className="pt-6 text-center">
+          <CardContent className="pt-5 text-center">
             <p>No fee classifications found.</p>
             <Button 
-              className="mt-4"
+              className="mt-3 h-7"
               onClick={() => setShowCreateClassificationDialog(true)}
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
               Create Your First Classification
             </Button>
           </CardContent>
@@ -273,207 +739,118 @@ export function FeeScheduleTable({
 
   return (
     <div className="border rounded-lg">
-      <Table>
+      <Table className="w-full table-fixed"
+        style={{
+          tableLayout: 'fixed',
+          width: '100%'
+        }}>
         <TableHeader>
-          <TableRow>
-            <TableHead>Aircraft Type</TableHead>
-            <TableHead>Min Fuel</TableHead>
-            {primaryFeeRules.map(rule => (
-              <TableHead key={rule.id}>
-                {rule.fee_name}
-                {viewMode === 'caa' && rule.has_caa_override && ' (CAA)'}
-              </TableHead>
-            ))}
-            <TableHead className="w-[50px]">Actions</TableHead>
-          </TableRow>
+          {table.getHeaderGroups().map(headerGroup => (
+            <TableRow key={headerGroup.id}>
+              {headerGroup.headers.map(header => {
+                                 // Define column-specific classes with consistent width styles
+                 let headerClassName = ''
+                 let headerStyle = {}
+                 if (header.id.startsWith('fee_')) {
+                   headerClassName = 'hidden md:table-cell text-center px-2 py-2'
+                   headerStyle = { width: '12%' }
+                 } else if (header.id === 'expander') {
+                   headerClassName = 'px-2 py-2'
+                   headerStyle = { width: '8%' }
+                 } else if (header.id === 'name') {
+                   headerClassName = 'px-3 py-2'
+                   headerStyle = { width: '30%' }
+                 } else if (header.id === 'min_fuel') {
+                   headerClassName = 'text-center px-2 py-2'
+                   headerStyle = { width: '12%' }
+                 } else if (header.id === 'actions') {
+                   headerClassName = 'text-right px-3 py-2'
+                   headerStyle = { width: '14%' }
+                 }
+                
+                return (
+                  <TableHead key={header.id} className={headerClassName} style={headerStyle}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())
+                    }
+                  </TableHead>
+                )
+              })}
+            </TableRow>
+          ))}
         </TableHeader>
         <TableBody>
-          {filteredSchedule.map((classification) => (
-            <React.Fragment key={classification.id}>
-              {/* Group Header Row */}
-              <TableRow 
-                className="bg-muted/50 hover:bg-muted/70 cursor-pointer"
-                onClick={() => toggleClassificationCollapse(classification.id)}
-              >
-                <TableCell 
-                  colSpan={2} 
-                  className="font-semibold"
-                >
-                  <div className="flex items-center gap-2">
-                    {collapsedClassifications[classification.id] ? (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200" />
-                    ) : (
-                      <ChevronUp className="h-4 w-4 text-muted-foreground transition-transform duration-200" />
-                    )}
-                    {classification.name}
-                    <span className="text-sm text-muted-foreground font-normal ml-2">
-                      ({classification.aircraft_types.length} aircraft)
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell colSpan={primaryFeeRules.length + 1} className="text-right">
-                  <div className="flex items-center gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
-                    <EditClassificationDefaultsDialog
-                      classificationId={classification.id}
-                      classificationName={classification.name}
-                      classificationRules={primaryFeeRules}
-                      currentOverrides={data?.overrides || []}
-                      viewMode={viewMode}
-                      iconOnly={true}
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setAddingToCategory(classification.id)
-                      }}
-                      disabled={addingToCategory !== null}
-                      className="h-8"
-                      title="Add Aircraft"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </TableCell>
+          {table.getRowModel().rows.map(row => (
+            <React.Fragment key={row.id}>
+              {/* Main row - either classification or aircraft */}
+              <TableRow className={
+                row.original.type === 'classification' 
+                  ? 'bg-muted/50 hover:bg-muted/70' 
+                  : ''
+              }>
+                {row.getVisibleCells().map(cell => {
+                  // Define column-specific classes with matching width styles
+                  let cellClassName = ''
+                  let cellStyle = {}
+                  if (cell.column.id.startsWith('fee_')) {
+                    cellClassName = 'hidden md:table-cell text-center px-2 py-2'
+                    cellStyle = { width: '12%' }
+                  } else if (cell.column.id === 'expander') {
+                    cellClassName = 'px-2 py-2'
+                    cellStyle = { width: '8%' }
+                  } else if (cell.column.id === 'name') {
+                    cellClassName = 'px-3 py-2'
+                    cellStyle = { width: '30%' }
+                  } else if (cell.column.id === 'min_fuel') {
+                    cellClassName = 'text-center px-2 py-2'
+                    cellStyle = { width: '12%' }
+                  } else if (cell.column.id === 'actions') {
+                    cellClassName = 'text-right px-3 py-2'
+                    cellStyle = { width: '14%' }
+                  }
+                  
+                  return (
+                    <TableCell key={cell.id} className={cellClassName} style={cellStyle}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  )
+                })}
               </TableRow>
 
-              {/* Add Aircraft Row - only show when not collapsed */}
-              {!collapsedClassifications[classification.id] && addingToCategory === classification.id && (
-                <tr className="animate-in fade-in duration-300">
-                  <td colSpan={primaryFeeRules.length + 3}>
+              {/* Add Aircraft Row - show after classification rows when adding */}
+              {row.original.type === 'classification' && 
+               addingToCategory === row.original.classification_id && (
+                <TableRow className="animate-in fade-in duration-300">
+                  <TableCell colSpan={row.getVisibleCells().length}>
                     <NewAircraftTableRow
-                      key={`new-aircraft-${classification.id}`}
-                      categoryId={classification.id}
+                      key={`new-aircraft-${row.original.classification_id}`}
+                      categoryId={row.original.classification_id}
                       feeColumns={primaryFeeRules.map(rule => rule.fee_code)}
-                      primaryFeeRules={primaryFeeRules.filter(r => r.applies_to_classification_id === classification.id)}
+                      primaryFeeRules={primaryFeeRules.filter(r => r.applies_to_classification_id === row.original.classification_id)}
                       onSuccess={() => {
                         setAddingToCategory(null)
                         queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
                       }}
                       onCancel={() => setAddingToCategory(null)}
                     />
-                  </td>
-                </tr>
-              )}
-
-              {/* Aircraft Rows within this group - only show when not collapsed with staggered animation */}
-              {!collapsedClassifications[classification.id] && classification.aircraft_types.map((aircraft, index) => (
-                <TableRow 
-                  key={aircraft.id}
-                  className="animate-in fade-in slide-in-from-top-2 duration-300"
-                  style={{
-                    animationDelay: `${index * 75}ms`
-                  }}
-                >
-                  <TableCell>{aircraft.name}</TableCell>
-                  <TableCell>
-                    <EditableMinFuelCell 
-                      value={Number(aircraft.base_min_fuel_gallons_for_waiver)}
-                      onSave={(newValue) => updateMinFuelMutation.mutate({ aircraftTypeId: aircraft.id, minFuel: newValue })}
-                    />
-                  </TableCell>
-                  
-                  {/* Dynamically render fee columns */}
-                  {primaryFeeRules.map((rule) => {
-                    // Use the enhanced fee details from the backend
-                    const feeDetail = aircraft.fees?.[rule.id.toString()];
-                    
-                    if (!feeDetail) {
-                      // This should not happen with the new backend, but provide minimal fallback
-                      console.warn(`Missing fee detail for aircraft ${aircraft.name}, rule ${rule.id}`);
-                      return (
-                        <TableCell key={rule.id}>
-                          <EditableFeeCell
-                            value={Number(rule.amount)}
-                            isAircraftOverride={false}
-                            onSave={(newValue) => {
-                              upsertOverrideMutation.mutate({
-                                aircraftTypeId: aircraft.id,
-                                feeRuleId: rule.id,
-                                amount: newValue
-                              });
-                            }}
-                          />
-                        </TableCell>
-                      );
-                    }
-
-                    // Use the enhanced backend data structure
-                    const displayValue = viewMode === 'caa' 
-                      ? feeDetail.final_caa_display_value 
-                      : feeDetail.final_display_value;
-                    const isOverride = viewMode === 'caa'
-                      ? feeDetail.is_caa_aircraft_override
-                      : feeDetail.is_aircraft_override;
-
-                    return (
-                      <TableCell key={rule.id}>
-                        <EditableFeeCell
-                          value={displayValue}
-                          isAircraftOverride={isOverride}
-                          onSave={(newValue) => {
-                            upsertOverrideMutation.mutate({
-                              aircraftTypeId: aircraft.id,
-                              feeRuleId: rule.id,
-                              amount: newValue
-                            });
-                          }}
-                          onRevert={isOverride ? () => {
-                            deleteOverrideMutation.mutate({
-                              aircraft_type_id: aircraft.id,
-                              fee_rule_id: rule.id
-                            });
-                          } : undefined}
-                        />
-                      </TableCell>
-                    );
-                  })}
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setSelectedAircraftToMove({
-                              aircraft_type_id: aircraft.id,
-                              aircraft_type_name: aircraft.name,
-                              classification_id: aircraft.classification_id
-                            })
-                            setShowMoveAircraftDialog(true)
-                          }}
-                        >
-                          <Move className="mr-2 h-4 w-4" />
-                          Move to Category
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setSelectedAircraftToDelete({
-                              aircraft_type_id: aircraft.id,
-                              aircraft_type_name: aircraft.name
-                            })
-                            setDeleteDialogView('confirm')
-                            setDeleteError(null)
-                            setShowDeleteDialog(true)
-                          }}
-                          className="text-red-600"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+              )}
+
             </React.Fragment>
           ))}
         </TableBody>
       </Table>
+
+      {/* View Aircraft Details Dialog */}
+      <ViewAircraftDetailsDialog
+        aircraft={selectedAircraftToView}
+        open={showViewAircraftDialog}
+        onOpenChange={setShowViewAircraftDialog}
+        feeRules={primaryFeeRules}
+        viewMode={viewMode}
+      />
 
       {/* Move Aircraft Dialog */}
       <MoveAircraftDialog

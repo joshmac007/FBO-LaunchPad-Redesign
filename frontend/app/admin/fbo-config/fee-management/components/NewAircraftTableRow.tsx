@@ -51,7 +51,7 @@ export function NewAircraftTableRow({
     queryFn: () => getAircraftTypes(),
   })
 
-  // Add aircraft mutation
+  // Add aircraft mutation with optimistic updates
   const addAircraftMutation = useMutation({
     mutationFn: async () => {
       const payload = {
@@ -62,22 +62,85 @@ export function NewAircraftTableRow({
       
       return addAircraftToFeeSchedule(payload)
     },
-    onSuccess: () => {
-      // Invalidate relevant queries to refresh the table
-      queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
-      queryClient.invalidateQueries({ queryKey: ['aircraft-types'] })
+    onMutate: async () => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['global-fee-schedule'] })
+      await queryClient.cancelQueries({ queryKey: ['aircraft-types'] })
       
-      // Reset form
+      // Snapshot previous values
+      const previousScheduleData = queryClient.getQueryData(['global-fee-schedule'])
+      const previousAircraftTypes = queryClient.getQueryData(['aircraft-types'])
+      
+      // Create optimistic aircraft data
+      const optimisticAircraft = {
+        id: Date.now(), // Temporary ID
+        name: aircraftTypeName.trim(),
+        classification_id: categoryId,
+        base_min_fuel_gallons_for_waiver: parseInt(minFuelGallons, 10),
+        fees: {}, // Will be populated with default fees
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      
+      // Optimistically update global fee schedule
+      if (previousScheduleData) {
+        const newScheduleData = { ...previousScheduleData as any }
+        newScheduleData.schedule = newScheduleData.schedule.map((classification: any) => {
+          if (classification.id === categoryId) {
+            return {
+              ...classification,
+              aircraft_types: [...classification.aircraft_types, optimisticAircraft]
+            }
+          }
+          return classification
+        })
+        
+        queryClient.setQueryData(['global-fee-schedule'], newScheduleData)
+      }
+      
+      // Optimistically update aircraft types list
+      if (previousAircraftTypes) {
+        const newAircraftTypes = [...(previousAircraftTypes as any[]), {
+          id: optimisticAircraft.id,
+          name: optimisticAircraft.name
+        }]
+        queryClient.setQueryData(['aircraft-types'], newAircraftTypes)
+      }
+      
+      // Show immediate success feedback
+      toast.success(`Aircraft "${aircraftTypeName}" added successfully`)
+      
+      // Reset form immediately for snappy UX
+      const formData = { aircraftTypeName, minFuelGallons }
       setAircraftTypeName("")
       setMinFuelGallons("100")
       setOpen(false)
-      
-      toast.success(`Aircraft "${aircraftTypeName}" added successfully`)
       onSuccess()
+      
+      return { previousScheduleData, previousAircraftTypes, formData }
     },
-    onError: (error: any) => {
+    onError: (error: any, variables, context) => {
+      // Rollback optimistic updates
+      if (context?.previousScheduleData) {
+        queryClient.setQueryData(['global-fee-schedule'], context.previousScheduleData)
+      }
+      if (context?.previousAircraftTypes) {
+        queryClient.setQueryData(['aircraft-types'], context.previousAircraftTypes)
+      }
+      
+      // Restore form data
+      if (context?.formData) {
+        setAircraftTypeName(context.formData.aircraftTypeName)
+        setMinFuelGallons(context.formData.minFuelGallons)
+      }
+      
       const errorMessage = error?.message || "Failed to add aircraft. Please try again."
       toast.error(errorMessage)
+    },
+    onSuccess: () => {
+      // Invalidate queries to get fresh data from server
+      queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
+      queryClient.invalidateQueries({ queryKey: ['aircraft-types'] })
     }
   })
 
@@ -92,6 +155,7 @@ export function NewAircraftTableRow({
       return
     }
 
+    // Mutation will handle optimistic updates
     addAircraftMutation.mutate()
   }
 
@@ -118,17 +182,17 @@ export function NewAircraftTableRow({
   return (
     <TableRow className="bg-muted/50 border-dashed">
       <TableCell className="font-medium">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
                 role="combobox"
                 aria-expanded={open}
-                className="w-full justify-between"
+                className="w-full justify-between h-7"
               >
                 {aircraftTypeName || "Select or type aircraft type..."}
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                <ChevronsUpDown className="ml-1.5 h-3.5 w-3.5 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-full p-0">
@@ -151,7 +215,7 @@ export function NewAircraftTableRow({
                       >
                         <Check
                           className={cn(
-                            "mr-2 h-4 w-4",
+                            "mr-1.5 h-3.5 w-3.5",
                             aircraftTypeName === type.name ? "opacity-100" : "opacity-0"
                           )}
                         />
@@ -165,7 +229,7 @@ export function NewAircraftTableRow({
                       >
                         <Check
                           className={cn(
-                            "mr-2 h-4 w-4",
+                            "mr-1.5 h-3.5 w-3.5",
                             "opacity-0"
                           )}
                         />
@@ -186,23 +250,26 @@ export function NewAircraftTableRow({
           placeholder="100"
           value={minFuelGallons}
           onChange={(e) => setMinFuelGallons(e.target.value)}
-          className="w-24"
+          className="w-20 h-7"
           min="1"
         />
       </TableCell>
       
+      {/* Empty cell for expander column */}
+      <TableCell></TableCell>
+      
       {/* Empty cells for fee columns - will be populated after save */}
-      <TableCell>-</TableCell>
-      <TableCell>-</TableCell>
-      <TableCell>-</TableCell>
-      <TableCell>-</TableCell>
+      {primaryFeeRules.map(rule => (
+        <TableCell key={rule.id} className="hidden md:table-cell">-</TableCell>
+      ))}
       
       <TableCell>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <Button
             size="sm"
             onClick={handleSave}
             disabled={addAircraftMutation.isPending}
+            className="h-7"
           >
             {addAircraftMutation.isPending ? "Adding..." : "Save"}
           </Button>
@@ -211,8 +278,9 @@ export function NewAircraftTableRow({
             variant="outline"
             onClick={onCancel}
             disabled={addAircraftMutation.isPending}
+            className="h-7"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
           </Button>
         </div>
       </TableCell>

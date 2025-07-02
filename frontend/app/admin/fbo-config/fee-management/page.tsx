@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-quer
 import { Toaster } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Upload, Settings, Search } from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Upload, Settings, Search, Plane } from "lucide-react"
 import { FeeScheduleTable } from "./components/FeeScheduleTable"
 import { ScheduleRulesDialog } from "./components/ScheduleRulesDialog"
 import { UploadFeesDialog } from "./components/UploadFeesDialog"
@@ -62,7 +63,7 @@ function FeeManagementContent() {
   }
 
   return (
-    <div className="container mx-auto py-8 space-y-8">
+    <div className="space-y-6 p-4 md:p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -96,47 +97,70 @@ function FeeManagementContent() {
       )}
 
       {/* Action Toolbar */}
-      <div className="flex items-center gap-4 flex-wrap">
-        <UploadFeesDialog />
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5" />
+            Fee Management Tools
+          </CardTitle>
+          <CardDescription>
+            Upload fee schedules, manage rules, and configure display options
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-4 flex-wrap">
+            <UploadFeesDialog />
 
-        <Button
-          variant={viewMode === 'caa' ? 'default' : 'outline'}
-          onClick={handleToggleCAA}
-          className="flex items-center gap-2"
-        >
-          Toggle CAA View
-        </Button>
+            <Button
+              variant={viewMode === 'caa' ? 'default' : 'outline'}
+              onClick={handleToggleCAA}
+              className="flex items-center gap-2"
+            >
+              Toggle CAA View
+            </Button>
 
-        <Button
-          variant="outline"
-          onClick={() => setShowScheduleRulesDialog(true)}
-          className="flex items-center gap-2"
-        >
-          <Settings className="h-4 w-4" />
-          Manage Schedule Rules
-        </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowScheduleRulesDialog(true)}
+              className="flex items-center gap-2"
+            >
+              <Settings className="h-4 w-4" />
+              Manage Schedule Rules
+            </Button>
 
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </div>
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Aircraft Fee Schedule Section */}
-      <div className="space-y-4">
-        <h2 className="text-xl font-semibold">Aircraft Fee Schedule</h2>
-        <FeeScheduleTable
-          searchTerm={searchTerm}
-          viewMode={viewMode}
-          primaryFeeRules={primaryFeeRules}
-          globalData={globalData}
-        />
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Plane className="h-5 w-5" />
+            Aircraft Fee Schedule
+          </CardTitle>
+          <CardDescription>
+            Manage fee rates by aircraft classification and individual aircraft types
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FeeScheduleTable
+            searchTerm={searchTerm}
+            viewMode={viewMode}
+            primaryFeeRules={primaryFeeRules}
+            globalData={globalData}
+          />
+        </CardContent>
+      </Card>
 
 
       {/* Schedule Rules Dialog */}

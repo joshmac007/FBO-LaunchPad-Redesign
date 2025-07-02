@@ -7,10 +7,8 @@ import { usePermissions } from "@/hooks/usePermissions"
 import AppSidebar from "@/components/layout/app-sidebar"
 import AccessDenied from "@/app/components/access-denied"
 import {
-  Sidebar,
   SidebarInset,
   SidebarProvider,
-  SidebarRail,
 } from "@/components/ui/sidebar"
 
 export default function MemberLayout({ children }: { children: React.ReactNode }) {
@@ -91,10 +89,7 @@ export default function MemberLayout({ children }: { children: React.ReactNode }
 
   return (
     <SidebarProvider>
-      <Sidebar>
-        <AppSidebar userRole="member" />
-        <SidebarRail />
-      </Sidebar>
+      <AppSidebar />
       <SidebarInset>
         <main className="p-4 md:p-6 lg:pr-8 lg:py-8">
           <div className="mx-auto max-w-7xl">{children}</div>

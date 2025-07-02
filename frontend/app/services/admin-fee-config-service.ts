@@ -649,10 +649,17 @@ export const uploadFeeOverridesCSV = async (file: File): Promise<any> => {
 };
 
 export const addAircraftToFeeSchedule = async (data: AddAircraftToFeeScheduleRequest): Promise<any> => {
-  const response = await fetch(`${API_BASE_URL}/admin/aircraft-types`, {
+  // Transform the payload to match the backend schema
+  const transformedData = {
+    name: data.aircraft_type_name,
+    classification_id: data.aircraft_classification_id,
+    base_min_fuel_gallons_for_waiver: data.min_fuel_gallons
+  };
+
+  const response = await fetch(`${API_BASE_URL}/aircraft/types`, {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify(data),
+    body: JSON.stringify(transformedData),
   });
 
   return handleApiResponse<any>(response);

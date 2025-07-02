@@ -17,6 +17,7 @@ import {
 import { useTheme } from "next-themes"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface HeaderProps {
   sidebarCollapsed: boolean
@@ -103,12 +104,20 @@ export default function Header({ sidebarCollapsed, setSidebarCollapsed }: Header
   const unreadCount = notifications.filter((notification) => !notification.read).length
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-white px-6 dark:bg-gray-900">
-      {/* Mobile menu button */}
-      <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
-        <Menu className="h-5 w-5" />
-        <span className="sr-only">Toggle menu</span>
-      </Button>
+    <TooltipProvider>
+      <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-white px-6 dark:bg-gray-900">
+        {/* Mobile menu button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
+              <Menu className="h-5 w-5" />
+              <span className="sr-only">Toggle menu</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Toggle Menu</p>
+          </TooltipContent>
+        </Tooltip>
 
       {/* Page title and date */}
       <div className="flex flex-1 items-center justify-between">
@@ -129,28 +138,42 @@ export default function Header({ sidebarCollapsed, setSidebarCollapsed }: Header
       </div>
 
       {/* Theme toggle */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        className="rounded-full"
-      >
-        {mounted && theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-        <span className="sr-only">Toggle theme</span>
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="rounded-full"
+          >
+            {mounted && theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            <span className="sr-only">Toggle theme</span>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Toggle Theme</p>
+        </TooltipContent>
+      </Tooltip>
 
       {/* Notifications */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="relative rounded-full">
-            <Bell className="h-5 w-5" />
-            {unreadCount > 0 && (
-              <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center bg-blue-500 text-white">
-                {unreadCount}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative rounded-full">
+                <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center bg-blue-500 text-white">
+                    {unreadCount}
               </Badge>
             )}
             <span className="sr-only">Notifications</span>
           </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Notifications</p>
+            </TooltipContent>
+          </Tooltip>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-80">
           <DropdownMenuLabel>Notifications</DropdownMenuLabel>
@@ -203,5 +226,6 @@ export default function Header({ sidebarCollapsed, setSidebarCollapsed }: Header
         </DropdownMenuContent>
       </DropdownMenu>
     </header>
+    </TooltipProvider>
   )
 }

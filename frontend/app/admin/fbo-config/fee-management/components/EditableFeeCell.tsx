@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -19,6 +19,63 @@ const feeValueSchema = z.object({
 
 type FeeValueForm = z.infer<typeof feeValueSchema>
 
+// --- NEW SUB-COMPONENT ---
+// This component contains all the expensive form logic and is only rendered when needed.
+const FeeEditForm = ({
+  initialValue,
+  onSave,
+  onCancel,
+}: {
+  initialValue: number | null
+  onSave: (newValue: number) => void
+  onCancel: () => void
+}) => {
+  const form = useForm<FeeValueForm>({
+    resolver: zodResolver(feeValueSchema),
+    defaultValues: {
+      value: initialValue?.toString() || "0"
+    }
+  })
+
+  const handleSubmit = (data: FeeValueForm) => {
+    const numericValue = Number(data.value)
+    // Only call onSave if the value has actually changed
+    if (numericValue !== initialValue) {
+      onSave(numericValue)
+    }
+    onCancel() // This will set isEditing to false in the parent
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      onCancel()
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="flex items-center gap-1">
+        <div className="relative">
+          <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+          <Input
+            {...form.register("value")}
+            type="text"
+            className="w-16 h-7 pl-5 text-sm"
+            autoFocus
+            onBlur={form.handleSubmit(handleSubmit)}
+            onKeyDown={handleKeyDown}
+          />
+        </div>
+      </form>
+      {form.formState.errors.value && (
+        <div className="absolute z-10 mt-1 text-xs text-red-500 bg-white border rounded px-1.5 py-0.5 shadow-md">
+          {form.formState.errors.value.message}
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface EditableFeeCellProps {
   value: number | null
   isAircraftOverride: boolean
@@ -28,6 +85,7 @@ interface EditableFeeCellProps {
   className?: string
 }
 
+// --- UPDATED MAIN COMPONENT ---
 export function EditableFeeCell({
   value,
   isAircraftOverride,
@@ -37,73 +95,34 @@ export function EditableFeeCell({
   className
 }: EditableFeeCellProps) {
   const [isEditing, setIsEditing] = useState(false)
-  const [originalValue, setOriginalValue] = useState<number | null>(null)
 
-  const form = useForm<FeeValueForm>({
-    resolver: zodResolver(feeValueSchema),
-    defaultValues: {
-      value: value?.toString() || "0"
-    }
-  })
+  // Reset edit mode if the underlying value changes from an external source
+  useEffect(() => {
+    setIsEditing(false)
+  }, [value])
 
   const handleClick = () => {
-    if (disabled) return
-    setIsEditing(true)
-    setOriginalValue(value)
-    form.setValue("value", value?.toString() || "0")
-  }
-
-  const handleSubmit = (data: FeeValueForm) => {
-    const numericValue = Number(data.value)
-    // Only call onSave if the value has actually changed
-    if (numericValue !== originalValue) {
-      onSave(numericValue)
+    if (!disabled) {
+      setIsEditing(true)
     }
-    setIsEditing(false)
   }
 
-  const handleCancel = () => {
-    setIsEditing(false)
-    form.reset()
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
-      handleCancel()
-    }
+  if (isEditing) {
+    return (
+      <FeeEditForm
+        initialValue={value}
+        onSave={onSave}
+        onCancel={() => setIsEditing(false)}
+      />
+    )
   }
 
   const displayValue = typeof value === 'number' ? `$${Math.round(value)}` : "$0"
 
-  if (isEditing) {
-    return (
-      <div className="flex items-center gap-1">
-        <form onSubmit={form.handleSubmit(handleSubmit)} className="flex items-center gap-1">
-          <div className="relative">
-            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-            <Input
-              {...form.register("value")}
-              type="text"
-              className="w-20 h-8 pl-6 text-sm"
-              autoFocus
-              onBlur={form.handleSubmit(handleSubmit)}
-              onKeyDown={handleKeyDown}
-            />
-          </div>
-        </form>
-        {form.formState.errors.value && (
-          <div className="absolute z-10 mt-1 text-xs text-red-500 bg-white border rounded px-2 py-1 shadow-md">
-            {form.formState.errors.value.message}
-          </div>
-        )}
-      </div>
-    )
-  }
-
   return (
     <div 
       className={cn(
-        "flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-2 py-1 min-h-8",
+        "flex items-center gap-1.5 cursor-pointer hover:bg-muted/50 rounded px-1.5 py-0.5 min-h-7",
         disabled && "cursor-not-allowed opacity-50",
         className
       )}
@@ -124,7 +143,7 @@ export function EditableFeeCell({
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 w-6 p-0 hover:bg-destructive/10"
+          className="h-5 w-5 p-0 hover:bg-destructive/10"
           onClick={(e) => {
             e.stopPropagation()
             onRevert()

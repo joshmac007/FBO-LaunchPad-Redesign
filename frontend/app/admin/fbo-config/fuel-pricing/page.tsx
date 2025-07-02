@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { z } from "zod"
+import { z, type ZodType } from "zod"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
@@ -18,7 +18,7 @@ import { Toaster } from "sonner"
 
 // Dynamic form schema generator for price inputs
 const createFuelPriceFormSchema = (fuelTypes: FuelType[]) => {
-  const schemaFields: Record<string, z.ZodString> = {}
+  const schemaFields: Record<string, ZodType> = {}
   
   fuelTypes.forEach(fuelType => {
     schemaFields[`fuel_${fuelType.id}`] = z.string().min(1, "Price is required").refine(
@@ -117,7 +117,7 @@ export default function FuelPricingPage() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto py-8 space-y-8">
+      <div className="space-y-6 p-4 md:p-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Fuel Pricing</h1>
@@ -143,7 +143,7 @@ export default function FuelPricingPage() {
 
   if (isError) {
     return (
-      <div className="container mx-auto py-8 space-y-8">
+      <div className="space-y-6 p-4 md:p-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Fuel Pricing</h1>
@@ -170,7 +170,7 @@ export default function FuelPricingPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 space-y-8">
+    <div className="space-y-6 p-4 md:p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

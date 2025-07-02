@@ -172,10 +172,15 @@ class AircraftService:
             if existing_type:
                 return None, f"Aircraft type with name '{data['name']}' already exists", 409
             
+            # Validate required fields
+            if 'classification_id' not in data:
+                return None, "Missing required field: classification_id", 400
+            
             # Create new aircraft type
             aircraft_type = AircraftType(
                 name=data['name'],
-                base_min_fuel_gallons_for_waiver=data['base_min_fuel_gallons_for_waiver']
+                base_min_fuel_gallons_for_waiver=data['base_min_fuel_gallons_for_waiver'],
+                classification_id=data['classification_id']
             )
             db.session.add(aircraft_type)
             db.session.commit()
@@ -204,6 +209,8 @@ class AircraftService:
                 aircraft_type.name = data['name']
             if 'base_min_fuel_gallons_for_waiver' in data:
                 aircraft_type.base_min_fuel_gallons_for_waiver = data['base_min_fuel_gallons_for_waiver']
+            if 'classification_id' in data:
+                aircraft_type.classification_id = data['classification_id']
             
             db.session.commit()
             return aircraft_type, "Aircraft type updated successfully", 200

@@ -8,10 +8,8 @@ import AppSidebar from "@/components/layout/app-sidebar"
 import AccessDenied from "@/app/components/access-denied"
 import { PERMISSION_GROUPS } from "@/app/constants/permissions"
 import {
-  Sidebar,
   SidebarInset,
   SidebarProvider,
-  SidebarRail,
 } from "@/components/ui/sidebar"
 
 export default function FuelerLayout({
@@ -101,10 +99,7 @@ export default function FuelerLayout({
 
   return (
     <SidebarProvider>
-      <Sidebar>
-        <AppSidebar userRole="fueler" />
-        <SidebarRail />
-      </Sidebar>
+      <AppSidebar />
       <SidebarInset className="flex flex-col">
         <main className="flex-1 overflow-auto">
           <div className="p-6">{children}</div>
