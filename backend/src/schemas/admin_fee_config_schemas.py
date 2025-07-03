@@ -52,26 +52,7 @@ class UpdateAircraftClassificationSchema(Schema):
 
 
 # Aircraft Type to Classification Mapping Schemas (Deprecated)
-class AircraftTypeMappingSchema(Schema):
-    """Schema for aircraft type to classification mapping (deprecated)."""
-    id = fields.Integer(dump_only=True)
-    aircraft_type_id = fields.Integer(required=True)
-    aircraft_type_name = fields.String(dump_only=True)
-    aircraft_classification_id = fields.Integer(required=True)
-    aircraft_classification_name = fields.String(dump_only=True)
-    created_at = fields.DateTime(dump_only=True)
-    updated_at = fields.DateTime(dump_only=True)
 
-
-class CreateAircraftTypeMappingSchema(Schema):
-    """Schema for creating aircraft type to classification mapping (deprecated)."""
-    aircraft_type_id = fields.Integer(required=True)
-    aircraft_classification_id = fields.Integer(required=True)
-
-
-class UpdateAircraftTypeMappingSchema(Schema):
-    """Schema for updating aircraft type to classification mapping (deprecated)."""
-    aircraft_classification_id = fields.Integer(required=True)
 
 
 class CSVUploadResultSchema(Schema):

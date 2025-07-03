@@ -163,7 +163,7 @@ export function FeeScheduleTable({
   }, [filteredSchedule, collapsedClassifications])
 
 
-  // Mutations for optimistic updates
+  // Mutations with simple invalidation strategy
   const upsertOverrideMutation = useMutation({
     mutationFn: ({ aircraftTypeId, feeRuleId, amount }: { aircraftTypeId: number; feeRuleId: number; amount: number }) => {
       const payload =
@@ -172,57 +172,11 @@ export function FeeScheduleTable({
           : { aircraft_type_id: aircraftTypeId, fee_rule_id: feeRuleId, override_amount: amount };
       return upsertFeeRuleOverride(payload);
     },
-    onMutate: async (variables) => {
-      // Cancel any outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['global-fee-schedule'] })
-      
-      // Snapshot the previous value
-      const previousData = queryClient.getQueryData<GlobalFeeSchedule>(['global-fee-schedule'])
-      
-      // Optimistically update the cache
-      if (previousData) {
-        const newData = { ...previousData }
-        
-        // Find and update the specific aircraft's fee
-        newData.schedule = newData.schedule.map(classification => ({
-          ...classification,
-          aircraft_types: classification.aircraft_types.map(aircraft => {
-            if (aircraft.id === variables.aircraftTypeId) {
-              const updatedFees = { ...aircraft.fees }
-              const feeKey = variables.feeRuleId.toString()
-              
-              if (updatedFees[feeKey]) {
-                updatedFees[feeKey] = {
-                  ...updatedFees[feeKey],
-                  ...(viewMode === 'caa' ? {
-                    final_caa_display_value: variables.amount,
-                    is_caa_aircraft_override: true
-                  } : {
-                    final_display_value: variables.amount,
-                    is_aircraft_override: true
-                  })
-                }
-              }
-              
-              return { ...aircraft, fees: updatedFees }
-            }
-            return aircraft
-          })
-        }))
-        
-        queryClient.setQueryData(['global-fee-schedule'], newData)
-      }
-      
-      return { previousData, variables }
-    },
-    onError: (error, variables, context) => {
-      // Rollback optimistic update
-      if (context?.previousData) {
-        queryClient.setQueryData(['global-fee-schedule'], context.previousData)
-      }
+    onError: (error) => {
       toast.error("Failed to update fee override")
     },
     onSuccess: () => {
+      // Simple invalidation - no brittle cache manipulation
       queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
       toast.success("Fee override updated successfully")
     }
@@ -231,57 +185,11 @@ export function FeeScheduleTable({
   const deleteOverrideMutation = useMutation({
     mutationFn: (params: { aircraft_type_id: number; fee_rule_id: number }) =>
       deleteFeeRuleOverride(params),
-    onMutate: async (variables) => {
-      // Cancel any outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['global-fee-schedule'] })
-      
-      // Snapshot the previous value
-      const previousData = queryClient.getQueryData<GlobalFeeSchedule>(['global-fee-schedule'])
-      
-      // Optimistically update the cache
-      if (previousData) {
-        const newData = { ...previousData }
-        
-        // Find and revert the specific aircraft's fee to default
-        newData.schedule = newData.schedule.map(classification => ({
-          ...classification,
-          aircraft_types: classification.aircraft_types.map(aircraft => {
-            if (aircraft.id === variables.aircraft_type_id) {
-              const updatedFees = { ...aircraft.fees }
-              const feeKey = variables.fee_rule_id.toString()
-              
-              if (updatedFees[feeKey]) {
-                updatedFees[feeKey] = {
-                  ...updatedFees[feeKey],
-                  ...(viewMode === 'caa' ? {
-                    final_caa_display_value: updatedFees[feeKey].revert_to_caa_value,
-                    is_caa_aircraft_override: false
-                  } : {
-                    final_display_value: updatedFees[feeKey].revert_to_value,
-                    is_aircraft_override: false
-                  })
-                }
-              }
-              
-              return { ...aircraft, fees: updatedFees }
-            }
-            return aircraft
-          })
-        }))
-        
-        queryClient.setQueryData(['global-fee-schedule'], newData)
-      }
-      
-      return { previousData, variables }
-    },
-    onError: (error, variables, context) => {
-      // Rollback optimistic update
-      if (context?.previousData) {
-        queryClient.setQueryData(['global-fee-schedule'], context.previousData)
-      }
+    onError: (error) => {
       toast.error("Failed to remove fee override")
     },
     onSuccess: () => {
+      // Simple invalidation - no brittle cache manipulation
       queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
       toast.success("Fee override removed successfully")
     }
@@ -290,47 +198,13 @@ export function FeeScheduleTable({
   const updateMinFuelMutation = useMutation({
     mutationFn: ({ aircraftTypeId, minFuel }: { aircraftTypeId: number; minFuel: number }) =>
       updateMinFuelForAircraft(aircraftTypeId, { base_min_fuel_gallons_for_waiver: minFuel }),
-    onMutate: async (variables) => {
-      // Cancel any outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ["global-fee-schedule"] });
-      
-      // Snapshot the previous value
-      const previousData = queryClient.getQueryData<GlobalFeeSchedule>(["global-fee-schedule"]);
-
-      // Optimistically update the cache
-      if (previousData) {
-        const newData = { ...previousData }
-        
-        // Find and update the specific aircraft's min fuel
-        newData.schedule = newData.schedule.map(classification => ({
-          ...classification,
-          aircraft_types: classification.aircraft_types.map(aircraft => {
-            if (aircraft.id === variables.aircraftTypeId) {
-              return {
-                ...aircraft,
-                base_min_fuel_gallons_for_waiver: variables.minFuel
-              }
-            }
-            return aircraft
-          })
-        }))
-        
-        queryClient.setQueryData(["global-fee-schedule"], newData)
-      }
-
-      return { previousData, variables };
-    },
-    onError: (err, variables, context) => {
-      // Rollback on error
-      if (context?.previousData) {
-        queryClient.setQueryData(["global-fee-schedule"], context.previousData);
-      }
-      toast.error("Failed to update Minimum Fuel. Your change has been reverted.");
+    onError: (err) => {
+      toast.error("Failed to update Minimum Fuel");
     },
     onSuccess: () => {
-      // Invalidate the query to refetch fresh data from the server
+      // Simple invalidation - no brittle cache manipulation
       queryClient.invalidateQueries({ queryKey: ["global-fee-schedule"] });
-      toast.success("Minimum Fuel updated successfully.");
+      toast.success("Minimum Fuel updated successfully");
     },
   });
 
@@ -457,6 +331,7 @@ export function FeeScheduleTable({
                       amount: newValue
                     });
                   }}
+                  highlightOverrides={preferences.highlight_overrides}
                 />
               );
             }
@@ -485,6 +360,7 @@ export function FeeScheduleTable({
                     fee_rule_id: rule.id
                   });
                 } : undefined}
+                highlightOverrides={preferences.highlight_overrides}
               />
             );
           }
@@ -603,56 +479,30 @@ export function FeeScheduleTable({
     setSelectedAircraftToMove(null)
   }
 
-  // Delete aircraft mutation with optimistic updates
+  // Delete aircraft mutation with simple invalidation
   const deleteAircraftMutation = useMutation({
     mutationFn: (aircraftTypeId: number) => deleteAircraftType(aircraftTypeId),
-    onMutate: async (aircraftTypeId) => {
-      // Cancel any outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['global-fee-schedule'] })
-      
-      // Snapshot the previous value
-      const previousData = queryClient.getQueryData(['global-fee-schedule'])
-      
-      // Optimistically remove the aircraft from the cache
-      if (previousData) {
-        const newData = { ...(previousData as GlobalFeeSchedule) }
-        
-        newData.schedule = newData.schedule.map(classification => ({
-          ...classification,
-          aircraft_types: classification.aircraft_types.filter(
-            aircraft => aircraft.id !== aircraftTypeId
-          )
-        }))
-        
-        queryClient.setQueryData(['global-fee-schedule'], newData)
-      }
-      
-      // Close dialog and show success immediately
-      setShowDeleteDialog(false)
-      setSelectedAircraftToDelete(null)
-      setIsDeletingAircraft(false)
-      toast.success("Aircraft deleted successfully!")
-      
-      return { previousData, aircraftTypeId }
+    onMutate: async () => {
+      // Close dialog and set loading state
+      setIsDeletingAircraft(true)
     },
-    onError: (error: any, aircraftTypeId, context) => {
-      // Rollback optimistic update
-      if (context?.previousData) {
-        queryClient.setQueryData(['global-fee-schedule'], context.previousData)
-      }
-      
+    onError: (error: any) => {
       // Show error state
       console.error("Failed to delete aircraft:", error)
       setDeleteError(error.message || "An unknown error occurred. Please try again.")
       setDeleteDialogView('error')
       setShowDeleteDialog(true)
       setIsDeletingAircraft(false)
-      
-      // Override the success toast with error
-      toast.error("Failed to delete aircraft. Changes have been reverted.")
+      toast.error("Failed to delete aircraft")
     },
     onSuccess: () => {
-      // Invalidate to get fresh data from server
+      // Close dialog and show success
+      setShowDeleteDialog(false)
+      setSelectedAircraftToDelete(null)
+      setIsDeletingAircraft(false)
+      toast.success("Aircraft deleted successfully!")
+      
+      // Simple invalidation - no brittle cache manipulation
       queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
     }
   })
@@ -769,7 +619,7 @@ export function FeeScheduleTable({
                    headerClassName = 'text-center px-2 py-2'
                    headerStyle = { width: '12%' }
                  } else if (header.id === 'actions') {
-                   headerClassName = 'text-right px-3 py-2'
+                   headerClassName = 'text-right pl-3 pr-1 py-2'
                    headerStyle = { width: '14%' }
                  }
                 
@@ -811,7 +661,7 @@ export function FeeScheduleTable({
                     cellClassName = 'text-center px-2 py-2'
                     cellStyle = { width: '12%' }
                   } else if (cell.column.id === 'actions') {
-                    cellClassName = 'text-right px-3 py-2'
+                    cellClassName = 'text-right pl-3 pr-1 py-2'
                     cellStyle = { width: '14%' }
                   }
                   

@@ -55,7 +55,10 @@ interface BackendAdminAircraft {
 interface BackendAircraft {
   tail_number: string  // Primary key in backend
   aircraft_type: string
-  fuel_type: string
+  fuel_type?: string  // Legacy field for backward compatibility
+  fuel_type_id: number
+  fuel_type_name: string
+  fuel_type_code: string
   customer_id?: number
   created_at: string
   updated_at: string
@@ -112,7 +115,7 @@ function mapBackendToFrontendAircraft(backend: BackendAircraft): Aircraft {
     id: backend.tail_number,
     tailNumber: backend.tail_number,
     aircraftType: backend.aircraft_type,
-    fuelType: backend.fuel_type,
+    fuelType: backend.fuel_type_name || backend.fuel_type || 'Unknown',
     customerId: backend.customer_id,
     createdAt: backend.created_at,
     updatedAt: backend.updated_at,

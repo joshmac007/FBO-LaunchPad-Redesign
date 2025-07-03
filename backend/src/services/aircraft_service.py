@@ -1,9 +1,56 @@
 from typing import Tuple, List, Optional, Dict, Any
 from ..models.aircraft import Aircraft
 from ..models.aircraft_type import AircraftType
+from ..models.fuel_type import FuelType
 from ..app import db
 
 class AircraftService:
+    @staticmethod
+    def _get_fuel_type_id(fuel_type_name: str) -> Optional[int]:
+        """
+        Helper method to get fuel type ID from fuel type name.
+        
+        Args:
+            fuel_type_name: String name of the fuel type (e.g., "Jet A", "100LL")
+            
+        Returns:
+            Integer fuel type ID if found, None if not found
+        """
+        # First try exact match
+        fuel_type = FuelType.query.filter_by(name=fuel_type_name.strip(), is_active=True).first()
+        if fuel_type:
+            return fuel_type.id
+            
+        # Try case-insensitive match
+        fuel_type = FuelType.query.filter(
+            db.func.lower(FuelType.name) == fuel_type_name.strip().lower(),
+            FuelType.is_active == True
+        ).first()
+        if fuel_type:
+            return fuel_type.id
+            
+        # Try mapping common variations
+        fuel_type_mappings = {
+            'jet a': 'Jet A',
+            'jet-a': 'Jet A',
+            'jet_a': 'Jet A',
+            'jeta': 'Jet A',
+            '100ll': '100LL',
+            'avgas': '100LL',
+            'avgas 100ll': '100LL',
+            'saf': 'SAF',
+            'sustainable aviation fuel': 'SAF'
+        }
+        
+        normalized_name = fuel_type_name.strip().lower()
+        if normalized_name in fuel_type_mappings:
+            mapped_name = fuel_type_mappings[normalized_name]
+            fuel_type = FuelType.query.filter_by(name=mapped_name, is_active=True).first()
+            if fuel_type:
+                return fuel_type.id
+                
+        return None
+
     @staticmethod
     def create_aircraft(data: Dict[str, Any]) -> Tuple[Optional[Aircraft], str, int]:
         if 'tail_number' not in data:
@@ -13,13 +60,18 @@ class AircraftService:
         if 'fuel_type' not in data:
             return None, "Missing required field: fuel_type", 400
             
+        # Convert fuel_type string to fuel_type_id
+        fuel_type_id = AircraftService._get_fuel_type_id(data['fuel_type'])
+        if fuel_type_id is None:
+            return None, f"Invalid fuel type: {data['fuel_type']}. Please use a valid fuel type.", 400
+            
         if Aircraft.query.filter_by(tail_number=data['tail_number']).first():
             return None, "Aircraft with this tail number already exists", 409
         try:
             aircraft = Aircraft(
                 tail_number=data['tail_number'],
                 aircraft_type=data['aircraft_type'],
-                fuel_type=data['fuel_type'],
+                fuel_type_id=fuel_type_id,
                 customer_id=data.get('customer_id')
             )
             db.session.add(aircraft)
@@ -71,6 +123,11 @@ class AircraftService:
             if 'fuel_type' not in data:
                 return None, "Missing required field: fuel_type for aircraft creation", 400, False
             
+            # Convert fuel_type string to fuel_type_id
+            fuel_type_id = AircraftService._get_fuel_type_id(data['fuel_type'].strip())
+            if fuel_type_id is None:
+                return None, f"Invalid fuel type: {data['fuel_type']}. Please use a valid fuel type.", 400, False
+            
             logger.info(f"Creating new aircraft: {tail_number}")
             
             # Use a transaction to handle potential race conditions
@@ -78,7 +135,7 @@ class AircraftService:
                 aircraft = Aircraft(
                     tail_number=tail_number,
                     aircraft_type=data['aircraft_type'].strip(),
-                    fuel_type=data['fuel_type'].strip(),
+                    fuel_type_id=fuel_type_id,
                     customer_id=data.get('customer_id')
                 )
                 db.session.add(aircraft)
@@ -136,7 +193,10 @@ class AircraftService:
             if 'aircraft_type' in update_data:
                 aircraft.aircraft_type = update_data['aircraft_type']
             if 'fuel_type' in update_data:
-                aircraft.fuel_type = update_data['fuel_type']
+                fuel_type_id = AircraftService._get_fuel_type_id(update_data['fuel_type'])
+                if fuel_type_id is None:
+                    return None, f"Invalid fuel type: {update_data['fuel_type']}. Please use a valid fuel type.", 400
+                aircraft.fuel_type_id = fuel_type_id
             if 'customer_id' in update_data:
                 aircraft.customer_id = update_data['customer_id']
             db.session.commit()

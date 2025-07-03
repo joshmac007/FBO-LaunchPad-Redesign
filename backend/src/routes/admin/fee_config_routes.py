@@ -11,7 +11,7 @@ from ...extensions import db
 from ...schemas.admin_fee_config_schemas import (
     AircraftTypeSchema, UpdateAircraftTypeFuelWaiverSchema,
     AircraftClassificationSchema, CreateAircraftClassificationSchema, UpdateAircraftClassificationSchema,
-    AircraftTypeMappingSchema, CreateAircraftTypeMappingSchema, UpdateAircraftTypeMappingSchema,
+
     CSVUploadResultSchema,
     FeeRuleSchema, CreateFeeRuleSchema, UpdateFeeRuleSchema,
     WaiverTierSchema, CreateWaiverTierSchema, UpdateWaiverTierSchema,
@@ -36,10 +36,7 @@ aircraft_classification_list_schema = AircraftClassificationSchema(many=True)
 create_aircraft_classification_schema = CreateAircraftClassificationSchema()
 update_aircraft_classification_schema = UpdateAircraftClassificationSchema()
 
-aircraft_type_mapping_schema = AircraftTypeMappingSchema()
-aircraft_type_mapping_list_schema = AircraftTypeMappingSchema(many=True)
-create_aircraft_type_mapping_schema = CreateAircraftTypeMappingSchema()
-update_aircraft_type_mapping_schema = UpdateAircraftTypeMappingSchema()
+
 csv_upload_result_schema = CSVUploadResultSchema()
 
 fee_rule_schema = FeeRuleSchema()
@@ -223,7 +220,7 @@ def update_aircraft_type_classification(aircraft_type_id):
         updated_mapping = AdminFeeConfigService.update_aircraft_type_classification(
             aircraft_type_id=aircraft_type_id, aircraft_classification_id=classification_id
         )
-        return jsonify(update_aircraft_type_mapping_schema.dump(updated_mapping))
+        return jsonify(updated_mapping)
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
@@ -233,105 +230,7 @@ def update_aircraft_type_classification(aircraft_type_id):
 
 
 
-# Aircraft Type to Fee Category Mapping Routes
-@admin_fee_config_bp.route('/api/admin/aircraft-type-mappings', methods=['GET'])
-@require_permission_v2('manage_fbo_fee_schedules')
-def get_aircraft_type_mappings():
-    """Get all aircraft type to fee category mappings, optionally filtered by fee category."""
-    try:
-        category_id = request.args.get('aircraft_classification_id', type=int)
-        mappings = AdminFeeConfigService.get_aircraft_type_mappings(category_id)
-        return jsonify(mappings), 200
-    except Exception as e:
-        current_app.logger.error(f"Error fetching aircraft type mappings: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
 
-
-@admin_fee_config_bp.route('/api/admin/aircraft-type-mappings', methods=['POST'])
-@require_permission_v2('manage_fbo_fee_schedules')
-def create_aircraft_type_mapping():
-    """Create a new aircraft type to fee category mapping."""
-    try:
-        if not request.json:
-            return jsonify({'error': 'Invalid JSON in request body'}), 400
-        loaded_data = create_aircraft_type_mapping_schema.load(request.json)
-        data = cast(Dict[str, Any], loaded_data)
-        mapping = AdminFeeConfigService.create_aircraft_type_mapping(
-            data['aircraft_type_id'], 
-            data['aircraft_classification_id']
-        )
-        return jsonify(mapping), 201
-    except ValidationError as e:
-        return jsonify({'error': 'Validation failed', 'messages': e.messages}), 400
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 409
-    except Exception as e:
-        current_app.logger.error(f"Error creating aircraft type mapping: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
-
-
-@admin_fee_config_bp.route('/api/admin/aircraft-type-mappings/<int:mapping_id>', methods=['PUT'])
-@require_permission_v2('manage_fbo_fee_schedules')
-def update_aircraft_type_mapping(mapping_id):
-    """Update an aircraft type to fee category mapping."""
-    try:
-        if not request.json:
-            return jsonify({'error': 'Invalid JSON in request body'}), 400
-        loaded_data = update_aircraft_type_mapping_schema.load(request.json)
-        data = cast(Dict[str, Any], loaded_data)
-        mapping = AdminFeeConfigService.update_aircraft_type_mapping(
-            mapping_id, 
-            data['aircraft_classification_id']
-        )
-        if not mapping:
-            return jsonify({'error': 'Aircraft type mapping not found'}), 404
-        return jsonify(mapping), 200
-    except ValidationError as e:
-        return jsonify({'error': 'Validation failed', 'messages': e.messages}), 400
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
-    except Exception as e:
-        current_app.logger.error(f"Error updating aircraft type mapping: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
-
-
-@admin_fee_config_bp.route('/api/admin/aircraft-type-mappings/<int:mapping_id>', methods=['DELETE'])
-@require_permission_v2('manage_fbo_fee_schedules')
-def delete_aircraft_type_mapping(mapping_id):
-    """Delete an aircraft type to fee category mapping."""
-    try:
-        success = AdminFeeConfigService.delete_aircraft_type_mapping(mapping_id)
-        if not success:
-            return jsonify({'error': 'Aircraft type mapping not found'}), 404
-        return '', 204
-    except Exception as e:
-        current_app.logger.error(f"Error deleting aircraft type mapping: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
-
-
-@admin_fee_config_bp.route('/api/admin/aircraft-type-mappings/upload-csv', methods=['POST'])
-@require_permission_v2('manage_fbo_fee_schedules')
-def upload_aircraft_type_mappings_csv():
-    """Upload CSV file for aircraft type to fee category mappings."""
-    try:
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file provided'}), 400
-        
-        file = request.files['file']
-        if file.filename == '' or file.filename is None:
-            return jsonify({'error': 'No file selected'}), 400
-        
-        if not file.filename.endswith('.csv'):
-            return jsonify({'error': 'File must be a CSV'}), 400
-        
-        csv_content = file.read().decode('utf-8')
-        result = AdminFeeConfigService.upload_aircraft_type_mappings_csv(csv_content)
-        return jsonify(result), 200
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
-    except Exception as e:
-        current_app.logger.error(f"Error uploading CSV: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
 
 
 # Fee Rules Routes
@@ -342,7 +241,7 @@ def get_fee_rules():
     try:
         category_id = request.args.get('applies_to_aircraft_classification_id', type=int)
         rules = AdminFeeConfigService.get_fee_rules(category_id)
-        return jsonify(rules), 200
+        return jsonify({'fee_rules': rules}), 200
     except Exception as e:
         current_app.logger.error(f"Error fetching fee rules: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
@@ -829,4 +728,23 @@ def import_fee_configuration():
         current_app.logger.error(f"Error importing fee configuration: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
- 
+
+@admin_fee_config_bp.route('/api/admin/fee-schedule/export', methods=['GET'])
+@require_permission_v2('manage_fbo_fee_schedules')
+def export_fee_configuration():
+    """Export current fee configuration as JSON file."""
+    try:
+        # Create configuration snapshot
+        snapshot_data = AdminFeeConfigService._create_configuration_snapshot()
+        
+        # Create response with proper headers for file download
+        from flask import make_response
+        response = make_response(jsonify(snapshot_data))
+        response.headers['Content-Type'] = 'application/json'
+        response.headers['Content-Disposition'] = 'attachment; filename=fee_configuration_export.json'
+        
+        return response
+        
+    except Exception as e:
+        current_app.logger.error(f"Error exporting fee configuration: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500

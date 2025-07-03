@@ -24,10 +24,12 @@ interface AircraftCreationData {
   fuel_type: string
 }
 
-// Common fuel types
+// Constants for fuel types matching database values
 const FUEL_TYPES = [
   "Jet A",
-  "100LL",
+  "Avgas 100LL", 
+  "Sustainable Aviation Fuel (Jet A)",
+  "Other"
 ]
 
 export default function AircraftLookup({

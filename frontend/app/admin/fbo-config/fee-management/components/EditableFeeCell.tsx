@@ -83,6 +83,7 @@ interface EditableFeeCellProps {
   onRevert?: () => void
   disabled?: boolean
   className?: string
+  highlightOverrides?: boolean
 }
 
 // --- UPDATED MAIN COMPONENT ---
@@ -92,7 +93,8 @@ export function EditableFeeCell({
   onSave,
   onRevert,
   disabled = false,
-  className
+  className,
+  highlightOverrides = true
 }: EditableFeeCellProps) {
   const [isEditing, setIsEditing] = useState(false)
 
@@ -132,7 +134,7 @@ export function EditableFeeCell({
         className={cn(
           "text-sm",
           isAircraftOverride 
-            ? "font-semibold text-foreground" 
+            ? (highlightOverrides ? "font-semibold text-foreground" : "text-foreground")
             : "italic text-muted-foreground"
         )}
       >

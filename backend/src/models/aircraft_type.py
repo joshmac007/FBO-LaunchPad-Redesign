@@ -24,9 +24,9 @@ class AircraftType(db.Model):
         return {
             'id': self.id,
             'name': self.name,
-            'base_min_fuel_gallons_for_waiver': str(self.base_min_fuel_gallons_for_waiver),
+            'base_min_fuel_gallons_for_waiver': float(self.base_min_fuel_gallons_for_waiver),
             'classification_id': self.classification_id,
-            'default_max_gross_weight_lbs': str(self.default_max_gross_weight_lbs) if self.default_max_gross_weight_lbs else None,
+            'default_max_gross_weight_lbs': float(self.default_max_gross_weight_lbs) if self.default_max_gross_weight_lbs else None,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

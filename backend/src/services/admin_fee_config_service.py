@@ -61,7 +61,7 @@ class AdminFeeConfigService:
     def _sort_aircraft_classifications(classifications):
         """
         Sort aircraft classifications according to the standard hierarchy.
-        Classifications not in the standard order will appear at the end, sorted alphabetically.
+        Classifications not in the standard order will retain their original order by ID.
         """
         def classification_sort_key(classification):
             name = classification.name
@@ -69,8 +69,8 @@ class AdminFeeConfigService:
                 # Return the index from our sort order (lower index = higher priority)
                 return (0, AdminFeeConfigService.AIRCRAFT_CLASSIFICATION_SORT_ORDER.index(name))
             except ValueError:
-                # Not in our standard order, sort alphabetically at the end
-                return (1, name.lower())
+                # Not in our standard order, preserve original order by ID
+                return (1, classification.id)
         
         return sorted(classifications, key=classification_sort_key)
 
@@ -383,65 +383,7 @@ class AdminFeeConfigService:
             current_app.logger.error(f"Error updating aircraft type classification: {str(e)}")
             raise
 
-    @staticmethod
-    def upload_aircraft_type_mappings_csv(csv_content: str) -> Dict[str, Any]:
-        """Upload and process CSV for aircraft type to classification mappings."""
-        try:
-            csv_file = io.StringIO(csv_content)
-            reader = csv.DictReader(csv_file)
-            
-            expected_columns = {'AircraftModel', 'AircraftClassificationName'}
-            if not expected_columns.issubset(set(reader.fieldnames or [])):
-                missing = expected_columns - set(reader.fieldnames or [])
-                raise ValueError(f"Missing required CSV columns: {missing}")
-            
-            results = {
-                'created': 0,
-                'updated': 0,
-                'errors': []
-            }
-            
-            for row_num, row in enumerate(reader, start=2):  # Start at 2 for header row
-                try:
-                    aircraft_model = row['AircraftModel'].strip()
-                    aircraft_classification_name = row['AircraftClassificationName'].strip()
-                    aircraft_manufacturer = row.get('AircraftManufacturer', '').strip()
-                    
-                    if not aircraft_model or not aircraft_classification_name:
-                        results['errors'].append(f"Row {row_num}: Missing required fields")
-                        continue
-                    
-                    # Find aircraft type by name (exact match)
-                    aircraft_type = AircraftType.query.filter_by(name=aircraft_model).first()
-                    if not aircraft_type:
-                        results['errors'].append(f"Row {row_num}: Aircraft model '{aircraft_model}' not found")
-                        continue
-                    
-                    # Find aircraft classification by name (global)
-                    aircraft_classification = AircraftClassification.query.filter_by(
-                        name=aircraft_classification_name
-                    ).first()
-                    if not aircraft_classification:
-                        results['errors'].append(f"Row {row_num}: Aircraft classification '{aircraft_classification_name}' not found")
-                        continue
-                    
-                    # Update aircraft type's classification directly
-                    if aircraft_type.classification_id != aircraft_classification.id:
-                        aircraft_type.classification_id = aircraft_classification.id
-                        results['updated'] += 1
-                        
-                except Exception as e:
-                    results['errors'].append(f"Row {row_num}: {str(e)}")
-            
-            if results['updated'] > 0:
-                db.session.commit()
-            
-            return results
-            
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Error processing CSV upload: {str(e)}")
-            raise
+
 
     # Fee Rules CRUD
     @staticmethod
@@ -1322,7 +1264,7 @@ class AdminFeeConfigService:
             # Step 2: Validate the configuration data
             snapshot_schema = FeeScheduleSnapshotSchema()
             try:
-                validated_data = snapshot_schema.load(configuration_data)
+                validated_data: Dict[str, Any] = snapshot_schema.load(configuration_data)
                 current_app.logger.info(f"Configuration data validation successful for version {version_id}")
             except MarshmallowValidationError as e:
                 error_msg = f"Configuration validation failed for version {version_id}: {e.messages}"
@@ -1343,38 +1285,44 @@ class AdminFeeConfigService:
                 
                 # Insert new data in dependency order
                 # 1. Aircraft Classifications (no dependencies)
-                for classification_data in validated_data['classifications']:
+                classifications_data = validated_data.get('classifications', [])
+                for classification_data in classifications_data:
                     classification = AircraftClassification(**classification_data)
                     db.session.add(classification)
                 
                 db.session.flush()  # Get IDs for foreign keys
                 
                 # 2. Aircraft Types (depend on classifications)
-                for aircraft_type_data in validated_data['aircraft_types']:
+                aircraft_types_data = validated_data.get('aircraft_types', [])
+                for aircraft_type_data in aircraft_types_data:
                     aircraft_type = AircraftType(**aircraft_type_data)
                     db.session.add(aircraft_type)
                 
                 db.session.flush()  # Get IDs for foreign keys
                 
                 # 3. Fee Rules (depend on classifications)
-                for fee_rule_data in validated_data['fee_rules']:
+                fee_rules_data = validated_data.get('fee_rules', [])
+                for fee_rule_data in fee_rules_data:
                     fee_rule = FeeRule(**fee_rule_data)
                     db.session.add(fee_rule)
                 
                 db.session.flush()  # Get IDs for foreign keys
                 
                 # 4. Aircraft Type Configs (depend on aircraft types)
-                for config_data in validated_data['aircraft_type_configs']:
+                aircraft_type_configs_data = validated_data.get('aircraft_type_configs', [])
+                for config_data in aircraft_type_configs_data:
                     config = AircraftTypeConfig(**config_data)
                     db.session.add(config)
                 
                 # 5. Fee Rule Overrides (depend on aircraft types and fee rules)
-                for override_data in validated_data['overrides']:
+                overrides_data = validated_data.get('overrides', [])
+                for override_data in overrides_data:
                     override = FeeRuleOverride(**override_data)
                     db.session.add(override)
                 
                 # 6. Waiver Tiers (no foreign key dependencies)
-                for waiver_tier_data in validated_data['waiver_tiers']:
+                waiver_tiers_data = validated_data.get('waiver_tiers', [])
+                for waiver_tier_data in waiver_tiers_data:
                     waiver_tier = WaiverTier(**waiver_tier_data)
                     db.session.add(waiver_tier)
                 
@@ -1406,14 +1354,13 @@ class AdminFeeConfigService:
             current_app.logger.info(f"Creating pre-import backup for user {user_id}")
             backup_snapshot = AdminFeeConfigService._create_configuration_snapshot()
             
-            backup_version = FeeScheduleVersion(
-                version_name=f"Pre-import backup {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}",
-                description="Automatic backup created before configuration import",
-                configuration_data=backup_snapshot,
-                version_type='pre_import_backup',
-                created_by_user_id=user_id,
-                expires_at=datetime.utcnow() + timedelta(hours=48)  # 48 hour expiry
-            )
+            backup_version = FeeScheduleVersion()
+            backup_version.version_name = f"Pre-import backup {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+            backup_version.description = "Automatic backup created before configuration import"
+            backup_version.configuration_data = backup_snapshot
+            backup_version.version_type = 'pre_import_backup'
+            backup_version.created_by_user_id = user_id
+            backup_version.expires_at = datetime.utcnow() + timedelta(hours=48)  # 48 hour expiry
             
             db.session.add(backup_version)
             db.session.commit()  # Commit backup separately
@@ -1433,7 +1380,7 @@ class AdminFeeConfigService:
             # Validate against schema
             snapshot_schema = FeeScheduleSnapshotSchema()
             try:
-                validated_data = snapshot_schema.load(import_data)
+                validated_data: Dict[str, Any] = snapshot_schema.load(import_data)
                 current_app.logger.info("Import data validation successful")
             except MarshmallowValidationError as e:
                 error_msg = f"Import validation failed: {e.messages}"
@@ -1454,38 +1401,44 @@ class AdminFeeConfigService:
                 
                 # Insert new data in dependency order
                 # 1. Aircraft Classifications (no dependencies)
-                for classification_data in validated_data['classifications']:
+                classifications_data = validated_data.get('classifications', [])
+                for classification_data in classifications_data:
                     classification = AircraftClassification(**classification_data)
                     db.session.add(classification)
                 
                 db.session.flush()  # Get IDs for foreign keys
                 
                 # 2. Aircraft Types (depend on classifications)
-                for aircraft_type_data in validated_data['aircraft_types']:
+                aircraft_types_data = validated_data.get('aircraft_types', [])
+                for aircraft_type_data in aircraft_types_data:
                     aircraft_type = AircraftType(**aircraft_type_data)
                     db.session.add(aircraft_type)
                 
                 db.session.flush()  # Get IDs for foreign keys
                 
                 # 3. Fee Rules (depend on classifications)
-                for fee_rule_data in validated_data['fee_rules']:
+                fee_rules_data = validated_data.get('fee_rules', [])
+                for fee_rule_data in fee_rules_data:
                     fee_rule = FeeRule(**fee_rule_data)
                     db.session.add(fee_rule)
                 
                 db.session.flush()  # Get IDs for foreign keys
                 
                 # 4. Aircraft Type Configs (depend on aircraft types)
-                for config_data in validated_data['aircraft_type_configs']:
+                aircraft_type_configs_data = validated_data.get('aircraft_type_configs', [])
+                for config_data in aircraft_type_configs_data:
                     config = AircraftTypeConfig(**config_data)
                     db.session.add(config)
                 
                 # 5. Fee Rule Overrides (depend on aircraft types and fee rules)
-                for override_data in validated_data['overrides']:
+                overrides_data = validated_data.get('overrides', [])
+                for override_data in overrides_data:
                     override = FeeRuleOverride(**override_data)
                     db.session.add(override)
                 
                 # 6. Waiver Tiers (no foreign key dependencies)
-                for waiver_tier_data in validated_data['waiver_tiers']:
+                waiver_tiers_data = validated_data.get('waiver_tiers', [])
+                for waiver_tier_data in waiver_tiers_data:
                     waiver_tier = WaiverTier(**waiver_tier_data)
                     db.session.add(waiver_tier)
                 

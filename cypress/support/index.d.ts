@@ -83,14 +83,6 @@ declare namespace Cypress {
     updateAircraftWaiverMinimum(aircraftTypeId: number, waivMinGallons: number, fboId?: number): Chainable<any>
 
     /**
-     * Create aircraft type to fee category mapping via API
-     * @param aircraftTypeId - Aircraft type ID
-     * @param feeCategoryId - Fee category ID
-     * @param fboId - FBO location ID (defaults to 1)
-     */
-    createAircraftMapping(aircraftTypeId: number, feeCategoryId: number, fboId?: number): Chainable<any>
-
-    /**
      * Get aircraft types via API
      * @param fboId - FBO location ID (defaults to 1)
      */

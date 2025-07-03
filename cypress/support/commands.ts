@@ -355,34 +355,7 @@ Cypress.Commands.add('updateAircraftWaiverMinimum', (aircraftTypeId, waivMinGall
   })
 })
 
-/**
- * Create aircraft type to fee category mapping via API
- * @param {number} aircraftTypeId - Aircraft type ID
- * @param {number} feeCategoryId - Fee category ID
- * @param {number} fboId - FBO location ID (defaults to 1)
- */
-Cypress.Commands.add('createAircraftMapping', (aircraftTypeId, feeCategoryId, fboId = 1) => {
-  return cy.getAuthToken().then((token) => {
-    if (!token) {
-      throw new Error('No auth token found. Make sure to login first.')
-    }
 
-    return cy.request({
-      method: 'POST',
-      url: `http://localhost:5001/api/admin/fbo/${fboId}/aircraft-mappings`,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: {
-        aircraft_type_id: aircraftTypeId,
-        fee_category_id: feeCategoryId
-      }
-    }).then((response) => {
-      return response.body
-    })
-  })
-})
 
 /**
  * Get aircraft types via API

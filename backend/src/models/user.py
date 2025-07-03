@@ -72,6 +72,17 @@ class User(db.Model):
         lazy='dynamic'
     )
 
+    def __init__(self, **kwargs):
+        """Initialize user with default preferences."""
+        super().__init__(**kwargs)
+        # Set default preferences if not provided
+        if self.preferences is None:
+            self.preferences = {
+                'fee_schedule_view_size': 'standard',
+                'fee_schedule_sort_order': 'alphabetical',
+                'highlight_overrides': True
+            }
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
 

@@ -68,7 +68,10 @@ class FuelOrderResponseSchema(Schema):
     customer_id = fields.Int(dump_only=True, allow_none=True)
     # Include customer information via relationship
     customer_name = fields.Str(dump_only=True, attribute="customer.name", allow_none=True)
-    fuel_type = fields.Str(dump_only=True)
+    fuel_type = fields.Str(dump_only=True, attribute="fuel_type.name")  # Access fuel type name through relationship
+    fuel_type_id = fields.Int(dump_only=True)  # Include fuel_type_id for backend compatibility
+    fuel_type_name = fields.Str(dump_only=True, attribute="fuel_type.name")  # Explicit fuel_type_name field
+    fuel_type_code = fields.Str(dump_only=True, attribute="fuel_type.code")  # Include fuel_type_code
     service_type = fields.Str(dump_only=True)
     additive_requested = fields.Bool(dump_only=True)
     requested_amount = fields.Decimal(dump_only=True, places=2, as_string=True, allow_none=True) # Dump Decimal as string
@@ -138,7 +141,10 @@ class FuelOrderBriefResponseSchema(Schema): # For list view
     aircraft_registration = fields.Str(dump_only=True, attribute="tail_number")  # Frontend field mapping
     customer_id = fields.Int(dump_only=True, allow_none=True)
     customer_name = fields.Str(dump_only=True, attribute="customer.name", allow_none=True)
-    fuel_type = fields.Str(dump_only=True)
+    fuel_type = fields.Str(dump_only=True, attribute="fuel_type.name")  # Access fuel type name through relationship
+    fuel_type_id = fields.Int(dump_only=True)  # Include fuel_type_id for backend compatibility
+    fuel_type_name = fields.Str(dump_only=True, attribute="fuel_type.name")  # Explicit fuel_type_name field
+    fuel_type_code = fields.Str(dump_only=True, attribute="fuel_type.code")  # Include fuel_type_code
     service_type = fields.Str(dump_only=True)
     gallons_requested = fields.Method("get_gallons_requested", dump_only=True, allow_none=True)  # Frontend field mapping
     assigned_lst_user_id = fields.Int(dump_only=True, allow_none=True)
