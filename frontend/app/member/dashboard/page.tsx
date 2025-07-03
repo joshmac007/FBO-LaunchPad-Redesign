@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import AppLayout from "@/components/layout/app-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -196,19 +195,18 @@ export default function MemberDashboard() {
   }
 
   return (
-    <AppLayout>
-      <div className="space-y-6">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold mb-1">Hello, {user?.name || "User"}</h1>
-          <p className="text-gray-500">Track team progress here. You almost reach a goal!</p>
-        </div>
+    <div className="space-y-6">
+      {/* Welcome Section */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold mb-1">Hello, {user?.name || "User"}</h1>
+        <p className="text-gray-500">Track team progress here. You almost reach a goal!</p>
+      </div>
 
-        {/* Permission Debug Component */}
-        <PermissionDebug />
+      {/* Permission Debug Component */}
+      <PermissionDebug />
 
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Stats Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Finished */}
           <Card className="bg-gray-50 border-0 shadow-sm">
             <CardContent className="p-6">
@@ -262,10 +260,10 @@ export default function MemberDashboard() {
               </div>
             </CardContent>
           </Card>
-        </div>
+      </div>
 
-        {/* Performance Chart */}
-        <Card className="border-0 shadow-sm">
+      {/* Performance Chart */}
+      <Card className="border-0 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Performance</CardTitle>
@@ -282,10 +280,10 @@ export default function MemberDashboard() {
               <p className="text-gray-500">Performance chart will be displayed here</p>
             </div>
           </CardContent>
-        </Card>
+      </Card>
 
-        {/* Tasks and Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Tasks and Activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Current Tasks */}
           <Card className="lg:col-span-2 border-0 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between">
@@ -377,8 +375,7 @@ export default function MemberDashboard() {
               </div>
             </CardContent>
           </Card>
-        </div>
       </div>
-    </AppLayout>
+    </div>
   )
 }

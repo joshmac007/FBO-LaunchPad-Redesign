@@ -45,9 +45,9 @@ export default function ReceiptHeader({
             <Badge data-cy="receipt-status" className={getStatusColor(receipt.status)}>
               {receipt.status}
             </Badge>
-            {receipt.receiptNumber && (
+            {receipt.receipt_number && (
               <div className="text-sm text-muted-foreground">
-                Receipt #{receipt.receiptNumber}
+                Receipt #{receipt.receipt_number}
               </div>
             )}
           </div>
@@ -58,13 +58,12 @@ export default function ReceiptHeader({
           {/* Fuel Order Information */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Fuel Order Information</h3>
-            
             <div className="space-y-2">
               <Label htmlFor="tail-number">Tail Number</Label>
               <Input
                 id="tail-number"
                 data-cy="receipt-tail-number"
-                value={receipt.tailNumber}
+                value={receipt.fuel_order_tail_number || ''}
                 readOnly
                 className="bg-muted"
               />
@@ -75,7 +74,7 @@ export default function ReceiptHeader({
               <Input
                 id="fuel-type"
                 data-cy="receipt-fuel-type"
-                value={receipt.fuelType}
+                value={receipt.fuel_type_at_receipt_time || ''}
                 readOnly
                 className="bg-muted"
               />
@@ -85,7 +84,7 @@ export default function ReceiptHeader({
               <Label htmlFor="quantity">Quantity (Gallons)</Label>
               <Input
                 id="quantity"
-                value={receipt.quantity}
+                value={receipt.fuel_quantity_gallons_at_receipt_time || ''}
                 readOnly
                 className="bg-muted"
               />
@@ -99,7 +98,7 @@ export default function ReceiptHeader({
             <CustomerSelector
               data-cy="customer-selector"
               onCustomerSelected={onCustomerSelected}
-              initialCustomerId={receipt.customerId}
+              initialCustomerId={receipt.customer_id}
               required
               className="w-full"
             />
@@ -108,7 +107,7 @@ export default function ReceiptHeader({
               <Label htmlFor="aircraft-type">Aircraft Type</Label>
               <Input
                 id="aircraft-type"
-                value={receipt.aircraftTypeAtReceiptTime || ''}
+                value={receipt.aircraft_type_at_receipt_time || ''}
                 onChange={(e) => onAircraftTypeChange(e.target.value)}
                 disabled={isReadOnly}
                 placeholder="Enter aircraft type"
@@ -119,7 +118,7 @@ export default function ReceiptHeader({
               <Label htmlFor="fuel-order-id">Fuel Order ID</Label>
               <Input
                 id="fuel-order-id"
-                value={receipt.fuelOrderId}
+                value={receipt.fuel_order_id ?? ''}
                 readOnly
                 className="bg-muted"
               />

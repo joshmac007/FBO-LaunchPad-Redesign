@@ -1,6 +1,9 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
 import {
   Truck,
   Plus,
@@ -17,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -52,6 +56,13 @@ import { toast } from "sonner"
 
 const FUEL_TYPES = ["Jet A", "Jet A-1", "Avgas 100LL", "Diesel"]
 
+const truckFormSchema = z.object({
+  truck_number: z.string().min(1, { message: "Truck number is required." }),
+  fuel_type: z.string(),
+  capacity: z.coerce.number().positive({ message: "Capacity must be a positive number." }),
+  current_meter_reading: z.coerce.number().min(0),
+})
+
 type EditTruckData = {
   id: number
   truck_number?: string
@@ -77,13 +88,16 @@ export default function FuelTruckManagementPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
   const [selectedTruck, setSelectedTruck] = useState<FuelTruck | null>(null)
-  const [formError, setFormError] = useState<string | null>(null) // Used for create/edit/delete dialog errors
+  const [formError, setFormError] = useState<string | null>(null) // Used for delete dialog errors
 
-  const [newTruckData, setNewTruckData] = useState<FuelTruckCreateRequest>({
-    truck_number: "",
-    fuel_type: FUEL_TYPES[0],
-    capacity: 5000,
-    current_meter_reading: 0,
+  const form = useForm<z.infer<typeof truckFormSchema>>({
+    resolver: zodResolver(truckFormSchema),
+    defaultValues: {
+      truck_number: "",
+      fuel_type: "Jet A",
+      capacity: 5000,
+      current_meter_reading: 0,
+    },
   })
 
   const [editTruckData, setEditTruckData] = useState<Partial<EditTruckData>>({})
@@ -126,22 +140,16 @@ export default function FuelTruckManagementPage() {
     setFilteredTrucks(currentFilteredTrucks)
   }, [trucks, searchTerm, statusFilter, fuelTypeFilter])
 
-  const handleCreateSubmit = async () => {
-    setFormError(null)
-    if (!newTruckData.truck_number || !newTruckData.fuel_type || newTruckData.capacity <= 0) {
-      setFormError("Truck Number, Fuel Type, and a valid Capacity are required.")
-      return
-    }
+  const handleCreateSubmit = async (values: z.infer<typeof truckFormSchema>) => {
     setIsSubmitting(true)
     try {
-      await createFuelTruck(newTruckData)
+      await createFuelTruck(values)
       toast.success("Fuel truck created successfully!")
-      await fetchTrucks()
+      fetchTrucks()
       setIsCreateDialogOpen(false)
+      form.reset()
     } catch (error: any) {
-      console.error("Failed to create fuel truck:", error)
-      setFormError(error.message || "Failed to create fuel truck.")
-      toast.error(error.message || "Failed to create fuel truck.")
+      toast.error(`Failed to create truck: ${error.message}`)
     } finally {
       setIsSubmitting(false)
     }
@@ -236,8 +244,7 @@ export default function FuelTruckManagementPage() {
           onOpenChange={(isOpen) => {
             setIsCreateDialogOpen(isOpen)
             if (!isOpen) {
-              setNewTruckData({ truck_number: "", fuel_type: FUEL_TYPES[0], capacity: 5000, current_meter_reading: 0 })
-              setFormError(null)
+              form.reset()
             }
           }}
         >
@@ -251,55 +258,75 @@ export default function FuelTruckManagementPage() {
               <DialogTitle>Add New Fuel Truck</DialogTitle>
               <DialogDescription>Register a new fuel truck to the fleet management system.</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="truck_number-create">Truck Number</Label>
-                <Input
-                  id="truck_number-create"
-                  value={newTruckData.truck_number}
-                  onChange={(e) => setNewTruckData({ ...newTruckData, truck_number: e.target.value })}
-                  placeholder="e.g., T-101"
-                  disabled={isSubmitting}
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleCreateSubmit)} className="grid gap-4 py-4">
+                <FormField
+                  control={form.control}
+                  name="truck_number"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Truck Number</FormLabel>
+                      <FormControl>
+                        <Input placeholder="T-101" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="fuel_type-create">Fuel Type</Label>
-                <Select
-                  value={newTruckData.fuel_type}
-                  onValueChange={(value) => setNewTruckData({ ...newTruckData, fuel_type: value })}
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger id="fuel_type-create"><SelectValue placeholder="Select fuel type" /></SelectTrigger>
-                  <SelectContent>
-                    {FUEL_TYPES.map((type) => (<SelectItem key={type} value={type}>{type}</SelectItem>))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="capacity-create">Capacity (Gallons)</Label>
-                <Input
-                  id="capacity-create" type="number" value={newTruckData.capacity}
-                  onChange={(e) => setNewTruckData({ ...newTruckData, capacity: Number.parseInt(e.target.value) || 0 })}
-                  disabled={isSubmitting}
+                <FormField
+                  control={form.control}
+                  name="fuel_type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Fuel Type</FormLabel>
+                      <FormControl>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select fuel type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {FUEL_TYPES.map((type) => (
+                              <SelectItem key={type} value={type}>{type}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="current_meter_reading-create">Current Meter Reading</Label>
-                <Input
-                  id="current_meter_reading-create" type="number" value={newTruckData.current_meter_reading}
-                  onChange={(e) => setNewTruckData({ ...newTruckData, current_meter_reading: Number.parseInt(e.target.value) || 0})}
-                  disabled={isSubmitting}
+                <FormField
+                  control={form.control}
+                  name="capacity"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Capacity (Gallons)</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="5000" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              {formError && (<div className="text-sm text-red-500 p-2 bg-red-50 border border-red-200 rounded-md">{formError}</div>)}
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isSubmitting}>Cancel</Button>
-              <Button type="button" onClick={handleCreateSubmit} disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {isSubmitting ? "Creating..." : "Create Fuel Truck"}
-              </Button>
-            </DialogFooter>
+                <FormField
+                  control={form.control}
+                  name="current_meter_reading"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Current Meter Reading</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="0" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
+                  <Button type="submit">Create Truck</Button>
+                </DialogFooter>
+              </form>
+            </Form>
           </DialogContent>
         </Dialog>
       </div>
@@ -370,7 +397,7 @@ export default function FuelTruckManagementPage() {
                           }}>
                             <Edit className="mr-2 h-4 w-4" />Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive hover:!text-destructive-foreground hover:!bg-destructive" onClick={() => { setSelectedTruck(truck); setIsDeleteDialogOpen(true); setFormError(null);}}>
+                          <DropdownMenuItem className="text-destructive hover:text-destructive-foreground! hover:bg-destructive!" onClick={() => { setSelectedTruck(truck); setIsDeleteDialogOpen(true); setFormError(null);}}>
                             <Trash2 className="mr-2 h-4 w-4" />Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>

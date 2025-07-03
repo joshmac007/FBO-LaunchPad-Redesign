@@ -1,5 +1,6 @@
 from typing import Tuple, List, Optional, Dict, Any
 from ..models.aircraft import Aircraft
+from ..models.aircraft_type import AircraftType
 from ..app import db
 
 class AircraftService:
@@ -150,9 +151,91 @@ class AircraftService:
             aircraft = Aircraft.query.get(tail_number)
             if not aircraft:
                 return False, f"Aircraft with tail number {tail_number} not found", 404
+            
+            # Check for associated fuel orders
+            if aircraft.fuel_orders.first():
+                return False, "Cannot delete aircraft with existing fuel orders. Please reassign or delete them first.", 409
+
             db.session.delete(aircraft)
             db.session.commit()
             return True, "Aircraft deleted successfully", 200
         except Exception as e:
             db.session.rollback()
             return False, f"Error deleting aircraft: {str(e)}", 500
+
+    @staticmethod
+    def create_aircraft_type(data: Dict[str, Any]) -> Tuple[Optional[AircraftType], str, int]:
+        """Create a new aircraft type."""
+        try:
+            # Verify if aircraft type with same name already exists
+            existing_type = AircraftType.query.filter_by(name=data['name']).first()
+            if existing_type:
+                return None, f"Aircraft type with name '{data['name']}' already exists", 409
+            
+            # Validate required fields
+            if 'classification_id' not in data:
+                return None, "Missing required field: classification_id", 400
+            
+            # Create new aircraft type
+            aircraft_type = AircraftType(
+                name=data['name'],
+                base_min_fuel_gallons_for_waiver=data['base_min_fuel_gallons_for_waiver'],
+                classification_id=data['classification_id']
+            )
+            db.session.add(aircraft_type)
+            db.session.commit()
+            return aircraft_type, "Aircraft type created successfully", 201
+        except Exception as e:
+            db.session.rollback()
+            return None, f"Error creating aircraft type: {str(e)}", 500
+
+    @staticmethod
+    def update_aircraft_type(type_id: int, data: Dict[str, Any]) -> Tuple[Optional[AircraftType], str, int]:
+        """Update an existing aircraft type."""
+        try:
+            # Fetch the aircraft type
+            aircraft_type = AircraftType.query.get(type_id)
+            if not aircraft_type:
+                return None, f"Aircraft type with ID {type_id} not found", 404
+            
+            # Check if name is being updated and if it conflicts
+            if 'name' in data and data['name'] != aircraft_type.name:
+                existing_type = AircraftType.query.filter_by(name=data['name']).first()
+                if existing_type:
+                    return None, f"Aircraft type with name '{data['name']}' already exists", 409
+            
+            # Update fields if provided
+            if 'name' in data:
+                aircraft_type.name = data['name']
+            if 'base_min_fuel_gallons_for_waiver' in data:
+                aircraft_type.base_min_fuel_gallons_for_waiver = data['base_min_fuel_gallons_for_waiver']
+            if 'classification_id' in data:
+                aircraft_type.classification_id = data['classification_id']
+            
+            db.session.commit()
+            return aircraft_type, "Aircraft type updated successfully", 200
+        except Exception as e:
+            db.session.rollback()
+            return None, f"Error updating aircraft type: {str(e)}", 500
+
+    @staticmethod
+    def delete_aircraft_type(type_id: int) -> Tuple[bool, str, int]:
+        """Delete an aircraft type."""
+        try:
+            # Fetch the aircraft type
+            aircraft_type = AircraftType.query.get(type_id)
+            if not aircraft_type:
+                return False, f"Aircraft type with ID {type_id} not found", 404
+            
+            # Check if the type is used in any aircraft instances
+            aircraft_using_type = Aircraft.query.filter_by(aircraft_type=aircraft_type.name).first()
+            if aircraft_using_type:
+                return False, f"Cannot delete aircraft type '{aircraft_type.name}' because it is being used by aircraft instance '{aircraft_using_type.tail_number}'. Please update or delete the aircraft instances first.", 409
+            
+            # Delete the aircraft type
+            db.session.delete(aircraft_type)
+            db.session.commit()
+            return True, "Aircraft type deleted successfully", 200
+        except Exception as e:
+            db.session.rollback()
+            return False, f"Error deleting aircraft type: {str(e)}", 500

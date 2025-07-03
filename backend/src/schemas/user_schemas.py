@@ -1,4 +1,4 @@
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, fields, validate, validates_schema, ValidationError
 
 class RoleBriefSchema(Schema):
     """Brief schema for role information in user responses."""
@@ -48,6 +48,22 @@ class UserListResponseSchema(Schema):
     """Schema for list of users response."""
     message = fields.String()
     users = fields.List(fields.Nested(UserBriefSchema))
+
+class UserPreferencesSchema(Schema):
+    """Schema for user preferences validation."""
+    fee_schedule_view_size = fields.String(
+        validate=validate.OneOf(['default', 'compact']),
+        missing='default',
+        default='default'
+    )
+    fee_schedule_sort_order = fields.String(
+        missing='classification_name:asc',
+        default='classification_name:asc'
+    )
+    highlight_overrides = fields.Boolean(
+        missing=True,
+        default=True
+    )
 
 class ErrorResponseSchema(Schema):
     """Schema for error responses."""

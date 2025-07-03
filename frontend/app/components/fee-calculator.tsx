@@ -10,10 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   calculateFees,
   type FeeCalculationResult,
-  getAllFeeStructures,
-  type FeeStructure,
 } from "../services/fee-service"
-import { getAllAircraft, type Aircraft } from "../services/aircraft-service"
+import { getAircraftList, type Aircraft } from "../services/aircraft-service"
 import { AlertCircle, Calculator, DollarSign } from "lucide-react"
 import { usePermissions } from "../contexts/permission-context"
 
@@ -38,33 +36,22 @@ const FeeCalculator: React.FC<FeeCalculatorProps> = ({
   const [customerId, setCustomerId] = useState(initialCustomerId)
   const [fuelType, setFuelType] = useState(initialFuelType)
   const [quantity, setQuantity] = useState(initialQuantity.toString())
-  const [feeStructureId, setFeeStructureId] = useState<string>("")
-
   const [isCalculating, setIsCalculating] = useState(false)
   const [calculationResult, setCalculationResult] = useState<FeeCalculationResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const [aircraft, setAircraft] = useState<Aircraft[]>([])
-  const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  const { can } = usePermissions()
+  const { hasPermission } = usePermissions()
 
-  // Load aircraft and fee structures
+  // Load aircraft
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true)
       try {
-        const [aircraftData, feeStructuresData] = await Promise.all([getAllAircraft(), getAllFeeStructures()])
-
+        const aircraftData = await getAircraftList()
         setAircraft(aircraftData)
-        setFeeStructures(feeStructuresData)
-
-        // Set default fee structure if available
-        const defaultStructure = feeStructuresData.find((fs) => fs.isDefault)
-        if (defaultStructure) {
-          setFeeStructureId(defaultStructure.id)
-        }
       } catch (err) {
         console.error("Error loading data:", err)
         setError("Failed to load required data. Please try again.")
@@ -106,7 +93,6 @@ const FeeCalculator: React.FC<FeeCalculatorProps> = ({
         customerId,
         fuelType,
         quantity: Number.parseFloat(quantity),
-        feeStructureId: feeStructureId || undefined,
       })
 
       setCalculationResult(result)
@@ -132,7 +118,7 @@ const FeeCalculator: React.FC<FeeCalculatorProps> = ({
   }
 
   // Check if user has permission to calculate fees
-  const hasCalculationPermission = can("view_billing_info")
+  const hasCalculationPermission = hasPermission("view_billing_info")
 
   if (isLoading) {
     return (
@@ -170,7 +156,7 @@ const FeeCalculator: React.FC<FeeCalculatorProps> = ({
                 <SelectContent>
                   {aircraft.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
-                      {a.tailNumber} - {a.model}
+                      {a.tailNumber} - {a.aircraftType}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -221,25 +207,6 @@ const FeeCalculator: React.FC<FeeCalculatorProps> = ({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="feeStructure">Fee Structure</Label>
-            <Select
-              value={feeStructureId}
-              onValueChange={setFeeStructureId}
-              disabled={isCalculating || !hasCalculationPermission}
-            >
-              <SelectTrigger id="feeStructure">
-                <SelectValue placeholder="Select fee structure" />
-              </SelectTrigger>
-              <SelectContent>
-                {feeStructures.map((fs) => (
-                  <SelectItem key={fs.id} value={fs.id}>
-                    {fs.name} {fs.isDefault ? "(Default)" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
 
           {!hasCalculationPermission && (
             <p className="text-xs text-amber-500 mt-1">You don't have permission to calculate fees</p>
@@ -247,7 +214,7 @@ const FeeCalculator: React.FC<FeeCalculatorProps> = ({
 
           {error && (
             <div className="bg-red-500/10 border border-red-500/50 rounded-md p-3 flex items-start gap-2">
-              <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+              <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
               <p className="text-red-500 text-sm">{error}</p>
             </div>
           )}
@@ -276,40 +243,36 @@ const FeeCalculator: React.FC<FeeCalculatorProps> = ({
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">
                   <div className="text-sm font-medium">Base Rate:</div>
-                  <div className="text-sm">{formatCurrency(calculationResult.breakdown.baseRate)} per gallon</div>
+                  <div className="text-sm">{formatCurrency(calculationResult.breakdown.baseFuelPrice)} per gallon</div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="text-sm font-medium">Quantity:</div>
-                  <div className="text-sm">{calculationResult.breakdown.quantity} gallons</div>
+                  <div className="text-sm">{quantity} gallons</div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="text-sm font-medium">Subtotal:</div>
                   <div className="text-sm">{formatCurrency(calculationResult.subtotal)}</div>
                 </div>
 
-                {calculationResult.discounts.length > 0 && (
-                  <div className="pt-2">
-                    <div className="text-sm font-medium mb-1">Discounts:</div>
-                    {calculationResult.discounts.map((discount, index) => (
-                      <div key={index} className="grid grid-cols-2 gap-2 pl-4">
-                        <div className="text-sm">{discount.name}:</div>
-                        <div className="text-sm text-green-600">-{formatCurrency(discount.amount)}</div>
-                      </div>
-                    ))}
+                <div className="pt-2">
+                  <div className="text-sm font-medium mb-1">Discounts:</div>
+                  <div className="grid grid-cols-2 gap-2 pl-4">
+                    <div className="text-sm">Customer Discount:</div>
+                    <div className="text-sm text-green-600">{(calculationResult.breakdown.customerDiscount * 100).toFixed(1)}%</div>
                   </div>
-                )}
+                  <div className="grid grid-cols-2 gap-2 pl-4">
+                    <div className="text-sm">Volume Discount:</div>
+                    <div className="text-sm text-green-600">{(calculationResult.breakdown.volumeDiscount * 100).toFixed(1)}%</div>
+                  </div>
+                </div>
 
-                {calculationResult.additionalFees.length > 0 && (
-                  <div className="pt-2">
-                    <div className="text-sm font-medium mb-1">Additional Fees:</div>
-                    {calculationResult.additionalFees.map((fee, index) => (
-                      <div key={index} className="grid grid-cols-2 gap-2 pl-4">
-                        <div className="text-sm">{fee.name}:</div>
-                        <div className="text-sm">{formatCurrency(fee.amount)}</div>
-                      </div>
-                    ))}
+                <div className="pt-2">
+                  <div className="text-sm font-medium mb-1">Aircraft Factor:</div>
+                  <div className="grid grid-cols-2 gap-2 pl-4">
+                    <div className="text-sm">Aircraft Adjustment:</div>
+                    <div className="text-sm">{(calculationResult.breakdown.aircraftFactor * 100).toFixed(1)}%</div>
                   </div>
-                )}
+                </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div className="text-sm font-medium">Tax:</div>

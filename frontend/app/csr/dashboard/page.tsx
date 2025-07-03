@@ -6,9 +6,10 @@ import { motion } from "framer-motion"
 import { BarChart3, Clock, CheckCircle, AlertCircle, FileText, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { getFuelOrders, getFuelOrderStats, type FuelOrderDisplay } from "@/app/services/fuel-order-service"
+import { getFuelOrders, getFuelOrderStats, type FuelOrderDisplay, transformToDisplay, type FuelOrderBackend } from "@/app/services/fuel-order-service"
 import { getRecentReceipts, type Receipt } from "@/app/services/receipt-service"
 import PermissionDebug from "@/app/components/permission-debug"
+import NewFuelOrderDialog from "@/app/csr/fuel-orders/components/NewFuelOrderDialog"
 
 export default function CSRDashboard() {
   const router = useRouter()
@@ -20,6 +21,7 @@ export default function CSRDashboard() {
   const [currentDate, setCurrentDate] = useState<string>("")
   const [recentReceipts, setRecentReceipts] = useState<Receipt[]>([])
   const [receiptsLoading, setReceiptsLoading] = useState(false)
+  const [isNewOrderDialogOpen, setIsNewOrderDialogOpen] = useState(false)
 
   useEffect(() => {
     // Set current date
@@ -49,7 +51,10 @@ export default function CSRDashboard() {
 
       // Load fuel orders from backend API
       const response = await getFuelOrders()
-      setFuelOrders(response.items || [])
+      const transformedOrders = await Promise.all(
+        (response.orders || []).map((order: FuelOrderBackend) => transformToDisplay(order))
+      );
+      setFuelOrders(transformedOrders)
     } catch (error) {
       console.error("Error loading fuel orders:", error)
       setError("Failed to load fuel orders. Please try again.")
@@ -278,80 +283,77 @@ export default function CSRDashboard() {
   const orderCounts = getOrderCounts()
 
   return (
-    <div className="space-y-6">
-      {/* Permission Debug Component (development only) */}
-      <PermissionDebug />
-      
-      {/* Welcome section */}
-      <motion.div className="bg-card p-6 rounded-lg border" initial="initial" animate="animate" variants={cardVariants}>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Welcome back, {user?.name || "CSR"}</h1>
-            <p className="text-muted-foreground mt-1">Here's what's happening with your fuel orders today.</p>
-          </div>
-          <motion.div variants={buttonVariants} whileHover="hover" whileTap="tap">
-            <Button onClick={() => router.push("/csr/fuel-orders/new")} className="gap-2">
+    <div className="space-y-6 p-4 md:p-6">
+      <div className="flex items-center justify-between space-y-2">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">CSR Dashboard</h2>
+          <p className="text-muted-foreground">{currentDate}</p>
+        </div>
+        <div className="flex items-center space-x-2">
+            <Button onClick={() => setIsNewOrderDialogOpen(true)} className="gap-2">
               <Plus className="h-4 w-4" />
-              <span>New Fuel Order</span>
+              New Fuel Order
             </Button>
-          </motion.div>
         </div>
-      </motion.div>
+      </div>
 
-      {/* Quick Statistics */}
-      <motion.div className="bg-card p-6 rounded-lg border" initial="initial" animate="animate" variants={cardVariants}>
-        <h2 className="text-xl font-semibold text-foreground mb-6">Quick Statistics</h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <motion.div className="bg-muted p-4 rounded-lg border" variants={statCardVariants} whileHover="hover">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Orders</p>
-                <h3 className="text-2xl font-bold text-foreground mt-1">{orderCounts.total}</h3>
-              </div>
-              <div className="p-2 bg-primary/10 rounded-full">
-                <BarChart3 className="h-6 w-6 text-primary" />
-              </div>
+      {/* Quick Statistics Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <motion.div className="bg-muted p-4 rounded-lg border" variants={statCardVariants} whileHover="hover">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Total Orders</p>
+              <h3 className="text-2xl font-bold text-foreground mt-1">{orderCounts.total}</h3>
             </div>
-          </motion.div>
-
-          <motion.div className="bg-muted p-4 rounded-lg border" variants={statCardVariants} whileHover="hover">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Pending</p>
-                <h3 className="text-2xl font-bold text-foreground mt-1">{orderCounts.pending}</h3>
-              </div>
-              <div className="p-2 bg-warning/10 rounded-full">
-                <AlertCircle className="h-6 w-6 text-warning" />
-              </div>
+            <div className="p-2 bg-primary/10 rounded-full">
+              <BarChart3 className="h-6 w-6 text-primary" />
             </div>
-          </motion.div>
+          </div>
+        </motion.div>
 
-          <motion.div className="bg-muted p-4 rounded-lg border" variants={statCardVariants} whileHover="hover">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">In Progress</p>
-                <h3 className="text-2xl font-bold text-foreground mt-1">{orderCounts.inProgress}</h3>
-              </div>
-              <div className="p-2 bg-primary/10 rounded-full">
-                <Clock className="h-6 w-6 text-primary" />
-              </div>
+        <motion.div className="bg-muted p-4 rounded-lg border" variants={statCardVariants} whileHover="hover">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Pending</p>
+              <h3 className="text-2xl font-bold text-foreground mt-1">{orderCounts.pending}</h3>
             </div>
-          </motion.div>
+            <div className="p-2 bg-warning/10 rounded-full">
+              <AlertCircle className="h-6 w-6 text-warning" />
+            </div>
+          </div>
+        </motion.div>
 
-          <motion.div className="bg-muted p-4 rounded-lg border" variants={statCardVariants} whileHover="hover">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Completed</p>
-                <h3 className="text-2xl font-bold text-foreground mt-1">{orderCounts.completed}</h3>
-              </div>
-              <div className="p-2 bg-success/10 rounded-full">
-                <CheckCircle className="h-6 w-6 text-success" />
-              </div>
+        <motion.div className="bg-muted p-4 rounded-lg border" variants={statCardVariants} whileHover="hover">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">In Progress</p>
+              <h3 className="text-2xl font-bold text-foreground mt-1">{orderCounts.inProgress}</h3>
             </div>
-          </motion.div>
-        </div>
-      </motion.div>
+            <div className="p-2 bg-primary/10 rounded-full">
+              <Clock className="h-6 w-6 text-primary" />
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div className="bg-muted p-4 rounded-lg border" variants={statCardVariants} whileHover="hover">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Completed</p>
+              <h3 className="text-2xl font-bold text-foreground mt-1">{orderCounts.completed}</h3>
+            </div>
+            <div className="p-2 bg-success/10 rounded-full">
+              <CheckCircle className="h-6 w-6 text-success" />
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      <PermissionDebug />
+      <NewFuelOrderDialog 
+        isOpen={isNewOrderDialogOpen}
+        onOpenChange={setIsNewOrderDialogOpen}
+        onOrderCreated={loadFuelOrders}
+      />
 
       {/* Fuel Orders */}
       <Card>

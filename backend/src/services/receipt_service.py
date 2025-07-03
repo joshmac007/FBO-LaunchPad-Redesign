@@ -11,6 +11,7 @@ from datetime import datetime
 from flask import current_app
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy import func
 
 from ..extensions import db
 from ..models.receipt import Receipt, ReceiptStatus
@@ -20,6 +21,7 @@ from ..models.customer import Customer
 from ..models.aircraft import Aircraft
 from ..models.aircraft_type import AircraftType
 from ..models.audit_log import AuditLog
+from ..models.fuel_price import FuelPrice, FuelTypeEnum
 from .fee_calculation_service import FeeCalculationService, FeeCalculationContext
 
 
@@ -30,13 +32,12 @@ class ReceiptService:
         """Initialize the service with fee calculation service."""
         self.fee_calculation_service = FeeCalculationService()
     
-    def create_draft_from_fuel_order(self, fuel_order_id: int, fbo_location_id: int, user_id: int) -> Receipt:
+    def create_draft_from_fuel_order(self, fuel_order_id: int, user_id: int) -> Receipt:
         """
         Create a new draft receipt from a completed fuel order.
         
         Args:
             fuel_order_id: ID of the completed fuel order
-            fbo_location_id: FBO location ID for scoping
             user_id: ID of the user creating the receipt
             
         Returns:
@@ -102,46 +103,90 @@ class ReceiptService:
             if fuel_order.aircraft and fuel_order.aircraft.aircraft_type:
                 aircraft_type_name = fuel_order.aircraft.aircraft_type
             
-            # Calculate fuel quantity dispensed
+            # Calculate fuel quantity dispensed - use multiple sources to ensure we get quantity
             fuel_quantity_gallons = None
+            
+            # Priority 1: Use meter readings difference (most accurate)
             if fuel_order.start_meter_reading and fuel_order.end_meter_reading:
                 fuel_quantity_gallons = fuel_order.end_meter_reading - fuel_order.start_meter_reading
             
-            # Create the receipt record
+            # Priority 2: Use gallons_dispensed field if meter readings not available
+            elif fuel_order.gallons_dispensed:
+                fuel_quantity_gallons = fuel_order.gallons_dispensed
+            
+            # Priority 3: Use requested_amount as fallback
+            elif fuel_order.requested_amount:
+                fuel_quantity_gallons = fuel_order.requested_amount
+            
+            # Log the quantity source for debugging
+            current_app.logger.info(f"Receipt {fuel_order_id}: Using fuel quantity {fuel_quantity_gallons} gallons from " + 
+                                  ("meter readings" if fuel_order.start_meter_reading and fuel_order.end_meter_reading
+                                   else "gallons_dispensed" if fuel_order.gallons_dispensed
+                                   else "requested_amount" if fuel_order.requested_amount
+                                   else "no source available"))
+            
+            # Calculate preliminary fuel subtotal (will be refined during fee calculation)
+            fuel_subtotal = Decimal('0.00')
+            fuel_unit_price = None
+            if fuel_quantity_gallons:
+                # Get basic fuel price for preliminary calculation
+                fuel_unit_price = self._get_fuel_price(fuel_order.fuel_type)
+                fuel_subtotal = Decimal(str(fuel_quantity_gallons)) * fuel_unit_price
+            
+            # Create the receipt record with all fuel order data pre-populated
             receipt = Receipt(
-                fbo_location_id=fbo_location_id,
                 fuel_order_id=fuel_order_id,
                 customer_id=customer_id,
                 aircraft_type_at_receipt_time=aircraft_type_name,
                 fuel_type_at_receipt_time=fuel_order.fuel_type,
                 fuel_quantity_gallons_at_receipt_time=fuel_quantity_gallons,
+                fuel_unit_price_at_receipt_time=fuel_unit_price,
+                fuel_subtotal=fuel_subtotal,
+                grand_total_amount=fuel_subtotal,  # Initial total is just fuel cost
                 status=ReceiptStatus.DRAFT,
                 created_by_user_id=user_id,
                 updated_by_user_id=user_id
             )
             
             db.session.add(receipt)
-            db.session.commit()
+            db.session.flush()  # Get the receipt ID before creating line items
             
-            current_app.logger.info(f"Created draft receipt {receipt.id} for fuel order {fuel_order_id}")
+            # Create initial fuel line item if we have fuel data
+            if fuel_quantity_gallons and fuel_unit_price:
+                fuel_line_item = ReceiptLineItem(
+                    receipt_id=receipt.id,
+                    line_item_type=LineItemType.FUEL,
+                    description=f"{fuel_order.fuel_type} Fuel",
+                    quantity=fuel_quantity_gallons,
+                    unit_price=fuel_unit_price,
+                    amount=fuel_subtotal
+                )
+                db.session.add(fuel_line_item)
+            
+            db.session.commit()  # Explicit commit for proper transaction handling
+            
+            current_app.logger.info(f"Created draft receipt {receipt.id} for fuel order {fuel_order_id} with fuel quantity {fuel_quantity_gallons} gallons")
             return receipt
             
         except IntegrityError as e:
-            db.session.rollback()
+            db.session.rollback()  # Explicit rollback on integrity error
             current_app.logger.error(f"Integrity error creating receipt: {str(e)}")
             raise ValueError("Failed to create receipt due to data integrity constraints")
         except SQLAlchemyError as e:
-            db.session.rollback()
+            db.session.rollback()  # Explicit rollback on database error
             current_app.logger.error(f"Database error creating receipt: {str(e)}")
             raise
+        except Exception as e:
+            db.session.rollback()  # Explicit rollback on any other exception
+            current_app.logger.error(f"Error creating draft receipt: {str(e)}")
+            raise
     
-    def update_draft(self, receipt_id: int, fbo_location_id: int, update_data: Dict[str, Any], user_id: int) -> Receipt:
+    def update_draft(self, receipt_id: int, update_data: Dict[str, Any], user_id: int) -> Receipt:
         """
         Update a draft receipt with new information.
         
         Args:
             receipt_id: ID of the receipt to update
-            fbo_location_id: FBO location ID for scoping
             update_data: Dictionary containing fields to update
             user_id: ID of the user making the update
             
@@ -152,13 +197,13 @@ class ReceiptService:
             ValueError: If receipt is not found, not a draft, or update is invalid
         """
         try:
-            # Fetch the receipt with FBO scoping
+            # Fetch the receipt
             receipt = (Receipt.query
-                      .filter_by(id=receipt_id, fbo_location_id=fbo_location_id)
+                      .filter_by(id=receipt_id)
                       .first())
             
             if not receipt:
-                raise ValueError(f"Receipt {receipt_id} not found for FBO {fbo_location_id}")
+                raise ValueError(f"Receipt {receipt_id} not found")
             
             # Validate receipt is in DRAFT status
             if receipt.status != ReceiptStatus.DRAFT:
@@ -173,6 +218,18 @@ class ReceiptService:
                     if not customer:
                         raise ValueError(f"Customer {new_customer_id} not found")
                     receipt.customer_id = new_customer_id
+            
+            # Update aircraft type if provided
+            if 'aircraft_type' in update_data:
+                aircraft_type = update_data['aircraft_type']
+                if aircraft_type is not None:
+                    receipt.aircraft_type_at_receipt_time = aircraft_type
+            
+            # Update notes if provided
+            if 'notes' in update_data:
+                notes = update_data['notes']
+                if notes is not None:
+                    receipt.notes = notes
             
             # Handle additional services (future implementation)
             if 'additional_services' in update_data:
@@ -198,14 +255,13 @@ class ReceiptService:
             current_app.logger.error(f"Database error updating receipt: {str(e)}")
             raise
     
-    def calculate_and_update_draft(self, receipt_id: int, fbo_location_id: int, 
+    def calculate_and_update_draft(self, receipt_id: int, 
                                  additional_services: Optional[List[Dict[str, Any]]] = None) -> Receipt:
         """
         Calculate fees and update a draft receipt with line items and totals.
         
         Args:
             receipt_id: ID of the receipt to calculate
-            fbo_location_id: FBO location ID for scoping
             additional_services: Optional list of additional services to include
             
         Returns:
@@ -221,11 +277,11 @@ class ReceiptService:
                           joinedload(Receipt.fuel_order).joinedload(FuelOrder.aircraft),
                           joinedload(Receipt.customer)
                       )
-                      .filter_by(id=receipt_id, fbo_location_id=fbo_location_id)
+                      .filter_by(id=receipt_id)
                       .first())
             
             if not receipt:
-                raise ValueError(f"Receipt {receipt_id} not found for FBO {fbo_location_id}")
+                raise ValueError(f"Receipt {receipt_id} not found")
             
             # Validate receipt is in DRAFT status
             if receipt.status != ReceiptStatus.DRAFT:
@@ -250,11 +306,10 @@ class ReceiptService:
                 raise ValueError(f"Aircraft type '{receipt.aircraft_type_at_receipt_time}' not found in system configuration")
             
             # FIXED: Use dynamic fuel pricing instead of hardcoded value
-            fuel_price_per_gallon = self._get_fuel_price(fbo_location_id, receipt.fuel_type_at_receipt_time)
+            fuel_price_per_gallon = self._get_fuel_price(receipt.fuel_type_at_receipt_time)
             
             # Create fee calculation context
             context = FeeCalculationContext(
-                fbo_location_id=fbo_location_id,
                 aircraft_type_id=aircraft_type_record.id,
                 customer_id=receipt.customer_id,
                 fuel_uplift_gallons=receipt.fuel_quantity_gallons_at_receipt_time,
@@ -265,7 +320,6 @@ class ReceiptService:
             # Calculate fees using the fee calculation service
             calculation_result = self.fee_calculation_service.calculate_for_transaction(context)
             
-            # Begin transaction for updating receipt and line items
             # Delete existing line items
             ReceiptLineItem.query.filter_by(receipt_id=receipt_id).delete()
             
@@ -292,59 +346,99 @@ class ReceiptService:
             receipt.fuel_unit_price_at_receipt_time = fuel_price_per_gallon
             receipt.updated_at = datetime.utcnow()
             
+            # Commit the transaction
             db.session.commit()
             
             current_app.logger.info(f"Calculated fees for receipt {receipt_id}: ${receipt.grand_total_amount}")
             return receipt
             
         except IntegrityError as e:
-            db.session.rollback()
+            db.session.rollback()  # Explicit rollback on integrity error
             current_app.logger.error(f"Integrity error calculating fees: {str(e)}")
             raise ValueError("Failed to calculate fees due to data integrity constraints")
         except SQLAlchemyError as e:
-            db.session.rollback()
+            db.session.rollback()  # Explicit rollback on database error
             current_app.logger.error(f"Database error calculating fees: {str(e)}")
             raise
         except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Unexpected error calculating fees: {str(e)}")
-            raise ValueError(f"Fee calculation failed: {str(e)}")
+            db.session.rollback()  # Explicit rollback on any other exception
+            current_app.logger.error(f"Error calculating fees: {str(e)}")
+            raise
     
-    def _get_fuel_price(self, fbo_id: int, fuel_type: str) -> Decimal:
+    def _get_fuel_price(self, fuel_type: str) -> Decimal:
         """
-        Get fuel price for given FBO and fuel type.
+        Get the current fuel price for a given fuel type from the database.
         
         Args:
-            fbo_id: FBO location ID
-            fuel_type: Type of fuel (e.g., 'Jet A', 'Avgas 100LL')
+            fuel_type: Type of fuel (e.g., 'JET_A', 'AVGAS_100LL', 'SAF_JET_A')
             
         Returns:
             Price per gallon as Decimal
             
-        Note: This is a temporary implementation. In the full system, this would
-                  query an FBO fuel pricing configuration table.
+        Note: This queries the fuel_prices table for the most recent price effective
+              as of the current date for the specified fuel type.
         """
-        # Temporary implementation with hardcoded prices per FBO
-        fuel_prices = {
-            1: {  # FBO ID 1
-                'Jet A': Decimal('5.50'),
-                'Avgas 100LL': Decimal('6.25'),
-                'Jet A-1': Decimal('5.50'),
-                'default': Decimal('5.50')
-            },
-            # Future FBOs can be added here
-        }
-        
-        fbo_prices = fuel_prices.get(fbo_id, fuel_prices[1])  # Default to FBO 1 prices
-        return fbo_prices.get(fuel_type, fbo_prices['default'])
+        try:
+            # Normalize fuel type string to match enum values
+            # Handle variations in fuel type naming
+            fuel_type_normalized = fuel_type.upper().replace(' ', '_').replace('-', '_')
+            
+            # Map common variations to the correct enum values
+            fuel_type_mapping = {
+                'JET_A': 'JET_A',
+                'JET_A_1': 'JET_A',  # Treat Jet A-1 as JET_A
+                'AVGAS_100LL': 'AVGAS_100LL',
+                'SAF_JET_A': 'SAF_JET_A',
+                'JET': 'JET_A',  # Common shorthand
+                'AVGAS': 'AVGAS_100LL'  # Common shorthand
+            }
+            
+            mapped_fuel_type = fuel_type_mapping.get(fuel_type_normalized, fuel_type_normalized)
+            
+            # Validate that the fuel type string is a valid enum member
+            try:
+                fuel_type_enum = FuelTypeEnum[mapped_fuel_type]
+            except KeyError:
+                current_app.logger.warning(f"Unknown fuel type '{fuel_type}' (normalized: '{fuel_type_normalized}'). Defaulting to JET_A.")
+                fuel_type_enum = FuelTypeEnum.JET_A
+
+            # Find the most recent price for this fuel type
+            # that is effective as of now
+            latest_price_record = (FuelPrice.query
+                                 .filter(
+                                     FuelPrice.fuel_type == fuel_type_enum,
+                                     FuelPrice.effective_date <= func.now()
+                                 )
+                                 .order_by(FuelPrice.effective_date.desc())
+                                 .first())
+
+            if latest_price_record:
+                current_app.logger.info(f"Found fuel price {latest_price_record.price} for {fuel_type_enum.value}")
+                return latest_price_record.price
+            else:
+                # Fallback: log warning and return a default price
+                current_app.logger.warning(f"No fuel price found for fuel type {fuel_type_enum.value}. Using fallback price.")
+                
+                # Provide reasonable fallback prices based on fuel type
+                fallback_prices = {
+                    FuelTypeEnum.JET_A: Decimal('5.75'),
+                    FuelTypeEnum.AVGAS_100LL: Decimal('6.25'),
+                    FuelTypeEnum.SAF_JET_A: Decimal('7.50')
+                }
+                
+                return fallback_prices.get(fuel_type_enum, Decimal('5.75'))
+                
+        except Exception as e:
+            current_app.logger.error(f"Error fetching fuel price for fuel type {fuel_type}: {str(e)}")
+            # Return a safe fallback price in case of any error
+            return Decimal('5.75')
     
-    def generate_receipt(self, receipt_id: int, fbo_location_id: int) -> Receipt:
+    def generate_receipt(self, receipt_id: int) -> Receipt:
         """
         Generate (finalize) a receipt, assigning a receipt number and changing status.
         
         Args:
             receipt_id: ID of the receipt to generate
-            fbo_location_id: FBO location ID for scoping
             
         Returns:
             The generated receipt
@@ -355,11 +449,11 @@ class ReceiptService:
         try:
             # Fetch the receipt
             receipt = (Receipt.query
-                      .filter_by(id=receipt_id, fbo_location_id=fbo_location_id)
+                      .filter_by(id=receipt_id)
                       .first())
             
             if not receipt:
-                raise ValueError(f"Receipt {receipt_id} not found for FBO {fbo_location_id}")
+                raise ValueError(f"Receipt {receipt_id} not found")
             
             # Validate receipt is in DRAFT status
             if receipt.status != ReceiptStatus.DRAFT:
@@ -371,7 +465,7 @@ class ReceiptService:
                 raise ValueError("Cannot generate a receipt with uncalculated fees")
             
             # Generate unique receipt number
-            receipt_number = self._generate_receipt_number(fbo_location_id)
+            receipt_number = self._generate_receipt_number()
             
             # Update receipt status and metadata
             receipt.receipt_number = receipt_number
@@ -393,13 +487,12 @@ class ReceiptService:
             current_app.logger.error(f"Database error generating receipt: {str(e)}")
             raise
     
-    def mark_as_paid(self, receipt_id: int, fbo_location_id: int) -> Receipt:
+    def mark_as_paid(self, receipt_id: int) -> Receipt:
         """
         Mark a generated receipt as paid.
         
         Args:
             receipt_id: ID of the receipt to mark as paid
-            fbo_location_id: FBO location ID for scoping
             
         Returns:
             The updated receipt
@@ -410,11 +503,11 @@ class ReceiptService:
         try:
             # Fetch the receipt
             receipt = (Receipt.query
-                      .filter_by(id=receipt_id, fbo_location_id=fbo_location_id)
+                      .filter_by(id=receipt_id)
                       .first())
             
             if not receipt:
-                raise ValueError(f"Receipt {receipt_id} not found for FBO {fbo_location_id}")
+                raise ValueError(f"Receipt {receipt_id} not found")
             
             # Validate receipt is in GENERATED status
             if receipt.status != ReceiptStatus.GENERATED:
@@ -439,13 +532,12 @@ class ReceiptService:
             current_app.logger.error(f"Database error marking receipt as paid: {str(e)}")
             raise
     
-    def get_receipts(self, fbo_location_id: int, filters: Optional[Dict[str, Any]] = None, 
+    def get_receipts(self, filters: Optional[Dict[str, Any]] = None, 
                     page: int = 1, per_page: int = 50) -> Dict[str, Any]:
         """
-        Get a paginated list of receipts for an FBO with optional filtering.
+        Get a paginated list of receipts with optional filtering.
         
         Args:
-            fbo_location_id: FBO location ID for scoping
             filters: Optional dictionary of filters (status, customer_id, date_range, etc.)
             page: Page number (1-based)
             per_page: Number of receipts per page
@@ -454,9 +546,8 @@ class ReceiptService:
             Dictionary containing receipts list and pagination info
         """
         try:
-            # Build base query with FBO scoping
+            # Build base query
             query = (Receipt.query
-                    .filter_by(fbo_location_id=fbo_location_id)
                     .options(joinedload(Receipt.customer))
                     .order_by(Receipt.created_at.desc()))
             
@@ -475,6 +566,20 @@ class ReceiptService:
                 
                 if 'date_to' in filters:
                     query = query.filter(Receipt.created_at <= filters['date_to'])
+                
+                if 'search' in filters and filters['search']:
+                    search_term = f"%{filters['search']}%"
+                    # Import FuelOrder model for the join
+                    from ..models.fuel_order import FuelOrder
+                    from ..models.customer import Customer
+                    
+                    query = query.outerjoin(FuelOrder).outerjoin(Customer).filter(
+                        db.or_(
+                            Receipt.receipt_number.ilike(search_term),
+                            FuelOrder.tail_number.ilike(search_term),
+                            Customer.name.ilike(search_term)
+                        )
+                    )
             
             # Apply pagination
             paginated_results = query.paginate(
@@ -499,13 +604,12 @@ class ReceiptService:
             current_app.logger.error(f"Database error fetching receipts: {str(e)}")
             raise
     
-    def get_receipt_by_id(self, receipt_id: int, fbo_location_id: int) -> Optional[Receipt]:
+    def get_receipt_by_id(self, receipt_id: int) -> Optional[Receipt]:
         """
-        Get a specific receipt by ID with FBO scoping.
+        Get a specific receipt by ID.
         
         Args:
             receipt_id: ID of the receipt to fetch
-            fbo_location_id: FBO location ID for scoping
             
         Returns:
             The receipt if found, None otherwise
@@ -517,7 +621,7 @@ class ReceiptService:
                           joinedload(Receipt.fuel_order),
                           joinedload(Receipt.line_items)
                       )
-                      .filter_by(id=receipt_id, fbo_location_id=fbo_location_id)
+                      .filter_by(id=receipt_id)
                       .first())
             
             return receipt
@@ -526,23 +630,15 @@ class ReceiptService:
             current_app.logger.error(f"Database error fetching receipt {receipt_id}: {str(e)}")
             raise
     
-    def _generate_receipt_number(self, fbo_location_id: int) -> str:
+    def _generate_receipt_number(self) -> str:
         """
-        Generate a unique receipt number for the FBO.
+        Generate a unique receipt number.
         
-        Args:
-            fbo_location_id: FBO location ID
-            
         Returns:
             Unique receipt number string
         """
-        # For simplicity, using FBO-ID and timestamp
-        # In a real system, this would use a sequence or counter per FBO
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-        fbo_code = f"FBO{fbo_location_id:03d}"
-        
-        # Find the next sequential number for today
-        today_prefix = f"{fbo_code}-{datetime.utcnow().strftime('%Y%m%d')}"
+        # Generate a global receipt number with date and sequence
+        today_prefix = f"R-{datetime.utcnow().strftime('%Y%m%d')}"
         latest_receipt = (Receipt.query
                          .filter(Receipt.receipt_number.like(f"{today_prefix}%"))
                          .order_by(Receipt.receipt_number.desc())
@@ -614,14 +710,13 @@ class ReceiptService:
             current_app.logger.error(f"Database error voiding receipt: {str(e)}")
             raise
 
-    def toggle_line_item_waiver(self, receipt_id: int, line_item_id: int, fbo_location_id: int, user_id: int) -> Receipt:
+    def toggle_line_item_waiver(self, receipt_id: int, line_item_id: int, user_id: int) -> Receipt:
         """
         Toggle the waiver status of a fee line item manually.
         
         Args:
             receipt_id: ID of the receipt containing the line item
             line_item_id: ID of the fee line item to toggle waiver for
-            fbo_location_id: FBO location ID for scoping
             user_id: ID of the user making the change
             
         Returns:
@@ -631,13 +726,13 @@ class ReceiptService:
             ValueError: If receipt/line item not found, not draft status, or fee not waivable
         """
         try:
-            # Fetch the receipt with FBO scoping
+            # Fetch the receipt
             receipt = (Receipt.query
-                      .filter_by(id=receipt_id, fbo_location_id=fbo_location_id)
+                      .filter_by(id=receipt_id)
                       .first())
             
             if not receipt:
-                raise ValueError(f"Receipt {receipt_id} not found for FBO {fbo_location_id}")
+                raise ValueError(f"Receipt {receipt_id} not found")
             
             # Validate receipt is in DRAFT status
             if receipt.status != ReceiptStatus.DRAFT:
@@ -654,7 +749,7 @@ class ReceiptService:
             # Check if this fee is potentially waivable by looking up the fee rule
             from ..models.fee_rule import FeeRule
             fee_rule = (FeeRule.query
-                       .filter_by(fbo_location_id=fbo_location_id, fee_code=fee_line_item.fee_code_applied)
+                       .filter_by(fee_code=fee_line_item.fee_code_applied)
                        .first())
             
             if not fee_rule or not fee_rule.is_potentially_waivable_by_fuel_uplift:
@@ -726,7 +821,7 @@ class ReceiptService:
             elif item.line_item_type == LineItemType.FEE:
                 total_fees_amount += item.amount
             elif item.line_item_type == LineItemType.WAIVER:
-                total_waivers_amount += abs(item.amount)  # Store as positive value
+                total_waivers_amount += item.amount  # Store as negative value (matching line item amount)
             elif item.line_item_type == LineItemType.TAX:
                 tax_amount += item.amount
         

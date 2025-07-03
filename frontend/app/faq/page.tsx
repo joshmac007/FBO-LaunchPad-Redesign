@@ -3,10 +3,11 @@
 import Header from "@/components/header"
 import Footer from "@/components/footer"
 import { useEffect, useState } from "react"
-import { HelpCircle, ChevronDown, ChevronUp, Plane, Search } from "lucide-react"
+import { HelpCircle, Plane, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Input } from "@/components/ui/input"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 export default function FAQPage() {
   // Scroll to top when page loads
@@ -16,18 +17,10 @@ export default function FAQPage() {
 
   const [isVisible, setIsVisible] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
-  const [expandedQuestions, setExpandedQuestions] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     setIsVisible(true)
   }, [])
-
-  const toggleQuestion = (id: string) => {
-    setExpandedQuestions((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }))
-  }
 
   const faqCategories = [
     {
@@ -264,34 +257,20 @@ export default function FAQPage() {
                 category.questions.length > 0 ? (
                   <div key={category.title} className="space-y-4">
                     <h2 className="text-2xl font-bold">{category.title}</h2>
-                    <div className="space-y-4">
+                    <Accordion type="single" collapsible className="w-full">
                       {category.questions.map((item) => (
-                        <div
-                          key={item.id}
-                          className="border rounded-lg overflow-hidden transition-all duration-200 hover:border-primary/50"
-                        >
-                          <button
-                            className="flex justify-between items-center w-full p-4 text-left"
-                            onClick={() => toggleQuestion(item.id)}
-                            aria-expanded={expandedQuestions[item.id]}
-                          >
-                            <span className="font-medium text-lg">{item.question}</span>
-                            {expandedQuestions[item.id] ? (
-                              <ChevronUp className="h-5 w-5 text-primary flex-shrink-0" />
-                            ) : (
-                              <ChevronDown className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                            )}
-                          </button>
-                          {expandedQuestions[item.id] && (
-                            <div className="p-4 pt-0 border-t">
-                              <div className="prose dark:prose-invert max-w-none">
-                                {typeof item.answer === "string" ? <p>{item.answer}</p> : item.answer}
-                              </div>
+                        <AccordionItem value={item.id} key={item.id}>
+                          <AccordionTrigger className="text-left text-lg font-medium">
+                            {item.question}
+                          </AccordionTrigger>
+                          <AccordionContent className="text-muted-foreground">
+                            <div className="prose dark:prose-invert max-w-none">
+                              {typeof item.answer === "string" ? <p>{item.answer}</p> : item.answer}
                             </div>
-                          )}
-                        </div>
+                          </AccordionContent>
+                        </AccordionItem>
                       ))}
-                    </div>
+                    </Accordion>
                   </div>
                 ) : null,
               )}

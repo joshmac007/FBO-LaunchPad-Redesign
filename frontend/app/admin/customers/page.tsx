@@ -1,7 +1,11 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
 import { Button } from "@/components/ui/button"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import {
   Table,
   TableBody,
@@ -52,6 +56,13 @@ import {
   type AdminCustomerUpdateRequest,
 } from "../../services/customer-service" // Adjusted path
 import { toast } from "sonner" // For notifications
+
+const customerFormSchema = z.object({
+  name: z.string().min(1, { message: "Name is required." }),
+  email: z.string().email({ message: "Please enter a valid email address." }),
+  phone: z.string().optional(),
+})
+
 export default function CustomerManagementPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -61,10 +72,13 @@ export default function CustomerManagementPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
 
-  const [newCustomerData, setNewCustomerData] = useState({
-    name: "",
-    email: "",
-    phone: "",
+  const form = useForm<z.infer<typeof customerFormSchema>>({
+    resolver: zodResolver(customerFormSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+    },
   })
   // Adjusted editCustomerData state for form fields
   const [editCustomerData, setEditCustomerData] = useState<{
@@ -118,34 +132,21 @@ export default function CustomerManagementPage() {
     setIsDeleteDialogOpen(true)
   }
 
-  const handleCreateCustomerSubmit = async () => {
-    setCreateFormError(null) // Reset previous errors
-
-    // Basic client-side validation
-    if (!newCustomerData.name.trim()) {
-      setCreateFormError("Name is required.")
-      return
-    }
-    if (!newCustomerData.email.trim() || !/\S+@\S+\.\S+/.test(newCustomerData.email)) {
-      setCreateFormError("A valid email is required.")
-      return
-    }
-
+  const handleCreateCustomerSubmit = async (values: z.infer<typeof customerFormSchema>) => {
     setIsSubmitting(true)
     try {
       const payload: AdminCustomerCreateRequest = {
-        name: newCustomerData.name.trim(),
-        email: newCustomerData.email.trim(),
-        phone: newCustomerData.phone?.trim() || undefined, // Send undefined if phone is empty or only whitespace
+        name: values.name.trim(),
+        email: values.email.trim(),
+        phone: values.phone?.trim() || undefined,
       }
       await createAdminCustomer(payload)
       toast.success("Customer created successfully!")
       await fetchCustomers() // Refresh the list
       setIsCreateDialogOpen(false) // Close dialog on success
-      // Resetting form is handled by onOpenChange of Dialog
+      form.reset()
     } catch (error: any) {
       console.error("Failed to create customer:", error)
-      setCreateFormError(error.message || "An unknown error occurred. Please try again.")
       toast.error(error.message || "Failed to create customer.")
     } finally {
       setIsSubmitting(false)
@@ -221,15 +222,15 @@ export default function CustomerManagementPage() {
   }
 
   return (
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold">Customer Management</h1>
+    <div className="p-4 md:p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold">Customer Management</h1>
           <Dialog 
             open={isCreateDialogOpen} 
             onOpenChange={(isOpen) => {
               setIsCreateDialogOpen(isOpen);
               if (!isOpen) {
-                setNewCustomerData({ name: "", email: "", phone: "" }); // Reset form data
+                form.reset(); // Reset form data
                 setCreateFormError(null); // Clear any form errors
               }
             }}
@@ -247,57 +248,55 @@ export default function CustomerManagementPage() {
                 Fill in the details to add a new customer. Click create when you&apos;re done.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="name-create" className="text-right">Name</Label>
-                <Input
-                  id="name-create"
-                  value={newCustomerData.name}
-                  onChange={(e) => setNewCustomerData({ ...newCustomerData, name: e.target.value })}
-                  className="col-span-3"
-                  placeholder="John Doe"
-                  disabled={isSubmitting}
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleCreateCustomerSubmit)} className="grid gap-4 py-4">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="John Doe" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="email-create" className="text-right">Email</Label>
-                <Input
-                  id="email-create"
-                  type="email"
-                  value={newCustomerData.email}
-                  onChange={(e) => setNewCustomerData({ ...newCustomerData, email: e.target.value })}
-                  className="col-span-3"
-                  placeholder="john.doe@example.com"
-                  disabled={isSubmitting}
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="john.doe@example.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="phone-create" className="text-right">Phone</Label>
-                <Input
-                  id="phone-create"
-                  value={newCustomerData.phone}
-                  onChange={(e) => setNewCustomerData({ ...newCustomerData, phone: e.target.value })}
-                  className="col-span-3"
-                  placeholder="(123) 456-7890 (Optional)"
-                  disabled={isSubmitting}
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="(123) 456-7890" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              {createFormError && (
-                <div className="col-span-4 bg-red-50 p-2 rounded-md border border-red-200 text-xs text-red-600 flex items-center">
-                  <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
-                  {createFormError}
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isSubmitting}>
-                Cancel
-              </Button>
-              <Button onClick={handleCreateCustomerSubmit} disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isSubmitting ? "Creating..." : "Create Customer"}
-              </Button>
-            </DialogFooter>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit">Create Customer</Button>
+                </DialogFooter>
+              </form>
+            </Form>
           </DialogContent>
         </Dialog>
       </div>
@@ -321,9 +320,9 @@ export default function CustomerManagementPage() {
       {!isLoading && !error && (
         <Card>
           <CardHeader>
-            <CardTitle>Customer List</CardTitle>
+            <CardTitle>Customers</CardTitle>
             <CardDescription>
-              A list of all customers in the system.
+              Manage your customer records.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -364,7 +363,7 @@ export default function CustomerManagementPage() {
                               <Edit2 className="mr-2 h-4 w-4" />
                               Edit
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDeleteClick(customer)} className="text-red-600 hover:!text-red-600 hover:!bg-red-100">
+                            <DropdownMenuItem onClick={() => handleDeleteClick(customer)} className="text-red-600 hover:text-red-600! hover:bg-red-100!">
                               <Trash2 className="mr-2 h-4 w-4" />
                               Delete
                             </DropdownMenuItem>
@@ -440,7 +439,7 @@ export default function CustomerManagementPage() {
               </div>
               {editFormError && (
                 <div className="col-span-4 bg-red-50 p-2 rounded-md border border-red-200 text-xs text-red-600 flex items-center">
-                  <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <AlertCircle className="h-4 w-4 mr-2 shrink-0" />
                   {editFormError}
                 </div>
               )}
@@ -478,7 +477,7 @@ export default function CustomerManagementPage() {
           </DialogHeader>
           {deleteError && (
             <div className="bg-red-50 p-3 rounded-md border border-red-200 text-sm text-red-700 flex items-center my-2">
-              <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+              <AlertCircle className="h-4 w-4 mr-2 shrink-0" />
               {deleteError}
             </div>
           )}

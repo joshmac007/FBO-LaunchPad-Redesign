@@ -174,9 +174,58 @@ def verify_permission_groups():
     else:
         click.echo("❌ Permission groups verification failed!")
 
+@click.group()
+def maintenance_cli():
+    """Database maintenance commands."""
+    pass
+
+@maintenance_cli.command('cleanup-versions')
+@with_appcontext
+def cleanup_expired_versions():
+    """Clean up expired fee schedule versions."""
+    from datetime import datetime
+    from .models.fee_schedule_version import FeeScheduleVersion
+    
+    click.echo("🧹 Starting cleanup of expired fee schedule versions...")
+    
+    # Find expired versions
+    now = datetime.utcnow()
+    expired_versions = FeeScheduleVersion.query.filter(
+        FeeScheduleVersion.expires_at.isnot(None),
+        FeeScheduleVersion.expires_at < now
+    ).all()
+    
+    if not expired_versions:
+        click.echo("✅ No expired versions found!")
+        return
+    
+    click.echo(f"🗑️  Found {len(expired_versions)} expired versions to clean up:")
+    
+    # List expired versions
+    for version in expired_versions:
+        click.echo(f"   - ID {version.id}: {version.version_name} (expired: {version.expires_at})")
+    
+    # Confirm deletion
+    if click.confirm("Do you want to delete these expired versions?"):
+        try:
+            count = 0
+            for version in expired_versions:
+                db.session.delete(version)
+                count += 1
+            
+            db.session.commit()
+            click.echo(f"✅ Successfully deleted {count} expired versions!")
+            
+        except Exception as e:
+            db.session.rollback()
+            click.echo(f"❌ Error during cleanup: {str(e)}")
+    else:
+        click.echo("🚫 Cleanup cancelled by user")
+
 def init_app(app):
     """Register CLI commands."""
     app.cli.add_command(create_admin)
     app.cli.add_command(seed_cli, name='seed')
     app.cli.add_command(migrate_cli, name='migrate')
-    app.cli.add_command(permission_groups_cli, name='create-permission-groups') 
+    app.cli.add_command(permission_groups_cli, name='create-permission-groups')
+    app.cli.add_command(maintenance_cli, name='maintenance') 

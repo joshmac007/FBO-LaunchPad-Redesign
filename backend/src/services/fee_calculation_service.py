@@ -20,8 +20,7 @@ from sqlalchemy import and_
 from ..extensions import db
 from ..models.customer import Customer
 from ..models.aircraft_type import AircraftType
-from ..models.fee_category import FeeCategory
-from ..models.aircraft_type_fee_category_mapping import AircraftTypeToFeeCategoryMapping
+from ..models.aircraft_classification import AircraftClassification
 from ..models.fee_rule import FeeRule, WaiverStrategy, CalculationBasis
 from ..models.waiver_tier import WaiverTier
 
@@ -29,7 +28,6 @@ from ..models.waiver_tier import WaiverTier
 @dataclass
 class FeeCalculationContext:
     """Input context for fee calculation."""
-    fbo_location_id: int
     aircraft_type_id: int
     customer_id: int
     fuel_uplift_gallons: Decimal
@@ -64,7 +62,7 @@ class FeeCalculationResult:
 class FeeCalculationService:
     """Service for calculating fees, taxes, and waivers for transactions."""
     
-    # Default tax rate - in a real system this would be FBO-configurable
+    # Default tax rate - in a real system this would be configurable
     DEFAULT_TAX_RATE = Decimal('0.08')  # 8%
     
     def calculate_for_transaction(self, context: FeeCalculationContext) -> FeeCalculationResult:
@@ -101,15 +99,15 @@ class FeeCalculationService:
             # 2. Determine applicable fee rules
             applicable_rules = self._determine_applicable_rules(
                 data['fee_rules'], 
-                data['aircraft_fee_category_id'],
+                data['aircraft_aircraft_classification_id'],
                 context.additional_services
             )
             
             # 3. Evaluate tiered waivers
-            # Get base minimum fuel gallons for waiver - FBO-specific if available, otherwise aircraft type default
+            # Get base minimum fuel gallons for waiver from aircraft type
             base_min_fuel_for_waiver = None
-            if data['fbo_aircraft_config']:
-                base_min_fuel_for_waiver = data['fbo_aircraft_config'].base_min_fuel_gallons_for_waiver
+            if data['aircraft_config']:
+                base_min_fuel_for_waiver = data['aircraft_config'].base_min_fuel_gallons_for_waiver
             elif data['aircraft_type']:
                 base_min_fuel_for_waiver = data['aircraft_type'].base_min_fuel_gallons_for_waiver
             
@@ -179,7 +177,7 @@ class FeeCalculationService:
                 if item.is_taxable and item.line_item_type in ['FUEL', 'FEE']
             )
             
-            tax_amount = self._calculate_taxes(taxable_amount)
+            tax_amount = self._calculate_taxes(taxable_amount) # type: ignore
             if tax_amount > 0:
                 tax_line_item = FeeCalculationResultLineItem(
                     line_item_type='TAX',
@@ -207,10 +205,10 @@ class FeeCalculationService:
             return FeeCalculationResult(
                 line_items=line_items,
                 fuel_subtotal=fuel_subtotal,
-                total_fees_amount=total_fees_amount,
-                total_waivers_amount=total_waivers_amount,
-                tax_amount=tax_amount,
-                grand_total_amount=grand_total_amount,
+                total_fees_amount=total_fees_amount, # type: ignore
+                total_waivers_amount=total_waivers_amount, # type: ignore
+                tax_amount=tax_amount, # type: ignore
+                grand_total_amount=grand_total_amount, # type: ignore
                 is_caa_applied=is_caa_member
             )
             
@@ -228,7 +226,7 @@ class FeeCalculationService:
         Returns:
             Dictionary containing all fetched data
         """
-        from ..models.fbo_aircraft_type_config import FBOAircraftTypeConfig
+        from ..models.aircraft_type_config import AircraftTypeConfig
         
         # Fetch customer
         customer = db.session.get(Customer, context.customer_id)
@@ -236,38 +234,29 @@ class FeeCalculationService:
         # Fetch aircraft type
         aircraft_type = db.session.get(AircraftType, context.aircraft_type_id)
         
-        # Fetch FBO-specific aircraft configuration (for waiver minimum fuel gallons)
-        fbo_aircraft_config = None
+        # Fetch aircraft configuration (for waiver minimum fuel gallons)
+        aircraft_config = None
         if aircraft_type:
-            fbo_aircraft_config = FBOAircraftTypeConfig.query.filter_by(
-                fbo_location_id=context.fbo_location_id,
+            aircraft_config = AircraftTypeConfig.query.filter_by(
                 aircraft_type_id=aircraft_type.id
             ).first()
         
-        # Find aircraft's fee category for this FBO
-        aircraft_fee_category_id = None
+        # Find aircraft's fee category (now global relationship)
+        aircraft_aircraft_classification_id = None
         if aircraft_type:
-            mapping = AircraftTypeToFeeCategoryMapping.query.filter_by(
-                fbo_location_id=context.fbo_location_id,
-                aircraft_type_id=aircraft_type.id
-            ).first()
-            aircraft_fee_category_id = mapping.fee_category_id if mapping else None
+            aircraft_aircraft_classification_id = aircraft_type.classification_id
         
-        # Fetch all fee rules for this FBO
-        fee_rules = FeeRule.query.filter_by(
-            fbo_location_id=context.fbo_location_id
-        ).options(joinedload(FeeRule.fee_category)).all()
+        # Fetch all fee rules
+        fee_rules = FeeRule.query.options(joinedload(FeeRule.aircraft_classification)).all()  # type: ignore
         
-        # Fetch all waiver tiers for this FBO
-        waiver_tiers = WaiverTier.query.filter_by(
-            fbo_location_id=context.fbo_location_id
-        ).all()
+        # Fetch all waiver tiers
+        waiver_tiers = WaiverTier.query.all()
         
         return {
             'customer': customer,
             'aircraft_type': aircraft_type,
-            'fbo_aircraft_config': fbo_aircraft_config,
-            'aircraft_fee_category_id': aircraft_fee_category_id,
+            'aircraft_config': aircraft_config,
+            'aircraft_aircraft_classification_id': aircraft_aircraft_classification_id,
             'fee_rules': fee_rules,
             'waiver_tiers': waiver_tiers
         }
@@ -275,15 +264,15 @@ class FeeCalculationService:
     def _determine_applicable_rules(
         self, 
         all_rules: List[FeeRule], 
-        aircraft_fee_category_id: Optional[int],
+        aircraft_aircraft_classification_id: Optional[int],
         additional_services: List[Dict[str, Any]]
     ) -> List[FeeRule]:
         """
         Filter fee rules to only those applicable to this transaction.
         
         Args:
-            all_rules: All fee rules for the FBO
-            aircraft_fee_category_id: Fee category ID for the aircraft
+            all_rules: All fee rules
+            aircraft_aircraft_classification_id: Fee category ID for the aircraft
             additional_services: Additional services requested
             
         Returns:
@@ -296,7 +285,7 @@ class FeeCalculationService:
         
         for rule in all_rules:
             # Include if it applies to the aircraft's fee category
-            if rule.applies_to_fee_category_id == aircraft_fee_category_id:
+            if rule.applies_to_aircraft_classification_id == aircraft_aircraft_classification_id:
                 applicable_rules.append(rule)
             # Include if it's an additional service that was requested
             elif rule.fee_code in additional_fee_codes:
@@ -308,7 +297,7 @@ class FeeCalculationService:
         self,
         fuel_uplift_gallons: Decimal,
         base_min_fuel_for_waiver: Optional[Decimal],
-        all_fbo_tiers: List[WaiverTier],
+        all_tiers: List[WaiverTier],
         is_caa_member: bool
     ) -> Set[str]:
         """
@@ -317,7 +306,7 @@ class FeeCalculationService:
         Args:
             fuel_uplift_gallons: Amount of fuel purchased
             base_min_fuel_for_waiver: Aircraft's base minimum fuel for waivers
-            all_fbo_tiers: All waiver tiers for the FBO
+            all_tiers: All waiver tiers
             is_caa_member: Whether customer is a CAA member
             
         Returns:
@@ -330,7 +319,7 @@ class FeeCalculationService:
         
         # Filter tiers based on CAA membership
         relevant_tiers = [
-            tier for tier in all_fbo_tiers
+            tier for tier in all_tiers
             if tier.is_caa_specific_tier == is_caa_member or not tier.is_caa_specific_tier
         ]
         
@@ -361,7 +350,7 @@ class FeeCalculationService:
         if taxable_amount <= 0:
             return Decimal('0.00')
         
-        # In a real system, tax rate would be configurable per FBO
+        # In a real system, tax rate would be configurable
         return (taxable_amount * self.DEFAULT_TAX_RATE).quantize(Decimal('0.01'))
     
     def _get_service_quantity(self, fee_code: str, additional_services: List[Dict[str, Any]]) -> Decimal:

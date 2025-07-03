@@ -6,8 +6,11 @@ import { useRouter } from "next/navigation"
 import { usePermissions } from "@/hooks/usePermissions"
 import AppSidebar from "@/components/layout/app-sidebar"
 import AccessDenied from "@/app/components/access-denied"
-import { TooltipProvider } from "@/components/ui/tooltip"
 import { PERMISSION_GROUPS } from "@/app/constants/permissions"
+import {
+  SidebarInset,
+  SidebarProvider,
+} from "@/components/ui/sidebar"
 
 export default function FuelerLayout({
   children,
@@ -15,7 +18,6 @@ export default function FuelerLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [hasAccess, setHasAccess] = useState(false)
 
@@ -96,21 +98,13 @@ export default function FuelerLayout({
   }
 
   return (
-    <TooltipProvider>
-      <div className="flex h-screen bg-background">
-        <AppSidebar 
-          collapsed={sidebarCollapsed} 
-          setCollapsed={setSidebarCollapsed} 
-          userRole="fueler" // Keep for compatibility, but sidebar should use permissions internally
-        />
-        <main
-          className={`flex-1 overflow-auto transition-all duration-300 ${
-            sidebarCollapsed ? "ml-[80px]" : "ml-[280px]"
-          }`}
-        >
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset className="flex flex-col">
+        <main className="flex-1 overflow-auto">
           <div className="p-6">{children}</div>
         </main>
-      </div>
-    </TooltipProvider>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }

@@ -32,10 +32,13 @@ class User(db.Model):
     username = db.Column(db.String(64), unique=True, nullable=False, index=True)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     name = db.Column(db.String(120), nullable=True)
-    password_hash = db.Column(db.String(128))
+    password_hash = db.Column(db.String(255))
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # User preferences stored as JSONB
+    preferences = db.Column(db.JSON, nullable=True)
     
     # LST-specific fields
     employee_id = db.Column(db.String(20), nullable=True, unique=True, index=True)
@@ -48,8 +51,6 @@ class User(db.Model):
     last_active = db.Column(db.DateTime, nullable=True)
     hire_date = db.Column(db.DateTime, nullable=True)
     
-    # FBO association for multi-tenancy
-    fbo_location_id = db.Column(db.Integer, nullable=True, index=True)
     
     roles = db.relationship(
         'Role',
@@ -87,7 +88,7 @@ class User(db.Model):
             'roles': [role.name for role in self.roles.all()],
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat(),
-            'fbo_id': self.fbo_location_id
+            'preferences': self.preferences or {},
         }
         
         # Add LST-specific fields if they exist

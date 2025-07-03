@@ -180,7 +180,8 @@ def login():
             'name': user.name,
             'roles': [role.name for role in user.roles], # Ensure roles is a list of strings
             'is_active': user.is_active,
-            'created_at': user.created_at.isoformat() if user.created_at else None
+            'created_at': user.created_at.isoformat() if user.created_at else None,
+            'preferences': user.preferences or {}
         }
         
         response_schema = LoginSuccessResponseSchema()

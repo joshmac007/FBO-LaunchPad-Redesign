@@ -3,7 +3,7 @@ import eventlet
 eventlet.monkey_patch()
 
 import os
-from flask import Flask, jsonify, current_app, request
+from flask import Flask, jsonify
 from flask_cors import CORS
 from apispec.ext.marshmallow import MarshmallowPlugin
 from apispec_webframeworks.flask import FlaskPlugin
@@ -77,7 +77,18 @@ def create_app(config_name=None):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    socketio.init_app(app)
+
+    # Initialize SocketIO here, inside the factory
+    socketio.init_app(
+        app,
+        cors_allowed_origins="*",
+        async_mode='eventlet',
+        message_queue=os.getenv('REDIS_URL', 'redis://redis:6379/0'),
+        logger=False,
+        engineio_logger=False,
+        max_http_buffer_size=100000000
+    )
+    
     init_cli(app)
 
     # JWT User Lookup Loader - sets g.current_user automatically when JWT is present
@@ -106,6 +117,9 @@ def create_app(config_name=None):
     # Re-initialize resolver for marshmallow plugin with updated plugins
     marshmallow_plugin.init_spec(apispec)
     
+    # Explicitly attach the spec to the app instance
+    app.spec = apispec  # type: ignore
+
     # Add security scheme for JWT
     apispec.components.security_scheme(
         "bearerAuth",
@@ -158,7 +172,7 @@ def create_app(config_name=None):
     @app.route('/api/swagger.json')
     def create_swagger_spec():
         """Serve the swagger specification."""
-        return jsonify(app.spec.to_dict())
+        return jsonify(app.spec.to_dict())  # type: ignore
 
     @app.route('/api/cors-test', methods=['OPTIONS', 'POST'])
     def cors_test():

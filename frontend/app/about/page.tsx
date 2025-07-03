@@ -64,7 +64,7 @@ export default function AboutPage() {
                     isVisible ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-10"
                   }`}
                 >
-                  <div className="absolute -inset-1 bg-gradient-to-r from-primary to-accent rounded-lg blur opacity-25"></div>
+                  <div className="absolute -inset-1 bg-linear-to-r from-primary to-accent rounded-lg blur opacity-25"></div>
                   <div className="relative rounded-lg overflow-hidden">
                     <Image
                       src="/aviation-planning.png"
@@ -236,7 +236,7 @@ export default function AboutPage() {
 
             <div className="grid gap-8 md:grid-cols-2">
               <div className="bg-white/10 backdrop-blur-md rounded-xl overflow-hidden card-futuristic">
-                <div className="aspect-[4/3] relative">
+                <div className="aspect-4/3 relative">
                   <Image
                     src="/images/josh2.jpg"
                     alt="Josh - Co-founder"
@@ -270,7 +270,7 @@ export default function AboutPage() {
               </div>
 
               <div className="bg-white/10 backdrop-blur-md rounded-xl overflow-hidden card-futuristic">
-                <div className="aspect-[4/3] relative">
+                <div className="aspect-4/3 relative">
                   <Image
                     src="/images/tyler4.jpg"
                     alt="Tyler - Co-founder"

@@ -1,0 +1,153 @@
+Of course. Based on the comprehensive "CSR Receipt System" PRD and the requirement to mimic the existing `fuel-orders` page, here is a specific PRD for the **Receipts Management Page**.
+
+This document focuses solely on the list view page (`csr/receipts`) and its associated user interactions, assuming the underlying services and data models from the main PRD are in place.
+
+---
+
+## Product Requirements Document: Receipts Management Page
+
+**Document Version:** 1.0
+**Author/Collaborators:** AI Assistant & User
+**Status:** Final Draft for Implementation
+
+---
+
+**1. Introduction & Goals**
+
+*   **1.1. Purpose:**
+    To create a centralized and efficient interface for Customer Service Representatives (CSRs) to view, search, filter, and manage all receipts within their FBO location. This page will serve as the primary hub for all post-transaction documentation tasks.
+
+*   **1.2. Design Philosophy:**
+    This page must **mimic the established UI/UX patterns of the Fuel Orders page (`csr/fuel-orders`)** to ensure a consistent, intuitive, and predictable user experience across the CSR portal. This includes the layout of statistics, filters, the data table, and action menus.
+
+*   **1.3. Primary Goals:**
+    *   Provide a single, comprehensive view of all receipts, regardless of their status (Draft, Generated, Paid).
+    *   Enable CSRs to quickly locate specific receipts using powerful search and filtering capabilities.
+    *   Display key receipt statistics at a glance to inform CSRs of the current workload and status distribution.
+    *   Facilitate common actions on receipts, such as viewing details, downloading PDFs, and exporting data, directly from the list view.
+    *   Maintain UI/UX consistency with the Fuel Orders page, reducing the learning curve for CSRs.
+
+*   **1.4. Success Metrics (SMART):**
+    *   **Efficiency:** Reduce the average time to find and download a specific receipt (given a tail number and date range) to under 30 seconds within 2 months of launch.
+    *   **Adoption:** Achieve >90% of CSRs using the search and filter functions for their daily tasks within 1 month of launch, measured via analytics.
+    *   **Usability:** Achieve a task completion rate of >95% for "Find and view a 'Paid' receipt from last week" in user acceptance testing.
+    *   **Consistency:** Maintain a user satisfaction score of >4.5/5.0 on the question "The Receipts page is easy to use and consistent with other parts of the application," measured in post-launch surveys.
+
+*   **1.5. Out of Scope (for this specific page's MVP):**
+    *   Bulk actions on receipts (e.g., bulk download, bulk email). A checkbox column will be implemented for future use.
+    *   In-line editing directly within the table (editing will occur on the detail/workspace page).
+    *   Real-time, automatic updates to the list (page will rely on manual refresh or re-navigation for now).
+    *   Advanced, configurable reporting dashboards.
+
+---
+
+**2. User Roles & Personas**
+
+*   **Customer Service Representative (CSR):**
+    *   Primary user of this page.
+    *   Needs to quickly find past transactions, check payment statuses, and re-send receipts to customers.
+    *   Manages draft receipts, ensuring they are completed and finalized.
+
+---
+
+**3. Features & User Experience (UX)**
+
+This page will be located at the `/csr/receipts` route and will be protected by the `view_receipts` permission.
+
+### 3.1. Page Layout & Header
+
+*   **Page Title:** A prominent `<h1>` title: "Receipts Management".
+*   **Description:** A subtitle below the title: "Search, filter, and manage all customer receipts."
+*   **Primary Action:** The page will **not** have a "Create Receipt" button, as the creation flow originates from a completed Fuel Order. The primary purpose of this page is management of existing receipts.
+
+### 3.2. Statistics Cards
+
+Directly mimicking the Fuel Orders page, a row of `StatCard` components will display key metrics.
+*   **Card 1: Total Receipts (Last 30 Days)**
+    *   Icon: `ReceiptIcon`
+    *   Value: A count of all non-draft receipts generated in the last 30 days.
+*   **Card 2: Drafts**
+    *   Icon: `Edit` (or similar for "in-progress")
+    *   Value: A live count of all receipts currently in 'DRAFT' status.
+*   **Card 3: Generated (Unpaid)**
+    *   Icon: `FileText`
+    *   Value: A live count of all receipts in 'GENERATED' status.
+*   **Card 4: Paid Today**
+    *   Icon: `CheckCircle`
+    *   Value: A count of all receipts marked as 'PAID' today.
+
+### 3.3. Search & Filtering Bar
+
+A `Card` component will contain all search and filtering controls.
+
+*   **3.3.1. Search Input:**
+    *   A single text `Input` component with a `Search` icon.
+    *   Placeholder text: "Search by Receipt #, Tail #, or Customer Name..."
+    *   The search input will be debounced (`useDebounce` hook) to trigger filtering only after the user stops typing for ~300ms.
+
+*   **3.3.2. Filter Dropdowns:**
+    *   **Status Filter (`Select` component):**
+        *   Label: "Status"
+        *   Options: "All Statuses", "Draft", "Generated", "Paid", "Void".
+    *   **Date Range Filter (`Popover` with `Calendar` component):**
+        *   A single button that displays the selected date range.
+        *   The popover will contain predefined ranges ("Today", "Last 7 Days", "Last 30 Days") and a custom date range selector.
+
+*   **3.3.3. Action Buttons:**
+    *   **Clear Filters:** A `Button` that resets all filters and the search term to their default state.
+    *   **Export to CSV:** A `Button` with a `Download` icon that triggers the export functionality (see 3.6).
+
+### 3.4. Receipts Table (`DataTable` component)
+
+This is the central component of the page, displaying a paginated and sortable list of receipts.
+
+*   **Data Source:** The table will be populated by data fetched from the `GET /api/fbo/{fbo_id}/receipts` endpoint via the `getReceipts()` function in `receipt-service.ts`.
+*   **State Management:** The component will use React Query (`useQuery`) to manage data fetching, caching, and state (loading, error, success). The query key will be dynamic to reflect the current filters and page number (e.g., `['receipts', fboId, filters, page]`).
+*   **Table Columns:**
+    1.  **Checkbox:** For future bulk actions.
+    2.  **Receipt #:** (Sortable) Displays the `receipt_number`. This will be a `Link` that navigates to the receipt's detail/workspace page (`/csr/receipts/{id}`).
+    3.  **Date:** (Sortable) Displays the `generated_at` timestamp (or `created_at` for drafts). Formatted as `MM/dd/yyyy`.
+    4.  **Tail #:** (Sortable) Displays the aircraft tail number.
+    5.  **Customer:** (Sortable) Displays the customer's name. If it's a placeholder customer, it should display "Account: [TailNumber]".
+    6.  **Total:** (Sortable) Displays the `grand_total_amount`, formatted as currency (e.g., "$1,234.56").
+    7.  **Status:** Displays the receipt `status` using a colored `Badge` component for easy visual identification (e.g., Blue for Draft, Yellow for Generated, Green for Paid, Red for Void).
+    8.  **Actions:** A `DropdownMenu` triggered by a `MoreHorizontal` icon button.
+
+*   **Row Actions (in Dropdown Menu):** The available actions will be context-aware based on the receipt's status.
+    *   **If Status is `DRAFT`:**
+        *   "Edit/View Draft" (`Edit` icon): Navigates to the receipt workspace (`/csr/receipts/{id}`).
+        *   "Delete Draft" (`Trash2` icon): Triggers a confirmation dialog to delete the draft receipt.
+    *   **If Status is `GENERATED` or `PAID`:**
+        *   "View Details" (`Eye` icon): Navigates to the read-only receipt detail view (`/csr/receipts/{id}`).
+        *   "Download PDF" (`Download` icon): Initiates a download of the receipt PDF.
+        *   "Print" (`Printer` icon): Opens the browser's print dialog for the receipt.
+        *   "Email Receipt" (`Mail` icon): (Future) Opens a dialog to email the receipt.
+    *   **If Status is `VOID`:**
+        *   "View Details" (`Eye` icon): Navigates to the read-only voided receipt view.
+
+*   **Table States:**
+    *   **Loading State:** A skeleton loader (`Skeleton` component) matching the table's structure will be displayed while data is being fetched.
+    *   **Empty State:** If no receipts match the current filters, a message will be displayed in the table body: "No receipts found. Try adjusting your filters."
+    *   **Error State:** If the API call fails, an error message with a "Retry" button will be displayed.
+
+### 3.5. Pagination
+
+Standard pagination controls will be present below the table, allowing the user to navigate between pages of receipts. It will display the current page, total pages, and next/previous buttons.
+
+### 3.6. Export Functionality
+
+*   The "Export to CSV" button will trigger a download of a CSV file containing the receipts that match the *current filter criteria*.
+*   The CSV file will contain the following columns: `Receipt #`, `Generation Date`, `Paid Date`, `Status`, `Tail #`, `Customer Name`, `Fuel Subtotal`, `Fees`, `Waivers`, `Tax`, `Grand Total`.
+
+---
+
+**4. Technical Considerations**
+
+*   **Frontend:**
+    *   **Component Reusability:** Leverage existing components from the Fuel Orders page where possible, such as `StatCard` and the general `DataTable` structure. Create a new `ReceiptsTableRow` component analogous to `FuelOrderTableRow`.
+    *   **State Management:** Utilize React Query for server state management of the receipts list. Client state (filters, search term, current page) will be managed with `useState`.
+    *   **API Integration:** The page will primarily interact with the `GET /api/fbo/{fbo_id}/receipts` endpoint. The service function `getReceipts(filters, pagination)` in `receipt-service.ts` will be the point of contact.
+*   **Backend:**
+    *   The `get_receipts` service method and its corresponding API endpoint must be optimized to handle all specified filters (`status`, `date_from`, `date_to`) and a text search across multiple fields (`receipt_number`, `aircraft.tail_number`, `customer.name`).
+    *   The endpoint must support pagination (`page`, `per_page`).
+    *   Database indexes should be present on `receipts.fbo_location_id`, `receipts.status`, `receipts.generated_at`, and other frequently filtered columns to ensure performant queries.

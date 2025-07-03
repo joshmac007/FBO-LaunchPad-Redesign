@@ -1,35 +1,37 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { usePermissions } from "@/hooks/usePermissions"
 import AppSidebar from "@/components/layout/app-sidebar"
 import AccessDenied from "@/app/components/access-denied"
-import { cn } from "@/lib/utils"
+import { QueryProvider } from "@/app/providers/query-provider"
+import {
+  SidebarInset,
+  SidebarProvider,
+} from "@/components/ui/sidebar"
 
 const CSRLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { loading, isAuthenticated, hasPermission, user } = usePermissions()
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [isClient, setIsClient] = useState(false)
 
-  console.log(
-    `%c[CSRLayout] Render. Loading: ${loading}, Authenticated: ${isAuthenticated()}, User Email: ${user?.email}`, 
-    "color: purple;"
-  )
+  // Ensure consistent rendering between server and client
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
-  if (loading) {
-    console.log("[CSRLayout] Showing loading skeleton.")
+  // Always render loading state during SSR and initial hydration
+  if (!isClient || loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-background">
         <p>Verifying CSR Access...</p>
       </div>
     )
   }
 
   const canAccess = isAuthenticated() && hasPermission("access_csr_dashboard")
-  console.log(`[CSRLayout] Access check complete. Result: ${canAccess}`)
 
   if (!canAccess) {
-    console.error("[CSRLayout] Access Denied. Rendering AccessDenied component.")
     return (
       <AccessDenied
         pageName="CSR Module"
@@ -38,21 +40,17 @@ const CSRLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     )
   }
 
-  console.log("%c[CSRLayout] Access Granted. Rendering children.", "color: green;")
   return (
-    <div className="min-h-screen bg-background">
-      <AppSidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} userRole="csr" />
-      <div
-        className={cn(
-          "transition-all duration-300 ease-in-out min-h-screen",
-          sidebarCollapsed ? "lg:pl-[80px]" : "lg:pl-[280px]",
-        )}
-      >
-        <main className="p-4 sm:p-6 lg:p-8">
-          <div className="mx-auto max-w-7xl">{children}</div>
-        </main>
-      </div>
-    </div>
+    <QueryProvider>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <main className="flex-1 overflow-y-auto p-4 md:p-6">
+            {children}
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    </QueryProvider>
   )
 }
 

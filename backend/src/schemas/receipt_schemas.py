@@ -17,6 +17,8 @@ class CreateDraftReceiptSchema(Schema):
 class UpdateDraftReceiptSchema(Schema):
     """Schema for updating a draft receipt."""
     customer_id = fields.Integer(validate=validate.Range(min=1), allow_none=True)
+    aircraft_type = fields.String(allow_none=True, validate=validate.Length(max=50))
+    notes = fields.String(allow_none=True, validate=validate.Length(max=1000))
     additional_services = fields.List(
         fields.Dict(keys=fields.Str(), values=fields.Raw()),
         missing=[]
@@ -64,9 +66,11 @@ class ReceiptSchema(Schema):
     """Schema for receipt response."""
     id = fields.Integer(dump_only=True)
     receipt_number = fields.String(dump_only=True, allow_none=True)
-    fbo_location_id = fields.Integer(dump_only=True)
     fuel_order_id = fields.Integer(dump_only=True, allow_none=True)
     customer_id = fields.Integer(dump_only=True)
+    
+    # Fuel order reference data (for display purposes)
+    fuel_order_tail_number = fields.String(dump_only=True, allow_none=True)
     
     # Snapshot data
     aircraft_type_at_receipt_time = fields.String(dump_only=True, allow_none=True)
@@ -108,6 +112,10 @@ class ReceiptListQuerySchema(Schema):
     customer_id = fields.Integer(validate=validate.Range(min=1), allow_none=True)
     date_from = fields.DateTime(allow_none=True)
     date_to = fields.DateTime(allow_none=True)
+    search = fields.String(
+        validate=validate.Length(max=100),
+        allow_none=True
+    )
     page = fields.Integer(validate=validate.Range(min=1), missing=1)
     per_page = fields.Integer(validate=validate.Range(min=1, max=100), missing=50)
     

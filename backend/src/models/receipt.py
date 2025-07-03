@@ -16,12 +16,11 @@ class Receipt(db.Model):
     
     __tablename__ = 'receipts'
     __table_args__ = (
-        db.UniqueConstraint('fbo_location_id', 'receipt_number', name='uq_receipt_fbo_number'),
+        db.UniqueConstraint('receipt_number', name='_receipt_number_uc'),
     )
 
     id = db.Column(db.Integer, primary_key=True)
     receipt_number = db.Column(db.String(50), nullable=True, index=True)  # Null for drafts, assigned when generated
-    fbo_location_id = db.Column(db.Integer, nullable=False, index=True)
     fuel_order_id = db.Column(db.Integer, db.ForeignKey('fuel_orders.id'), nullable=True, index=True)  # Nullable for manual receipts
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False)
     
@@ -63,9 +62,9 @@ class Receipt(db.Model):
         return {
             'id': self.id,
             'receipt_number': self.receipt_number,
-            'fbo_location_id': self.fbo_location_id,
             'fuel_order_id': self.fuel_order_id,
             'customer_id': self.customer_id,
+            'fuel_order_tail_number': self.fuel_order.tail_number if self.fuel_order else None,
             'aircraft_type_at_receipt_time': self.aircraft_type_at_receipt_time,
             'fuel_type_at_receipt_time': self.fuel_type_at_receipt_time,
             'fuel_quantity_gallons_at_receipt_time': str(self.fuel_quantity_gallons_at_receipt_time) if self.fuel_quantity_gallons_at_receipt_time else None,
@@ -86,4 +85,4 @@ class Receipt(db.Model):
         }
 
     def __repr__(self):
-        return f'<Receipt {self.receipt_number} - {self.status.value if self.status else "Unknown"} (FBO {self.fbo_location_id})>' 
+        return f'<Receipt {self.receipt_number} - {self.status.value if self.status else "Unknown"}>' 

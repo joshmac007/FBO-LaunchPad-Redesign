@@ -17,7 +17,7 @@ This document provides essential context about the FBO LaunchPad project to help
 *   **Frontend:**
     *   Framework: Next.js (React)
     *   Language: TypeScript
-    *   Styling: Tailwind CSS with Shadcn UI components
+    *   Styling: Tailwind CSS v4 with Shadcn UI components
     *   State Management: React Context API (e.g., `PermissionContext`), local component state.
 *   **Backend:**
     *   Framework: Flask (Python)

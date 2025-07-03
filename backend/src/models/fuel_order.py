@@ -29,7 +29,7 @@ class FuelOrder(db.Model):
     priority = db.Column(db.Enum(FuelOrderPriority), nullable=False, default=FuelOrderPriority.NORMAL)
     tail_number = db.Column(db.String(20), db.ForeignKey('aircraft.tail_number'), nullable=False, index=True)
     customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True)
-    fuel_type = db.Column(db.String(50), nullable=False)
+    fuel_type_id = db.Column(db.Integer, db.ForeignKey('fuel_types.id'), nullable=False)
     service_type = db.Column(db.String(50), nullable=False, default='Full Service')
     additive_requested = db.Column(db.Boolean, default=False)
     requested_amount = db.Column(db.Numeric(10, 2), nullable=True)
@@ -70,6 +70,7 @@ class FuelOrder(db.Model):
     # Relationships
     aircraft = db.relationship('Aircraft', backref=db.backref('fuel_orders', lazy='dynamic'))
     customer = db.relationship('Customer', backref=db.backref('fuel_orders', lazy='dynamic'))
+    fuel_type = db.relationship('FuelType', backref=db.backref('fuel_orders', lazy='dynamic'))
     assigned_lst = db.relationship('User', foreign_keys=[assigned_lst_user_id], 
                                  backref=db.backref('assigned_fuel_orders', lazy='dynamic'))
     assigned_truck = db.relationship('FuelTruck', backref=db.backref('fuel_orders', lazy='dynamic'))
@@ -95,7 +96,9 @@ class FuelOrder(db.Model):
             'aircraft_registration': self.tail_number,  # Frontend expects this field name
             'customer_id': self.customer_id,
             'customer_name': self.customer.name if self.customer else None,  # Use actual customer name from relationship
-            'fuel_type': self.fuel_type,
+            'fuel_type_id': self.fuel_type_id,
+            'fuel_type_name': self.fuel_type.name if self.fuel_type else None,
+            'fuel_type_code': self.fuel_type.code if self.fuel_type else None,
             'service_type': self.service_type,  # Add missing service_type field
             'additive_requested': self.additive_requested,
             'requested_amount': str(self.requested_amount) if self.requested_amount else None,

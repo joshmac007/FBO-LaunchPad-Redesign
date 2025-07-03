@@ -3,7 +3,7 @@
 // Check if we're in offline mode
 export function isOfflineMode(): boolean {
   // Always return true for preview environment
-  return true
+  return false
 }
 
 // Format currency

@@ -38,39 +38,20 @@ export async function handleApiResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     // Handle other HTTP error statuses
     const errorText = await response.text()
-    
-    // Try to parse JSON error response for better user-facing messages
+    let message = errorText
+
     try {
+      // Attempt to parse the error response as JSON
       const errorJson = JSON.parse(errorText)
-      
-      // Check for common error message fields
-      const userMessage = errorJson.error || errorJson.message || errorJson.details || errorText
-      
-      // Enhanced error handling for specific cases
-      if (response.status === 409) {
-        // Conflict errors (like trying to delete a category with dependencies)
-        if (typeof userMessage === 'string') {
-          throw new Error(userMessage)
-        }
-        throw new Error("Operation failed due to a conflict. The resource may be in use by other items.")
-      }
-      
-      if (response.status === 404) {
-        throw new Error("The requested resource was not found.")
-      }
-      
-      // If we have a structured error with details, use the main error message
-      if (typeof userMessage === 'string') {
-        throw new Error(userMessage)
-      } else if (typeof userMessage === 'object' && userMessage.message) {
-        throw new Error(userMessage.message)
-      } else {
-        throw new Error(`API error (${response.status}): ${errorText}`)
-      }
-    } catch (parseError) {
-      // If JSON parsing fails, use the raw error text
-      throw new Error(`API error (${response.status}): ${errorText}`)
+      // Use the specific error message from the backend if available
+      message = errorJson.error || errorJson.message || errorJson.details || message
+    } catch (e) {
+      // If parsing fails, 'message' will remain the raw errorText, which is fine.
     }
+
+    // Throw an error with the cleaned-up message.
+    // The UI component that catches this can then display it.
+    throw new Error(message)
   }
 
   try {
@@ -118,6 +99,25 @@ export function getAuthHeaders(): Record<string, string> {
     console.error("Failed to parse user from localStorage or get token:", error);
     // Clear invalid user data
     localStorage.removeItem("fboUser");
+  }
+
+  return headers;
+}
+
+// Function to get headers for GET requests (omits Content-Type)
+export function getHeadersForGetRequest(): Record<string, string> {
+  const headers: Record<string, string> = {};
+
+  try {
+    const userStr = localStorage.getItem("fboUser");
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      if (user && user.access_token) {
+        headers["Authorization"] = `Bearer ${user.access_token}`;
+      }
+    }
+  } catch (error) {
+    console.error("Failed to parse user from localStorage or get token:", error);
   }
 
   return headers;

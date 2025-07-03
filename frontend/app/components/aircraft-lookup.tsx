@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { getAircraftByTailNumber, createCSRAircraft, type Aircraft } from "../services/aircraft-service"
+import { getAircraftByTailNumber, createCSRAircraft, type Aircraft, getAircraftTypes, type AircraftType } from "../services/aircraft-service"
 
 interface AircraftLookupProps {
   onAircraftFound?: (aircraft: Aircraft) => void
@@ -23,20 +23,6 @@ interface AircraftCreationData {
   aircraft_type: string
   fuel_type: string
 }
-
-// Common aircraft types for quick selection
-const AIRCRAFT_TYPES = [
-  "Citation CJ3",
-  "Citation Mustang", 
-  "Gulfstream G650",
-  "King Air 350",
-  "Pilatus PC-12",
-  "Cessna 172",
-  "Cessna 182",
-  "Piper Archer",
-  "Beechcraft Bonanza",
-  "Other"
-]
 
 // Common fuel types
 const FUEL_TYPES = [
@@ -67,6 +53,28 @@ export default function AircraftLookup({
   })
   const [customAircraftType, setCustomAircraftType] = useState("")
   const [customFuelType, setCustomFuelType] = useState("")
+  
+  // Aircraft types state
+  const [aircraftTypes, setAircraftTypes] = useState<AircraftType[]>([])
+  const [isLoadingTypes, setIsLoadingTypes] = useState(false)
+
+  // Fetch aircraft types when dialog opens
+  useEffect(() => {
+    if (showCreateDialog && aircraftTypes.length === 0) {
+      setIsLoadingTypes(true)
+      getAircraftTypes()
+        .then((types) => {
+          setAircraftTypes(types)
+        })
+        .catch((error) => {
+          console.error("Failed to fetch aircraft types:", error)
+          // Show error but don't prevent dialog from opening
+        })
+        .finally(() => {
+          setIsLoadingTypes(false)
+        })
+    }
+  }, [showCreateDialog, aircraftTypes.length])
 
   // Remove automatic lookup - only trigger on button click or Enter key
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -313,11 +321,23 @@ export default function AircraftLookup({
                     <SelectValue placeholder="Select aircraft type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {AIRCRAFT_TYPES.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
-                      </SelectItem>
-                    ))}
+                    {isLoadingTypes ? (
+                      <div className="flex items-center justify-center py-2">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Loading aircraft types...
+                      </div>
+                    ) : (
+                      <>
+                        {aircraftTypes.map((type) => (
+                          <SelectItem key={type.id} value={type.name}>
+                            {type.name}
+                          </SelectItem>
+                        ))}
+                        <SelectItem key="other" value="Other">
+                          Other
+                        </SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
                 

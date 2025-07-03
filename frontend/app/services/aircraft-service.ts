@@ -1,5 +1,36 @@
 import { API_BASE_URL, getAuthHeaders, handleApiResponse } from "./api-config"
 
+// Aircraft Type interface for the types endpoint
+// Backend might return base_min_fuel_gallons_for_waiver as string or number
+interface BackendAircraftType {
+  id: number
+  name: string
+  base_min_fuel_gallons_for_waiver: number | string
+  classification_id: number
+  classification_name: string
+}
+
+export interface AircraftType {
+  id: number
+  name: string
+  base_min_fuel_gallons_for_waiver: number
+  classification_id: number
+  classification_name: string
+}
+
+// Request payload interfaces for Aircraft Types
+export interface AircraftTypeCreateRequest {
+  name: string
+  base_min_fuel_gallons_for_waiver: number
+  classification_id: number
+}
+
+export interface AircraftTypeUpdateRequest {
+  name?: string
+  base_min_fuel_gallons_for_waiver?: number
+  classification_id?: number
+}
+
 // Frontend Aircraft model - accurately reflecting backend structure
 export interface Aircraft {
   id: string  // Use tail_number as the ID
@@ -113,8 +144,8 @@ export async function getAdminAircraftByTailNumber(tailNumber: string): Promise<
     const backendAircraft = await handleApiResponse<BackendAdminAircraft>(response)
     return mapBackendAdminToFrontendAircraft(backendAircraft)
   } catch (error) {
-    // Check if the error message indicates a 404 Not Found
-    if (error instanceof Error && error.message.includes("API error (404)")) {
+    // Check for aircraft not found error message
+    if (error instanceof Error && error.message.includes("not found")) {
       return null // Return null for 404s as per requirement
     }
     // Re-throw other errors
@@ -209,9 +240,63 @@ export async function getAircraftByTailNumber(tailNumber: string): Promise<Aircr
     
     return mappedAircraft
   } catch (error) {
-    if (error instanceof Error && error.message.includes("API error (404)")) {
+    // Check for aircraft not found error message
+    if (error instanceof Error && error.message.includes("not found")) {
       return null
     }
     throw error
   }
+}
+
+// --- Aircraft Types Function ---
+
+export async function getAircraftTypes(): Promise<AircraftType[]> {
+  const response = await fetch(`${API_BASE_URL}/aircraft/types`, {
+    headers: getAuthHeaders(),
+  })
+  const data = await handleApiResponse<BackendAircraftType[]>(response)
+  // Ensure base_min_fuel_gallons_for_waiver is always a number and classification_name is present
+  return data.map((backendType) => ({
+    ...backendType,
+    base_min_fuel_gallons_for_waiver: Number(
+      backendType.base_min_fuel_gallons_for_waiver,
+    ),
+    classification_name: backendType.classification_name || "Unclassified",
+  }))
+}
+
+export async function createAircraftType(data: AircraftTypeCreateRequest): Promise<AircraftType> {
+  const response = await fetch(`${API_BASE_URL}/aircraft/types`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  })
+  const result = await handleApiResponse<{ message: string; aircraft_type: BackendAircraftType }>(response)
+  return {
+    ...result.aircraft_type,
+    base_min_fuel_gallons_for_waiver: Number(result.aircraft_type.base_min_fuel_gallons_for_waiver),
+    classification_name: result.aircraft_type.classification_name || "Unclassified",
+  }
+}
+
+export async function updateAircraftType(typeId: number, data: AircraftTypeUpdateRequest): Promise<AircraftType> {
+  const response = await fetch(`${API_BASE_URL}/aircraft/types/${typeId}`, {
+    method: "PUT",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  })
+  const result = await handleApiResponse<{ message: string; aircraft_type: BackendAircraftType }>(response)
+  return {
+    ...result.aircraft_type,
+    base_min_fuel_gallons_for_waiver: Number(result.aircraft_type.base_min_fuel_gallons_for_waiver),
+    classification_name: result.aircraft_type.classification_name || "Unclassified",
+  }
+}
+
+export async function deleteAircraftType(typeId: number): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/aircraft/types/${typeId}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  })
+  await handleApiResponse<unknown>(response) // Expecting 204 No Content
 }

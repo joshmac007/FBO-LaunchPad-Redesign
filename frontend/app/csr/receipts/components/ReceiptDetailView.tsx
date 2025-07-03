@@ -62,19 +62,13 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
     try {
       setIsDownloading(true)
       
-      // Get user's FBO ID
-      const { getCurrentUser } = await import("@/app/services/auth-service")
-      const user = getCurrentUser()
-      if (!user?.fbo_id) {
-        throw new Error("User is not associated with an FBO")
-      }
+      // Use the standard API configuration
+      const { API_BASE_URL, getAuthHeaders } = await import("@/app/services/api-config")
       
       // Call the PDF generation endpoint
-      const response = await fetch(`/api/fbo/${user.fbo_id}/receipts/${receipt.id}/pdf`, {
+      const response = await fetch(`${API_BASE_URL}/receipts/${receipt.id}/pdf`, {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
+        headers: getAuthHeaders(),
       })
       
       if (!response.ok) {
@@ -87,7 +81,7 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `Receipt_${receipt.receiptNumber || receipt.id}.pdf`
+      link.download = `Receipt_${receipt.receipt_number || receipt.id}.pdf`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -117,10 +111,41 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
   const handleEmailReceipt = async () => {
     try {
       setIsEmailing(true)
-      // TODO: Implement email functionality
-      console.log("Emailing receipt:", receipt.receiptNumber)
+      
+      // Create email content for the receipt
+      const subject = `Receipt ${receipt.receipt_number || receipt.id} - FBO LaunchPad`
+      const body = `Dear Customer,
+
+Please find your receipt details below:
+
+Receipt Number: ${receipt.receipt_number || receipt.id}
+Aircraft: ${receipt.tailNumber}
+Total Amount: ${formatCurrency(parseFloat(receipt.grand_total_amount))}
+Status: ${receipt.status}
+
+Thank you for choosing FBO LaunchPad for your aviation services.
+
+Best regards,
+FBO LaunchPad Team`
+
+      // Encode the email parameters
+      const mailtoUrl = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      
+      // Open the user's default email client
+      window.location.href = mailtoUrl
+      
+      toast({
+        title: "Email Client Opened",
+        description: "Your default email client has been opened with the receipt details.",
+        className: "bg-blue-500 text-white",
+      })
     } catch (error) {
-      console.error("Error emailing receipt:", error)
+      console.error("Error opening email client:", error)
+      toast({
+        title: "Error",
+        description: "Failed to open email client. " + (error instanceof Error ? error.message : ""),
+        variant: "destructive",
+      })
     } finally {
       setIsEmailing(false)
     }
@@ -174,8 +199,68 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 print:bg-white">
-      <div className="max-w-4xl mx-auto p-6 print:p-0">
+    <>
+      {/* Print-specific styles */}
+      <style jsx>{`
+        @media print {
+          @page {
+            size: A4;
+            margin: 0.5in;
+          }
+          
+          body {
+            print-color-adjust: exact;
+            -webkit-print-color-adjust: exact;
+          }
+          
+          .print\\:hidden {
+            display: none !important;
+          }
+          
+          .print\\:block {
+            display: block !important;
+          }
+          
+          .print\\:text-black {
+            color: black !important;
+          }
+          
+          .print\\:border-black {
+            border-color: black !important;
+          }
+          
+          .print\\:shadow-none {
+            box-shadow: none !important;
+          }
+          
+          .print\\:border-none {
+            border: none !important;
+          }
+          
+          .print\\:bg-white {
+            background-color: white !important;
+          }
+          
+          .print\\:p-0 {
+            padding: 0 !important;
+          }
+          
+          .print\\:p-4 {
+            padding: 1rem !important;
+          }
+          
+          .print\\:mt-4 {
+            margin-top: 1rem !important;
+          }
+          
+          .print\\:pt-4 {
+            padding-top: 1rem !important;
+          }
+        }
+      `}</style>
+      
+      <div className="min-h-screen bg-gray-50 print:bg-white">
+        <div className="max-w-4xl mx-auto p-6 print:p-0">
         {/* Actions Bar - Hidden in print */}
         <div className="flex justify-between items-center mb-6 print:hidden">
           <div className="flex items-center gap-2">
@@ -328,21 +413,21 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
                 <CardContent className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">Receipt Number:</span>
-                    <span className="font-mono">{receipt.receiptNumber}</span>
+                    <span className="font-mono">{receipt.receipt_number}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">Generated:</span>
-                    <span>{receipt.generatedAt ? format(new Date(receipt.generatedAt), "PPp") : "N/A"}</span>
+                    <span>{receipt.generated_at ? format(new Date(receipt.generated_at), "PPp") : "N/A"}</span>
                   </div>
-                  {receipt.paidAt && (
+                  {receipt.paid_at && (
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Paid:</span>
-                      <span>{format(new Date(receipt.paidAt), "PPp")}</span>
+                      <span>{format(new Date(receipt.paid_at), "PPp")}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">Fuel Order ID:</span>
-                    <span>#{receipt.fuelOrderId}</span>
+                    <span>#{receipt.fuel_order_id}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -408,32 +493,32 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <span className="text-sm text-muted-foreground">Fuel Type:</span>
-                    <p className="font-semibold">{receipt.fuelTypeAtReceiptTime || receipt.fuelType}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-muted-foreground">Quantity:</span>
-                    <p className="font-semibold">
-                      {receipt.fuelQuantityGallonsAtReceiptTime || receipt.quantity} gallons
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-muted-foreground">Unit Price:</span>
-                    <p className="font-semibold">
-                      {formatCurrency(receipt.fuelUnitPriceAtReceiptTime || 0)}/gallon
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-muted-foreground">Fuel Subtotal:</span>
-                    <p className="font-semibold">{formatCurrency(receipt.fuelSubtotal || 0)}</p>
-                  </div>
+                                  <div>
+                  <span className="text-sm text-muted-foreground">Fuel Type:</span>
+                  <p className="font-semibold">{receipt.fuel_type_at_receipt_time}</p>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Quantity:</span>
+                  <p className="font-semibold">
+                    {receipt.fuel_quantity_gallons_at_receipt_time} gallons
+                  </p>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Unit Price:</span>
+                  <p className="font-semibold">
+                    {formatCurrency(parseFloat(receipt.fuel_unit_price_at_receipt_time || "0"))}/gallon
+                  </p>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Fuel Subtotal:</span>
+                  <p className="font-semibold">{formatCurrency(parseFloat(receipt.fuel_subtotal))}</p>
+                </div>
                 </div>
               </CardContent>
             </Card>
 
             {/* Line Items */}
-            {receipt.lineItems && receipt.lineItems.length > 0 && (
+            {receipt.line_items && receipt.line_items.length > 0 && (
               <Card className="mb-6">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-sm">
@@ -443,24 +528,24 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {receipt.lineItems.map((item) => (
+                    {receipt.line_items.map((item) => (
                       <div key={item.id} className="flex justify-between py-2 border-b last:border-b-0">
                         <div>
                           <p className="font-medium">{item.description}</p>
-                          {item.quantity > 1 && (
+                          {parseFloat(item.quantity) > 1 && (
                             <p className="text-sm text-muted-foreground">
-                              {item.quantity} × {formatCurrency(item.unitPrice)}
+                              {item.quantity} × {formatCurrency(parseFloat(item.unit_price))}
                             </p>
                           )}
                         </div>
                         <div className="text-right">
                           <p className={`font-semibold ${
-                            item.lineItemType === 'WAIVER' || item.amount < 0 
+                            item.line_item_type === 'WAIVER' || parseFloat(item.amount) < 0 
                               ? 'text-green-600' 
                               : 'text-foreground'
                           }`}>
-                            {item.lineItemType === 'WAIVER' || item.amount < 0 ? '-' : ''}
-                            {formatCurrency(Math.abs(item.amount))}
+                            {item.line_item_type === 'WAIVER' || parseFloat(item.amount) < 0 ? '-' : ''}
+                            {formatCurrency(Math.abs(parseFloat(item.amount)))}
                           </p>
                         </div>
                       </div>
@@ -480,34 +565,32 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {receipt.fuelSubtotal && (
-                    <div className="flex justify-between">
-                      <span>Fuel Subtotal:</span>
-                      <span>{formatCurrency(receipt.fuelSubtotal)}</span>
-                    </div>
-                  )}
-                  {receipt.totalFeesAmount && receipt.totalFeesAmount > 0 && (
+                  <div className="flex justify-between">
+                    <span>Fuel Subtotal:</span>
+                    <span>{formatCurrency(parseFloat(receipt.fuel_subtotal))}</span>
+                  </div>
+                  {parseFloat(receipt.total_fees_amount) > 0 && (
                     <div className="flex justify-between">
                       <span>Total Fees:</span>
-                      <span>{formatCurrency(receipt.totalFeesAmount)}</span>
+                      <span>{formatCurrency(parseFloat(receipt.total_fees_amount))}</span>
                     </div>
                   )}
-                  {receipt.totalWaiversAmount && receipt.totalWaiversAmount > 0 && (
+                  {parseFloat(receipt.total_waivers_amount) < 0 && (
                     <div className="flex justify-between text-green-600">
                       <span>Total Waivers:</span>
-                      <span>-{formatCurrency(receipt.totalWaiversAmount)}</span>
+                      <span>{formatCurrency(parseFloat(receipt.total_waivers_amount))}</span>
                     </div>
                   )}
-                  {receipt.taxAmount && receipt.taxAmount > 0 && (
+                  {parseFloat(receipt.tax_amount) > 0 && (
                     <div className="flex justify-between">
                       <span>Tax:</span>
-                      <span>{formatCurrency(receipt.taxAmount)}</span>
+                      <span>{formatCurrency(parseFloat(receipt.tax_amount))}</span>
                     </div>
                   )}
                   <Separator />
                   <div className="flex justify-between text-lg font-bold">
                     <span>Grand Total:</span>
-                    <span data-testid="receipt-total">{formatCurrency(receipt.grandTotalAmount || receipt.amount)}</span>
+                    <span data-testid="receipt-total">{formatCurrency(parseFloat(receipt.grand_total_amount))}</span>
                   </div>
                   <div className="flex justify-between text-sm text-muted-foreground">
                     <span>Payment Status:</span>
@@ -538,5 +621,6 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
         </motion.div>
       </div>
     </div>
+    </>
   )
 } 

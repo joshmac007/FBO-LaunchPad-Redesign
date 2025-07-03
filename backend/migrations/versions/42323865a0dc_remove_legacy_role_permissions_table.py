@@ -1,8 +1,8 @@
-"""Remove legacy role_permissions table
+"""remove legacy role permissions table
 
 Revision ID: 42323865a0dc
-Revises: 59eff068d8af
-Create Date: 2025-06-17 17:53:29.608866
+Revises: 2b1a8f9c3d0e
+Create Date: 2024-07-28 20:53:52.559317
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '42323865a0dc'
-down_revision = '59eff068d8af'
+down_revision = '2b1a8f9c3d0e'
 branch_labels = None
 depends_on = None
 

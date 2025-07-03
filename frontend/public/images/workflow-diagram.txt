@@ -1,0 +1,3 @@
+PLACEHOLDER: workflow-diagram.png
+This file represents an animated diagram showing chaotic icons (radio, paper, question marks) flowing through the FBO LaunchPad logo to become a streamlined arrow.
+Replace with actual animated graphics or static diagram for the Problem & Solution Framework section. 

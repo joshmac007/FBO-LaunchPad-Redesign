@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useReducer } from "react"
+import { useEffect, useReducer, useCallback, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -10,15 +10,19 @@ import { Loader2, Calculator, FileText, CheckCircle, AlertCircle } from "lucide-
 import ReceiptHeader from "./ReceiptHeader"
 import ReceiptLineItemsList from "./ReceiptLineItemsList"
 import ReceiptTotals from "./ReceiptTotals"
-import AdditionalServicesForm from "./AdditionalServicesForm"
+import AdditionalServicesForm, { type SelectedService } from "./AdditionalServicesForm"
+import { useDebounce } from "@/hooks/useDebounce"
 import { 
   ExtendedReceipt, 
   getReceiptById, 
   updateDraftReceipt, 
   calculateFeesForReceipt, 
   generateFinalReceipt, 
-  markReceiptAsPaid 
+  markReceiptAsPaid,
+  toggleLineItemWaiver
 } from "@/app/services/receipt-service"
+import { getAvailableServices, type AvailableService } from "@/app/services/fee-service"
+import { usePermissions } from "@/hooks/usePermissions"
 import type { Customer } from "@/app/services/customer-service"
 
 interface ReceiptWorkspaceProps {
@@ -31,6 +35,8 @@ interface ReceiptState {
   status: 'idle' | 'loading_initial' | 'calculating_fees' | 'generating' | 'marking_paid' | 'error'
   error: string | null
   autoSaveStatus: 'idle' | 'saving' | 'saved' | 'error'
+  pendingUpdates: Record<string, any>
+  selectedServices: SelectedService[]
 }
 
 // Action types for useReducer
@@ -48,9 +54,13 @@ type ReceiptAction =
   | { type: 'MARK_PAID_SUCCESS'; payload: ExtendedReceipt }
   | { type: 'MARK_PAID_ERROR'; payload: string }
   | { type: 'UPDATE_RECEIPT'; payload: Partial<ExtendedReceipt> }
+  | { type: 'SET_PENDING_UPDATES'; payload: Record<string, any> }
+  | { type: 'CLEAR_PENDING_UPDATES' }
   | { type: 'AUTO_SAVE_START' }
   | { type: 'AUTO_SAVE_SUCCESS' }
   | { type: 'AUTO_SAVE_ERROR' }
+  | { type: 'ADD_SERVICE'; payload: SelectedService }
+  | { type: 'REMOVE_SERVICE'; payload: string }
 
 // Reducer function
 function receiptReducer(state: ReceiptState, action: ReceiptAction): ReceiptState {
@@ -97,14 +107,35 @@ function receiptReducer(state: ReceiptState, action: ReceiptAction): ReceiptStat
         receipt: state.receipt ? { ...state.receipt, ...action.payload } : null 
       }
     
+    case 'SET_PENDING_UPDATES':
+      return { 
+        ...state, 
+        pendingUpdates: { ...state.pendingUpdates, ...action.payload }
+      }
+    
+    case 'CLEAR_PENDING_UPDATES':
+      return { ...state, pendingUpdates: {} }
+    
     case 'AUTO_SAVE_START':
       return { ...state, autoSaveStatus: 'saving' }
     
     case 'AUTO_SAVE_SUCCESS':
-      return { ...state, autoSaveStatus: 'saved' }
+      return { ...state, autoSaveStatus: 'saved', pendingUpdates: {} }
     
     case 'AUTO_SAVE_ERROR':
       return { ...state, autoSaveStatus: 'error' }
+    
+    case 'ADD_SERVICE':
+      return { 
+        ...state, 
+        selectedServices: [...state.selectedServices, action.payload] 
+      }
+    
+    case 'REMOVE_SERVICE':
+      return { 
+        ...state, 
+        selectedServices: state.selectedServices.filter(s => s.fee_code !== action.payload) 
+      }
     
     default:
       return state
@@ -116,11 +147,20 @@ const initialState: ReceiptState = {
   receipt: null,
   status: 'idle',
   error: null,
-  autoSaveStatus: 'idle'
+  autoSaveStatus: 'idle',
+  pendingUpdates: {},
+  selectedServices: []
 }
 
 export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
   const [state, dispatch] = useReducer(receiptReducer, initialState)
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [availableServices, setAvailableServices] = useState<AvailableService[]>([])
+  const [isTogglingWaiver, setIsTogglingWaiver] = useState<number | null>(null)
+  const { user } = usePermissions()
+
+  // Debounce pending updates with 1 second delay
+  const debouncedPendingUpdates = useDebounce(state.pendingUpdates, 1000)
 
   // Load initial receipt data
   useEffect(() => {
@@ -137,54 +177,123 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
     loadReceipt()
   }, [receiptId])
 
-  // Auto-save function with debouncing
-  const autoSave = async (updates: any) => {
-    if (!state.receipt || state.receipt.status !== 'DRAFT') return
-
-    dispatch({ type: 'AUTO_SAVE_START' })
-    try {
-      await updateDraftReceipt(receiptId, updates)
-      dispatch({ type: 'AUTO_SAVE_SUCCESS' })
-      
-      // Clear saved status after 2 seconds
-      setTimeout(() => {
-        dispatch({ type: 'AUTO_SAVE_SUCCESS' })
-      }, 2000)
-    } catch (error) {
-      dispatch({ type: 'AUTO_SAVE_ERROR' })
+  // Load available services
+  useEffect(() => {
+    const loadServices = async () => {
+      try {
+        const services = await getAvailableServices()
+        setAvailableServices(services)
+      } catch (error) {
+        console.error('Error loading available services:', error)
+      }
     }
-  }
+
+    loadServices()
+  }, [])
+
+  // Auto-save when debounced pending updates change
+  useEffect(() => {
+    const performAutoSave = async () => {
+      // Only save if there are pending updates and receipt is a draft
+      if (Object.keys(debouncedPendingUpdates).length === 0 || 
+          !state.receipt || 
+          state.receipt.status !== 'DRAFT') {
+        return
+      }
+
+      dispatch({ type: 'AUTO_SAVE_START' })
+      try {
+        await updateDraftReceipt(receiptId, debouncedPendingUpdates)
+        dispatch({ type: 'AUTO_SAVE_SUCCESS' })
+        
+        // Clear saved status after 2 seconds
+        if (autoSaveTimeoutRef.current) {
+          clearTimeout(autoSaveTimeoutRef.current)
+        }
+        autoSaveTimeoutRef.current = setTimeout(() => {
+          dispatch({ type: 'AUTO_SAVE_SUCCESS' })
+        }, 2000)
+      } catch (error) {
+        console.error('Auto-save failed:', error)
+        dispatch({ type: 'AUTO_SAVE_ERROR' })
+      }
+    }
+
+    performAutoSave()
+  }, [debouncedPendingUpdates, receiptId, state.receipt])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  // Helper function to queue updates for debounced auto-save
+  const queueAutoSave = useCallback((updates: Record<string, any>) => {
+    if (state.receipt?.status === 'DRAFT') {
+      dispatch({ type: 'SET_PENDING_UPDATES', payload: updates })
+    }
+  }, [state.receipt?.status])
 
   // Event handlers
   const handleCustomerSelected = (customer: Customer) => {
     dispatch({ type: 'UPDATE_RECEIPT', payload: { customerId: customer.id, customer: customer.name } })
-    autoSave({ customerId: customer.id })
+    queueAutoSave({ customerId: customer.id })
   }
 
   const handleAircraftTypeChange = (aircraftType: string) => {
     dispatch({ type: 'UPDATE_RECEIPT', payload: { aircraftTypeAtReceiptTime: aircraftType } })
-  }
-
-  const handleAircraftTypeBlur = () => {
-    if (state.receipt?.aircraftTypeAtReceiptTime) {
-      autoSave({ aircraftType: state.receipt.aircraftTypeAtReceiptTime })
-    }
+    queueAutoSave({ aircraftType: aircraftType })
   }
 
   const handleNotesChange = (notes: string) => {
     dispatch({ type: 'UPDATE_RECEIPT', payload: { notes } })
-  }
-
-  const handleNotesBlur = () => {
-    if (state.receipt?.notes !== undefined) {
-      autoSave({ notes: state.receipt.notes })
-    }
+    queueAutoSave({ notes: notes })
   }
 
   const handleAddService = async (serviceCode: string, description: string) => {
-    // In a real implementation, this would call an API to add the service to the receipt
-    // For now, we'll just show that it's working
-    console.log('Adding service:', serviceCode, description)
+    const service = availableServices.find(s => s.code === serviceCode)
+    if (!service) return
+
+    // Check if service is already selected
+    const existingService = state.selectedServices.find(s => s.fee_code === serviceCode)
+    if (existingService) {
+      // Increase quantity if already selected
+      const updatedService = { ...existingService, quantity: existingService.quantity + 1 }
+      dispatch({ type: 'REMOVE_SERVICE', payload: serviceCode })
+      dispatch({ type: 'ADD_SERVICE', payload: updatedService })
+    } else {
+      // Add new service
+      const selectedService: SelectedService = {
+        fee_code: serviceCode,
+        description: service.description,
+        quantity: 1,
+        price: service.price
+      }
+      dispatch({ type: 'ADD_SERVICE', payload: selectedService })
+    }
+  }
+
+  const handleRemoveService = (serviceCode: string) => {
+    dispatch({ type: 'REMOVE_SERVICE', payload: serviceCode })
+  }
+
+  const handleToggleWaiver = async (lineItemId: number) => {
+    if (!state.receipt) return
+
+    setIsTogglingWaiver(lineItemId)
+    try {
+      const updatedReceipt = await toggleLineItemWaiver(receiptId, lineItemId)
+      dispatch({ type: 'CALCULATION_SUCCESS', payload: updatedReceipt })
+    } catch (error) {
+      console.error('Error toggling waiver:', error)
+      // You could add a toast notification here or show an error state
+    } finally {
+      setIsTogglingWaiver(null)
+    }
   }
 
   const handleCalculateFees = async () => {
@@ -192,7 +301,13 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
 
     dispatch({ type: 'CALCULATING_FEES' })
     try {
-      const calculatedReceipt = await calculateFeesForReceipt(receiptId)
+      // Convert selected services to the format expected by the API
+      const additionalServices = state.selectedServices.map(service => ({
+        fee_code: service.fee_code,
+        quantity: service.quantity
+      }))
+
+      const calculatedReceipt = await calculateFeesForReceipt(receiptId, additionalServices)
       dispatch({ type: 'CALCULATION_SUCCESS', payload: calculatedReceipt })
     } catch (error) {
       dispatch({ type: 'CALCULATION_ERROR', payload: error instanceof Error ? error.message : 'Fee calculation failed' })
@@ -251,7 +366,7 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
 
   const isReadOnly = state.receipt.status !== 'DRAFT'
   const canCalculateFees = state.receipt.status === 'DRAFT'
-  const canGenerateReceipt = state.receipt.grandTotalAmount !== undefined && state.receipt.grandTotalAmount > 0
+  const canGenerateReceipt = state.receipt.grand_total_amount !== undefined && parseFloat(state.receipt.grand_total_amount) > 0
   const canMarkAsPaid = state.receipt.status === 'GENERATED'
 
   return (
@@ -296,6 +411,8 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
       {/* Additional Services */}
       <AdditionalServicesForm
         onAddService={handleAddService}
+        selectedServices={state.selectedServices}
+        onRemoveService={handleRemoveService}
         isReadOnly={isReadOnly}
         isLoading={state.status === 'calculating_fees'}
       />
@@ -370,7 +487,13 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
 
       {/* Line Items and Totals */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ReceiptLineItemsList lineItems={state.receipt.lineItems || []} />
+        <ReceiptLineItemsList 
+          lineItems={state.receipt.lineItems || []} 
+          availableServices={availableServices}
+          receiptStatus={state.receipt.status}
+          onToggleWaiver={handleToggleWaiver}
+          isTogglingWaiver={isTogglingWaiver}
+        />
         <ReceiptTotals receipt={state.receipt} />
       </div>
 
@@ -384,7 +507,6 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
               data-cy="receipt-notes"
               value={state.receipt.notes || ''}
               onChange={(e) => handleNotesChange(e.target.value)}
-              onBlur={handleNotesBlur}
               disabled={isReadOnly}
               placeholder="Add any additional notes about this receipt..."
               rows={3}

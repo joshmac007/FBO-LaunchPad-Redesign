@@ -1,10 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
 import { Users, UserPlus, Search, Filter, MoreHorizontal, Edit, Trash2, Shield, Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -29,6 +33,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { User as ServiceUser, getAllUsers, createUser, updateUser, deleteUser, UserCreateRequest, UserUpdateRequest, Role, getRoles, getAdminUserById } from "@/app/services/user-service" // Import service functions
 import { toast } from "sonner" // For notifications
 
+const userFormSchema = z.object({
+  username: z.string().min(1, { message: "Username is required." }),
+  fullName: z.string().min(1, { message: "Full name is required." }),
+  email: z.string().email({ message: "Please enter a valid email address." }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters long." }),
+  role: z.string().min(1, { message: "Please select a role." }),
+  is_active: z.boolean(),
+})
+
 export default function UserManagement() {
   const [users, setUsers] = useState<ServiceUser[]>([]) // Use ServiceUser type
   const [filteredUsers, setFilteredUsers] = useState<ServiceUser[]>([]) // Use ServiceUser type
@@ -47,13 +60,16 @@ export default function UserManagement() {
   const [isLoadingRoles, setIsLoadingRoles] = useState(true)
   const [roleStringToIdMap, setRoleStringToIdMap] = useState<Record<string, number>>({})
 
-  const [newUser, setNewUser] = useState({
-    username: "",
-    fullName: "",
-    email: "",
-    password: "",
-    role: "", // This will be a role name string, to be mapped to role_ids
-    is_active: true, // Changed from status
+  const form = useForm<z.infer<typeof userFormSchema>>({
+    resolver: zodResolver(userFormSchema),
+    defaultValues: {
+      username: "",
+      fullName: "",
+      email: "",
+      password: "",
+      role: "",
+      is_active: true,
+    },
   })
 
   // Fetch roles from API and create mapping
@@ -126,29 +142,29 @@ export default function UserManagement() {
     setFilteredUsers(filtered)
   }, [users, searchTerm]) // Remove roleFilter and statusFilter from dependencies since they're handled server-side
 
-  const handleCreateUser = async () => {
+  const handleCreateUser = async (values: z.infer<typeof userFormSchema>) => {
     setIsSubmitting(true)
-    const roleId = roleStringToIdMap[newUser.role.toLowerCase()]
+    const roleId = roleStringToIdMap[values.role.toLowerCase()]
     if (!roleId) {
-      toast.error(`Invalid role selected: ${newUser.role}. Please select a valid role.`)
+      toast.error(`Invalid role selected: ${values.role}. Please select a valid role.`)
       setIsSubmitting(false)
       return
     }
 
     const payload: UserCreateRequest = {
-      username: newUser.username,
-      fullName: newUser.fullName,
-      email: newUser.email,
-      password: newUser.password,
+      username: values.username,
+      fullName: values.fullName,
+      email: values.email,
+      password: values.password,
       role_ids: [roleId], // Use dynamic mapping
-      is_active: newUser.is_active,
+      is_active: values.is_active,
     }
 
     try {
       await createUser(payload)
       toast.success("User created successfully!")
       fetchUsers() // Refresh user list
-      setNewUser({ username: "", fullName: "", email: "", password: "", role: "", is_active: true })
+      form.reset()
       setIsCreateDialogOpen(false)
     } catch (error: any) {
       console.error("Failed to create user:", error)
@@ -236,19 +252,21 @@ export default function UserManagement() {
     return role ? role.name : roleString
   }
 
-  const getStatusColor = (isActive: boolean) => {
-    return isActive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">User Management</h1>
           <p className="text-muted-foreground">Manage user accounts, roles, and permissions</p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <Dialog open={isCreateDialogOpen} onOpenChange={(isOpen) => {
+          setIsCreateDialogOpen(isOpen)
+          if (!isOpen) {
+            form.reset()
+          }
+        }}>
           <DialogTrigger asChild>
             <Button className="gap-2" disabled={isLoadingRoles}>
               <UserPlus className="h-4 w-4" />
@@ -260,97 +278,132 @@ export default function UserManagement() {
               <DialogTitle>Create New User</DialogTitle>
               <DialogDescription>Add a new user to the system with appropriate role and permissions.</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="username">Username</Label>
-                <Input
-                  id="username"
-                  value={newUser.username}
-                  onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                  placeholder="johndoe"
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleCreateUser)} className="grid gap-4 py-4">
+                <FormField
+                  control={form.control}
+                  name="username"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Username</FormLabel>
+                      <FormControl>
+                        <Input placeholder="johndoe" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="fullName">Full Name</Label>
-                <Input
-                  id="fullName"
-                  value={newUser.fullName}
-                  onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
-                  placeholder="John Doe"
+                <FormField
+                  control={form.control}
+                  name="fullName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Full Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="John Doe" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  placeholder="john@example.com"
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="john@example.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={newUser.password}
-                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                    placeholder="••••••••"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Input
+                            type={showPassword ? "text" : "password"}
+                            placeholder="••••••••"
+                            {...field}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                            onClick={() => setShowPassword(!showPassword)}
+                          >
+                            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Role</FormLabel>
+                      <FormControl>
+                        <Select value={field.value} onValueChange={field.onChange} disabled={isLoadingRoles}>
+                          <SelectTrigger>
+                            <SelectValue placeholder={isLoadingRoles ? "Loading roles..." : "Select a role"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {roles.map((role) => (
+                              <SelectItem key={role.id} value={role.name}>
+                                {role.name}
+                                {role.description && <span className="text-muted-foreground text-sm"> - {role.description}</span>}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="is_active"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Status</FormLabel>
+                      <FormControl>
+                        <Select
+                          value={field.value ? "active" : "inactive"}
+                          onValueChange={(value) => field.onChange(value === "active")}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="active">Active</SelectItem>
+                            <SelectItem value="inactive">Inactive</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                    Cancel
                   </Button>
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="role">Role</Label>
-                <Select value={newUser.role} onValueChange={(value) => setNewUser({ ...newUser, role: value })} disabled={isLoadingRoles}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={isLoadingRoles ? "Loading roles..." : "Select a role"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((role) => (
-                      <SelectItem key={role.id} value={role.name}>
-                        {role.name}
-                        {role.description && <span className="text-muted-foreground text-sm"> - {role.description}</span>}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {/* Add is_active select for create dialog */}
-              <div className="grid gap-2">
-                <Label htmlFor="status-create">Status</Label>
-                <Select
-                  value={newUser.is_active ? "active" : "inactive"}
-                  onValueChange={(value) => setNewUser({ ...newUser, is_active: value === "active" })}
-                >
-                  <SelectTrigger id="status-create">
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isSubmitting}>
-                Cancel
-              </Button>
-              <Button type="button" onClick={handleCreateUser} disabled={isSubmitting || isLoadingRoles}>
-                {isSubmitting ? "Creating..." : "Create User"}
-              </Button>
-            </DialogFooter>
+                  <Button type="submit">Create User</Button>
+                </DialogFooter>
+              </form>
+            </Form>
           </DialogContent>
         </Dialog>
       </div>
@@ -458,7 +511,7 @@ export default function UserManagement() {
                       })}
                     </TableCell>
                     <TableCell>
-                      <Badge className={getStatusColor(user.is_active)}>{user.is_active ? "Active" : "Inactive"}</Badge>
+                      <Badge variant={user.is_active ? "success" : "destructive"}>{user.is_active ? "Active" : "Inactive"}</Badge>
                     </TableCell>
                     <TableCell>{user.created_at ? new Date(user.created_at).toLocaleDateString() : "N/A"}</TableCell>
                     <TableCell className="text-right">
