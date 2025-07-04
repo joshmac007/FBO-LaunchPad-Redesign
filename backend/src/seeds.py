@@ -35,6 +35,9 @@ all_permissions = [
     {'name': 'view_fuel_trucks', 'description': 'Allows viewing fuel truck list', 'category': 'fuel_trucks'},
     {'name': 'manage_fuel_trucks', 'description': 'Allows creating, updating, deleting fuel trucks', 'category': 'fuel_trucks'},
     
+    # Fuel Types
+    {'name': 'manage_fuel_types', 'description': 'Allows creating, updating, deleting fuel types', 'category': 'fuel_types'},
+    
     # Aircraft
     {'name': 'view_aircraft', 'description': 'Allows viewing aircraft list', 'category': 'aircraft'},
     {'name': 'manage_aircraft', 'description': 'Allows creating, updating, deleting aircraft', 'category': 'aircraft'},

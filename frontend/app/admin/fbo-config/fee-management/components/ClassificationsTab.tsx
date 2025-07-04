@@ -203,10 +203,10 @@ export function ClassificationsTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['aircraft-classifications'] })
       form.reset()
-      toast.success("Classification created successfully")
+      toast.success("Aircraft classification created successfully")
     },
     onError: (error: any) => {
-      toast.error(error.message || "Failed to create classification")
+      toast.error(error.message || "Failed to create aircraft classification")
     },
   })
 
@@ -216,10 +216,10 @@ export function ClassificationsTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['aircraft-classifications'] })
       setEditingId(null)
-      toast.success("Classification updated successfully")
+      toast.success("Aircraft classification updated successfully")
     },
     onError: (error: any) => {
-      toast.error(error.message || "Failed to update classification")
+      toast.error(error.message || "Failed to update aircraft classification")
       setEditingId(null)
     },
   })
@@ -228,10 +228,10 @@ export function ClassificationsTab() {
     mutationFn: deleteAircraftClassification,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['aircraft-classifications'] })
-      toast.success("Classification deleted successfully")
+      toast.success("Aircraft classification deleted successfully")
     },
     onError: (error: any) => {
-      toast.error(error.message || "Failed to delete classification")
+      toast.error(error.message || "Failed to delete aircraft classification")
     },
   })
 
@@ -267,8 +267,8 @@ export function ClassificationsTab() {
       {/* Add New Classification */}
       <Card>
         <CardHeader>
-          <CardTitle>Add New Classification</CardTitle>
-          <CardDescription>Create a new aircraft classification for grouping fees</CardDescription>
+          <CardTitle>Add New Aircraft Classification</CardTitle>
+          <CardDescription>Create a new aircraft classification to organize similar aircraft types together (like "Light Jets", "Heavy Jets", "Turboprops")</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -279,7 +279,7 @@ export function ClassificationsTab() {
                 render={({ field }) => (
                   <FormItem className="flex-1">
                     <FormControl>
-                      <Input placeholder="Classification name (e.g., Light Jet)" {...field} />
+                      <Input placeholder="Classification name (e.g., Light Jets, Turboprops, Heavy Jets)" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -290,7 +290,7 @@ export function ClassificationsTab() {
                 disabled={createMutation.isPending}
               >
                 <PlusIcon className="h-4 w-4 mr-2" />
-                {createMutation.isPending ? "Creating..." : "Add Classification"}
+                {createMutation.isPending ? "Creating..." : "Add Aircraft Classification"}
               </Button>
             </form>
           </Form>
@@ -300,15 +300,15 @@ export function ClassificationsTab() {
       {/* Existing Classifications */}
       <Card>
         <CardHeader>
-          <CardTitle>Existing Classifications</CardTitle>
-          <CardDescription>Manage the groups used to categorize aircraft for fee purposes</CardDescription>
+          <CardTitle>Your Aircraft Classifications</CardTitle>
+          <CardDescription>Manage the groups you use to organize aircraft types with similar pricing</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="text-center py-8">Loading classifications...</div>
+            <div className="text-center py-8">Loading aircraft classifications...</div>
           ) : classifications.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No classifications found. Create your first classification above.
+              No aircraft classifications found. Create your first classification above to start organizing your aircraft types.
             </div>
           ) : (
             <Table>

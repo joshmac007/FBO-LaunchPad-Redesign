@@ -76,11 +76,13 @@ import {
   type AircraftType,
 } from "../../../services/aircraft-service"
 import { toast } from "sonner"
+import { getFuelTypes, type FuelType } from "../../../services/admin-fee-config-service"
 
 export default function AircraftInstancesTable() {
   const [aircraft, setAircraft] = useState<Aircraft[]>([])
   const [filteredAircraft, setFilteredAircraft] = useState<Aircraft[]>([])
   const [aircraftTypes, setAircraftTypes] = useState<AircraftType[]>([])
+  const [fuelTypes, setFuelTypes] = useState<FuelType[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -136,9 +138,21 @@ export default function AircraftInstancesTable() {
     }
   }
 
+  // Fetch fuel types for dropdowns
+  const fetchFuelTypes = async () => {
+    try {
+      const response = await getFuelTypes()
+      setFuelTypes(response.fuel_types)
+    } catch (err) {
+      console.error("Error fetching fuel types:", err)
+      // Don't set error state for fuel types, just log it
+    }
+  }
+
   useEffect(() => {
     fetchAircraft()
     fetchAircraftTypes()
+    fetchFuelTypes()
   }, [])
 
   // Filter and search effect
@@ -425,10 +439,11 @@ export default function AircraftInstancesTable() {
                       <SelectValue placeholder="Select fuel type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Jet A">Jet A</SelectItem>
-                      <SelectItem value="100LL">100LL</SelectItem>
-                      <SelectItem value="Avgas">Avgas</SelectItem>
-                      <SelectItem value="Jet A-1">Jet A-1</SelectItem>
+                      {fuelTypes.map((fuelType) => (
+                        <SelectItem key={fuelType.id} value={fuelType.name}>
+                          {fuelType.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -635,10 +650,11 @@ export default function AircraftInstancesTable() {
                   <SelectValue placeholder="Select fuel type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Jet A">Jet A</SelectItem>
-                  <SelectItem value="100LL">100LL</SelectItem>
-                  <SelectItem value="Avgas">Avgas</SelectItem>
-                  <SelectItem value="Jet A-1">Jet A-1</SelectItem>
+                  {fuelTypes.map((fuelType) => (
+                    <SelectItem key={fuelType.id} value={fuelType.name}>
+                      {fuelType.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -42,26 +42,10 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
 
   const form = useForm<FeeRuleFormData>({
     resolver: zodResolver(feeRuleSchema),
-    defaultValues: feeRule ? {
-      fee_name: feeRule.fee_name,
-      fee_code: feeRule.fee_code,
-      applies_to_aircraft_classification_id: feeRule.applies_to_aircraft_classification_id,
-      amount: feeRule.amount,
-      currency: feeRule.currency,
-      is_taxable: feeRule.is_taxable,
-      is_potentially_waivable_by_fuel_uplift: feeRule.is_potentially_waivable_by_fuel_uplift,
-      calculation_basis: feeRule.calculation_basis,
-      waiver_strategy: feeRule.waiver_strategy,
-      simple_waiver_multiplier: feeRule.simple_waiver_multiplier,
-      has_caa_override: feeRule.has_caa_override,
-      caa_override_amount: feeRule.caa_override_amount,
-      caa_waiver_strategy_override: feeRule.caa_waiver_strategy_override,
-      caa_simple_waiver_multiplier_override: feeRule.caa_simple_waiver_multiplier_override,
-      is_primary_fee: feeRule.is_primary_fee,
-    } : {
+    defaultValues: {
       fee_name: "",
       fee_code: "",
-      applies_to_aircraft_classification_id: 0,
+      applies_to_classification_id: 0,
       amount: 0,
       currency: "USD",
       is_taxable: false,
@@ -73,16 +57,61 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
     },
   })
 
+  // Reset form with appropriate values when feeRule changes
+  React.useEffect(() => {
+    if (feeRule) {
+      form.reset({
+        fee_name: feeRule.fee_name,
+        fee_code: feeRule.fee_code,
+        applies_to_classification_id: feeRule.applies_to_classification_id === null 
+          ? "global" 
+          : feeRule.applies_to_classification_id,
+        amount: feeRule.amount,
+        currency: feeRule.currency,
+        is_taxable: feeRule.is_taxable,
+        is_potentially_waivable_by_fuel_uplift: feeRule.is_potentially_waivable_by_fuel_uplift,
+        calculation_basis: feeRule.calculation_basis,
+        // Include waiver fields from existing data (managed in Fuel Waivers tab)
+        waiver_strategy: feeRule.waiver_strategy || "NONE",
+        simple_waiver_multiplier: feeRule.simple_waiver_multiplier,
+        has_caa_override: feeRule.has_caa_override || false,
+        caa_override_amount: feeRule.caa_override_amount,
+        caa_waiver_strategy_override: feeRule.caa_waiver_strategy_override,
+        caa_simple_waiver_multiplier_override: feeRule.caa_simple_waiver_multiplier_override,
+        is_primary_fee: feeRule.is_primary_fee,
+      });
+    } else {
+      form.reset({
+        fee_name: "",
+        fee_code: "",
+        applies_to_classification_id: 0,
+        amount: 0,
+        currency: "USD",
+        is_taxable: false,
+        is_potentially_waivable_by_fuel_uplift: false,
+        calculation_basis: "FIXED_PRICE",
+        // Default values for waiver fields (managed in Fuel Waivers tab)
+        waiver_strategy: "NONE",
+        simple_waiver_multiplier: undefined,
+        has_caa_override: false,
+        caa_override_amount: undefined,
+        caa_waiver_strategy_override: undefined,
+        caa_simple_waiver_multiplier_override: undefined,
+        is_primary_fee: false,
+      });
+    }
+  }, [feeRule, form])
+
   const createMutation = useMutation({
     mutationFn: createFeeRule,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fee-rules'] })
       onOpenChange(false)
       form.reset()
-      toast.success("Fee rule created successfully")
+      toast.success("Fee type created successfully")
     },
     onError: (error: any) => {
-      toast.error(error.message || "Failed to create fee rule")
+      toast.error(error.message || "Failed to create fee type")
     },
   })
 
@@ -91,18 +120,28 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fee-rules'] })
       onOpenChange(false)
-      toast.success("Fee rule updated successfully")
+      toast.success("Fee type updated successfully")
     },
     onError: (error: any) => {
-      toast.error(error.message || "Failed to update fee rule")
+      toast.error(error.message || "Failed to update fee type")
     },
   })
 
   const onSubmit = (data: FeeRuleFormData) => {
+    // Transform the applies_to_classification_id value: if it's "global", send as null
+    const transformedData = {
+      ...data,
+      applies_to_classification_id: data.applies_to_classification_id === "global" 
+        ? null 
+        : typeof data.applies_to_classification_id === 'string'
+          ? parseInt(data.applies_to_classification_id, 10)
+          : data.applies_to_classification_id
+    }
+    
     if (isEdit && feeRule) {
-      updateMutation.mutate({ id: feeRule.id, data })
+      updateMutation.mutate({ id: feeRule.id, data: transformedData as UpdateFeeRuleRequest })
     } else {
-      createMutation.mutate(data as CreateFeeRuleRequest)
+      createMutation.mutate(transformedData as CreateFeeRuleRequest)
     }
   }
 
@@ -112,7 +151,7 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Fee Rule" : "Create New Fee Rule"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Fee Type" : "Create New Fee Type"}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -149,17 +188,21 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
 
             <FormField
               control={form.control}
-              name="applies_to_aircraft_classification_id"
+              name="applies_to_classification_id"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Aircraft Classification</FormLabel>
-                  <Select onValueChange={(value) => field.onChange(parseInt(value))} value={field.value?.toString()}>
+                  <Select 
+                    onValueChange={(value) => field.onChange(value === "global" ? "global" : parseInt(value))} 
+                    value={field.value === null ? "global" : field.value?.toString()}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select classification" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
+                      <SelectItem value="global">Global Fee (applies to all aircraft)</SelectItem>
                       {classifications.map((classification) => (
                         <SelectItem key={classification.id} value={classification.id.toString()}>
                           {classification.name}
@@ -199,7 +242,7 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
                 name="calculation_basis"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Calculation Basis</FormLabel>
+                    <FormLabel>How This Fee is Calculated</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -207,8 +250,8 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="FIXED_PRICE">Fixed Price</SelectItem>
-                        <SelectItem value="PER_UNIT_SERVICE">Per Unit Service</SelectItem>
+                        <SelectItem value="FIXED_PRICE">Fixed Price (same amount every time)</SelectItem>
+                        <SelectItem value="PER_UNIT_SERVICE">Per Unit/Service (multiply by quantity)</SelectItem>
                         <SelectItem value="NOT_APPLICABLE">Not Applicable</SelectItem>
                       </SelectContent>
                     </Select>
@@ -237,7 +280,12 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
                 name="is_potentially_waivable_by_fuel_uplift"
                 render={({ field }) => (
                   <FormItem className="flex items-center justify-between">
-                    <FormLabel>Potentially Waivable by Fuel Uplift</FormLabel>
+                    <div className="space-y-0.5">
+                      <FormLabel>Can Be Waived with Fuel Purchase</FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        Allow this fee to be waived when customers buy enough fuel
+                      </div>
+                    </div>
                     <FormControl>
                       <Switch checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
@@ -250,13 +298,19 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
                 name="is_primary_fee"
                 render={({ field }) => (
                   <FormItem className="flex items-center justify-between">
-                    <FormLabel>Primary Fee</FormLabel>
+                    <div className="space-y-0.5">
+                      <FormLabel>Show as Main Column</FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        Display this fee as a column in the main pricing table
+                      </div>
+                    </div>
                     <FormControl>
                       <Switch checked={field.value} onCheckedChange={field.onChange} />
                     </FormControl>
                   </FormItem>
                 )}
               />
+
             </div>
 
             <div className="flex justify-end space-x-2 pt-4">
@@ -298,11 +352,11 @@ export function FeeLibraryTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fee-rules'] })
       setDeleteDialogOpen(null) // Close the dialog
-      toast.success("Fee rule deleted successfully")
+      toast.success("Fee type deleted successfully")
     },
     onError: (error: any) => {
       setDeleteDialogOpen(null) // Close the dialog on error too
-      toast.error(error.message || "Failed to delete fee rule")
+      toast.error(error.message || "Failed to delete fee type")
     },
   })
 
@@ -323,7 +377,10 @@ export function FeeLibraryTab() {
     deleteMutation.mutate(feeRuleId)
   }
 
-  const getClassificationName = (classificationId: number) => {
+  const getClassificationName = (classificationId: number | null) => {
+    if (classificationId === null || classificationId === undefined) {
+      return <Badge variant="outline">Global</Badge>
+    }
     const classification = classifications.find(c => c.id === classificationId)
     return classification?.name || "Unknown"
   }
@@ -334,21 +391,21 @@ export function FeeLibraryTab() {
         <CardHeader>
           <div className="flex justify-between items-center">
             <div>
-              <CardTitle>Fee Library</CardTitle>
-              <CardDescription>Define all possible fees and their default properties</CardDescription>
+              <CardTitle>Fee Types</CardTitle>
+              <CardDescription>Manage all the different types of fees you charge (like ramp fees, handling fees, etc.)</CardDescription>
             </div>
             <Button onClick={handleCreateNew}>
               <PlusIcon className="h-4 w-4 mr-2" />
-              Add New Fee Rule
+              Add Fee
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           {feeRulesLoading ? (
-            <div className="text-center py-8">Loading fee rules...</div>
+            <div className="text-center py-8">Loading fee types...</div>
           ) : feeRules.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No fee rules found. Create your first fee rule to get started.
+              No fee types found. Create your first fee type to get started (like ramp fees, handling fees, overnight fees, etc.).
             </div>
           ) : (
             <Table>
@@ -358,7 +415,7 @@ export function FeeLibraryTab() {
                   <TableHead>Code</TableHead>
                   <TableHead>Classification</TableHead>
                   <TableHead>Default Amount</TableHead>
-                  <TableHead>Waivable?</TableHead>
+                  <TableHead>Can Be Waived?</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -368,11 +425,11 @@ export function FeeLibraryTab() {
                     <TableCell className="font-medium">
                       {rule.fee_name}
                       {rule.is_primary_fee && (
-                        <Badge variant="secondary" className="ml-2">Primary</Badge>
+                        <Badge variant="secondary" className="ml-2">Main Column</Badge>
                       )}
                     </TableCell>
                     <TableCell>{rule.fee_code}</TableCell>
-                    <TableCell>{getClassificationName(rule.applies_to_aircraft_classification_id)}</TableCell>
+                    <TableCell>{getClassificationName(rule.applies_to_classification_id)}</TableCell>
                     <TableCell>${rule.amount.toFixed(2)}</TableCell>
                     <TableCell>
                       {rule.is_potentially_waivable_by_fuel_uplift ? (
@@ -398,9 +455,9 @@ export function FeeLibraryTab() {
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Fee Rule</AlertDialogTitle>
+                              <AlertDialogTitle>Delete Fee Type</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Are you sure you want to delete "{rule.fee_name}"? This action cannot be undone.
+                                Are you sure you want to delete "{rule.fee_name}"? This will remove this fee type from your system and cannot be undone.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>

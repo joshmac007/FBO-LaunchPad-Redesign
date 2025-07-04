@@ -20,14 +20,14 @@ class FeeRule(db.Model):
     Now operates in a single-tenant context per database."""
     
     __tablename__ = 'fee_rules'
-    __table_args__ = (
-        db.UniqueConstraint('fee_code', 'applies_to_classification_id', name='uq_fee_rule_code_classification'),
-    )
+    # Note: Unique constraints are now handled by conditional unique indexes:
+    # - uq_global_fee_code: unique fee_code where applies_to_classification_id IS NULL
+    # - uq_specific_fee_rule: unique (fee_code, applies_to_classification_id) where applies_to_classification_id IS NOT NULL
 
     id = db.Column(db.Integer, primary_key=True)
     fee_name = db.Column(db.String(100), nullable=False)
     fee_code = db.Column(db.String(50), nullable=False, index=True)
-    applies_to_classification_id = db.Column(db.Integer, db.ForeignKey('aircraft_classifications.id'), nullable=False)
+    applies_to_classification_id = db.Column(db.Integer, db.ForeignKey('aircraft_classifications.id'), nullable=True)
     
     # Fee amount and calculation
     amount = db.Column(db.Numeric(10, 2), nullable=False)
@@ -63,7 +63,7 @@ class FeeRule(db.Model):
             'id': self.id,
             'fee_name': self.fee_name,
             'fee_code': self.fee_code,
-            'applies_to_aircraft_classification_id': self.applies_to_classification_id,
+            'applies_to_classification_id': self.applies_to_classification_id,
             'amount': float(self.amount),
             'currency': self.currency,
             'is_taxable': self.is_taxable,

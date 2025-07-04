@@ -14,7 +14,7 @@ export interface FeeRule {
   id: number;
   fee_name: string;
   fee_code: string;
-  applies_to_aircraft_classification_id: number;
+  applies_to_classification_id: number | null;
   amount: number;
   currency: string;
   is_taxable: boolean;
@@ -236,7 +236,7 @@ export interface UpdateAircraftClassificationRequest {
 export interface CreateFeeRuleRequest {
   fee_name: string;
   fee_code: string;
-  applies_to_aircraft_classification_id: number;
+  applies_to_classification_id: number | null;
   amount: number;
   currency?: string;
   is_taxable?: boolean;
@@ -254,7 +254,7 @@ export interface CreateFeeRuleRequest {
 export interface UpdateFeeRuleRequest {
   fee_name?: string;
   fee_code?: string;
-  applies_to_aircraft_classification_id?: number;
+  applies_to_classification_id?: number | null;
   amount?: number;
   currency?: string;
   is_taxable?: boolean;
@@ -580,21 +580,7 @@ export const updateMinFuelForAircraft = async (
   return handleApiResponse<any>(response);
 };
 
-export const uploadFeeOverridesCSV = async (file: File): Promise<any> => {
-  const formData = new FormData();
-  formData.append('file', file);
 
-  const response = await fetch(`${API_BASE_URL}/admin/fee-rule-overrides/upload`, {
-    method: 'POST',
-    headers: {
-      ...getAuthHeaders(),
-      // Don't set Content-Type for FormData, let browser set it with boundary
-    },
-    body: formData,
-  });
-
-  return handleApiResponse<any>(response);
-};
 
 export const addAircraftToFeeSchedule = async (data: AddAircraftToFeeScheduleRequest): Promise<any> => {
   // Transform the payload to match the backend schema
@@ -689,13 +675,59 @@ export const exportFeeConfiguration = async (): Promise<void> => {
 };
 
 // Fuel Management
-export const getFuelTypes = async (): Promise<FuelTypesResponse> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fuel-types`, {
+export const getFuelTypes = async (includeInactive?: boolean): Promise<FuelTypesResponse> => {
+  const url = includeInactive 
+    ? `${API_BASE_URL}/admin/fuel-types?include_inactive=true`
+    : `${API_BASE_URL}/admin/fuel-types`;
+  
+  const response = await fetch(url, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
 
   return handleApiResponse<FuelTypesResponse>(response);
+};
+
+export interface CreateFuelTypeRequest {
+  name: string;
+  code: string;
+  description?: string;
+}
+
+export interface UpdateFuelTypeRequest {
+  name?: string;
+  code?: string;
+  description?: string;
+  is_active?: boolean;
+}
+
+export const createFuelType = async (data: CreateFuelTypeRequest): Promise<FuelType> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fuel-types`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  return handleApiResponse<FuelType>(response);
+};
+
+export const updateFuelType = async (fuelTypeId: number, data: UpdateFuelTypeRequest): Promise<FuelType> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fuel-types/${fuelTypeId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  return handleApiResponse<FuelType>(response);
+};
+
+export const deleteFuelType = async (fuelTypeId: number): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/admin/fuel-types/${fuelTypeId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+
+  await handleApiResponse<void>(response);
 };
 
 export const getFuelPrices = async (): Promise<FuelPricesResponse> => {
@@ -748,8 +780,7 @@ export default {
   // Min Fuel
   updateMinFuelForAircraft,
   
-  // Fee Overrides CSV
-  uploadFeeOverridesCSV,
+
   
   // New API functions for Phase 2
   addAircraftToFeeSchedule,

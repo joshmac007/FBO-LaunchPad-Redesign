@@ -541,7 +541,7 @@ export function FeeScheduleTable({
     return (
       <div className="border rounded-lg p-6">
         <div className="text-center space-y-1.5">
-          <div className="text-muted-foreground">Loading fee schedule...</div>
+          <div className="text-muted-foreground">Loading your pricing schedule...</div>
         </div>
       </div>
     )
@@ -552,7 +552,7 @@ export function FeeScheduleTable({
     return (
       <div className="border rounded-lg p-6">
         <div className="text-center space-y-3">
-          <div className="text-destructive">Failed to load fee schedule</div>
+          <div className="text-destructive">Couldn't load your pricing schedule</div>
           <Button onClick={() => window.location.reload()} variant="outline" className="h-7">
             Try Again
           </Button>

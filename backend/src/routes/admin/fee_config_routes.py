@@ -546,11 +546,15 @@ def create_aircraft_fee_setup():
 
 # Fuel Type Management Routes
 @admin_fee_config_bp.route('/api/admin/fuel-types', methods=['GET'])
-@require_permission_v2('manage_fbo_fee_schedules')
+@require_permission_v2('manage_fuel_types')
 def get_fuel_types():
-    """Get all active fuel types."""
+    """Get all fuel types, optionally including inactive ones."""
     try:
-        fuel_types = AdminFeeConfigService.get_all_active_fuel_types()
+        include_inactive = request.args.get('include_inactive', 'false').lower() == 'true'
+        if include_inactive:
+            fuel_types = AdminFeeConfigService.get_all_fuel_types()
+        else:
+            fuel_types = AdminFeeConfigService.get_all_active_fuel_types()
         return jsonify({'fuel_types': fuel_types}), 200
     except Exception as e:
         current_app.logger.error(f"Error fetching fuel types: {str(e)}")
@@ -647,12 +651,11 @@ def create_fee_schedule_version():
         if not version_name:
             return jsonify({'error': 'version_name is required'}), 400
         
-        # Get current user ID from request context 
-        # This assumes user_id is available in the Flask request context
+        # Get current user ID from request context
         from flask import g
-        user_id = getattr(g, 'current_user_id', None)
-        if not user_id:
+        if not getattr(g, 'current_user', None):
             return jsonify({'error': 'User authentication required'}), 401
+        user_id = g.current_user.id
         
         # Create configuration snapshot
         snapshot_data = AdminFeeConfigService._create_configuration_snapshot()
@@ -711,9 +714,9 @@ def import_fee_configuration():
         
         # Get current user ID from request context
         from flask import g
-        user_id = getattr(g, 'current_user_id', None)
-        if not user_id:
+        if not getattr(g, 'current_user', None):
             return jsonify({'error': 'User authentication required'}), 401
+        user_id = g.current_user.id
         
         # Import configuration
         AdminFeeConfigService.import_configuration_from_file(file.stream, user_id)

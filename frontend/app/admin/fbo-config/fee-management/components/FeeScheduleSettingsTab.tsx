@@ -1,12 +1,11 @@
 "use client"
 
-import React, { useState } from "react"
+import React from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -17,11 +16,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { toast } from "sonner"
 import { useUserPreferences } from "@/app/contexts/user-preferences-context"
 import { 
-  getFeeRules, 
   getFeeScheduleVersions, 
   createFeeScheduleVersion, 
   restoreFeeScheduleVersion,
-  type FeeRule,
   type FeeScheduleVersion
 } from "@/app/services/admin-fee-config-service"
 import { feeScheduleVersionSchema, type FeeScheduleVersionFormData } from "@/app/schemas/versioning.schema"
@@ -29,13 +26,6 @@ import { feeScheduleVersionSchema, type FeeScheduleVersionFormData } from "@/app
 export function FeeScheduleSettingsTab() {
   const queryClient = useQueryClient()
   const { preferences, updatePreferences, isLoading: preferencesLoading } = useUserPreferences()
-  const [primaryFeeCodes, setPrimaryFeeCodes] = useState<string[]>([])
-
-  // Fetch fee rules for the primary fee columns selection
-  const { data: feeRules = [] } = useQuery<FeeRule[]>({
-    queryKey: ['fee-rules'],
-    queryFn: () => getFeeRules(),
-  })
 
   // Fetch fee schedule versions for version history
   const { data: versions = [] } = useQuery<FeeScheduleVersion[]>({
@@ -113,14 +103,6 @@ export function FeeScheduleSettingsTab() {
     restoreVersionMutation.mutate(versionId)
   }
 
-  const handlePrimaryFeeToggle = (feeCode: string, checked: boolean) => {
-    if (checked) {
-      setPrimaryFeeCodes([...primaryFeeCodes, feeCode])
-    } else {
-      setPrimaryFeeCodes(primaryFeeCodes.filter(code => code !== feeCode))
-    }
-  }
-
   return (
     <div className="space-y-6 p-6">
       {/* Display Settings Card */}
@@ -175,32 +157,6 @@ export function FeeScheduleSettingsTab() {
                 <SelectItem value="amount_desc">Amount (High to Low)</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Primary Fee Columns Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Primary Fee Columns</CardTitle>
-          <CardDescription>Select fees to always show first in the table</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            {feeRules.map((rule) => (
-              <div key={rule.id} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`fee-${rule.id}`}
-                  checked={primaryFeeCodes.includes(rule.fee_code)}
-                  onCheckedChange={(checked) => 
-                    handlePrimaryFeeToggle(rule.fee_code, checked as boolean)
-                  }
-                />
-                <Label htmlFor={`fee-${rule.id}`} className="text-sm">
-                  {rule.fee_name}
-                </Label>
-              </div>
-            ))}
           </div>
         </CardContent>
       </Card>

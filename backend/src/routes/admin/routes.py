@@ -10,6 +10,7 @@ from .customer_admin_routes import *
 from .aircraft_admin_routes import *
 from .lst_admin_routes import *
 from .fuel_truck_admin_routes import *
+from .fuel_type_admin_routes import *
 from .performance_monitor_routes import performance_monitor_bp
 
 # Register routes with the admin blueprint

@@ -8,11 +8,18 @@ export const waiverTierSchema = z.object({
     .refine((val) => {
       const num = parseFloat(val);
       return !isNaN(num) && num > 0;
-    }, "Must be a positive number")
-    .transform((val) => parseFloat(val)),
+    }, "Must be a positive number"),
   fees_waived_codes: z.array(z.string()).min(1, "At least one fee code must be selected"),
   tier_priority: z.number().optional(), // Will be set by the system
   is_caa_specific_tier: z.boolean().default(false),
 });
 
 export type WaiverTierFormData = z.infer<typeof waiverTierSchema>;
+
+// Schema for the API request - with fuel_uplift_multiplier as number
+export const waiverTierApiSchema = waiverTierSchema.transform((data) => ({
+  ...data,
+  fuel_uplift_multiplier: parseFloat(data.fuel_uplift_multiplier)
+}));
+
+export type WaiverTierApiData = z.infer<typeof waiverTierApiSchema>;

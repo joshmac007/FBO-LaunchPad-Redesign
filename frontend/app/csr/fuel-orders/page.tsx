@@ -23,6 +23,7 @@ import {
   type FuelOrderStats,
   type FuelOrderFilters
 } from "@/app/services/fuel-order-service"
+import { getFuelTypes, type FuelType } from "@/app/services/admin-fee-config-service"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -136,6 +137,10 @@ function EnhancedFuelOrdersPageInternal() {
   })
   const [fuelTypeFilter, setFuelTypeFilter] = useState<string>("all")
   
+  // Fuel types state
+  const [fuelTypes, setFuelTypes] = useState<FuelType[]>([])
+  const [isFuelTypesLoading, setIsFuelTypesLoading] = useState(false)
+  
   // Dialog states
   const [isNewOrderDialogOpen, setIsNewOrderDialogOpen] = useState(false)
   const [cancelOrderDialog, setCancelOrderDialog] = useState<{
@@ -167,6 +172,24 @@ function EnhancedFuelOrdersPageInternal() {
       setSearchTerm(tailNumberParam);
     }
   }, [tailNumberParam]);
+
+  // Fetch fuel types on component mount
+  useEffect(() => {
+    const fetchFuelTypes = async () => {
+      setIsFuelTypesLoading(true)
+      try {
+        const response = await getFuelTypes()
+        setFuelTypes(response.fuel_types)
+      } catch (error) {
+        console.error("Failed to fetch fuel types:", error)
+        // Don't prevent page from loading if fuel types fail
+      } finally {
+        setIsFuelTypesLoading(false)
+      }
+    }
+
+    fetchFuelTypes()
+  }, [])
 
   // Use React Query with improved caching (temporarily without WebSocket due to connection issues)
   const {
@@ -628,10 +651,18 @@ function EnhancedFuelOrdersPageInternal() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="100LL">100LL</SelectItem>
-                  <SelectItem value="Jet A">Jet A</SelectItem>
-                  <SelectItem value="Jet A-1">Jet A-1</SelectItem>
-                  <SelectItem value="Mogas">Mogas</SelectItem>
+                  {isFuelTypesLoading ? (
+                    <div className="flex items-center justify-center py-2">
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Loading...
+                    </div>
+                  ) : (
+                    fuelTypes.map((fuelType) => (
+                      <SelectItem key={fuelType.id} value={fuelType.name}>
+                        {fuelType.name}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>

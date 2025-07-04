@@ -1,6 +1,7 @@
 """Marshmallow schemas for admin fee configuration API endpoints."""
 
 from marshmallow import Schema, fields, validate, validates, ValidationError, validates_schema
+from marshmallow import EXCLUDE
 
 
 # Aircraft Types Schemas
@@ -13,7 +14,7 @@ class AircraftTypeSchema(Schema):
         validate=validate.Range(min=0),
         as_string=True
     )
-    default_aircraft_classification_id = fields.Integer(allow_none=True)
+    classification_id = fields.Integer(required=True, data_key='classification_id')
     default_max_gross_weight_lbs = fields.Decimal(
         allow_none=True,
         validate=validate.Range(min=0),
@@ -21,6 +22,9 @@ class AircraftTypeSchema(Schema):
     )
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+
+    class Meta:
+        unknown = EXCLUDE
 
 
 class UpdateAircraftTypeFuelWaiverSchema(Schema):
@@ -39,6 +43,9 @@ class AircraftClassificationSchema(Schema):
     name = fields.String(required=True, validate=validate.Length(min=1, max=100))
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+
+    class Meta:
+        unknown = EXCLUDE
 
 
 class CreateAircraftClassificationSchema(Schema):
@@ -68,7 +75,7 @@ class FeeRuleSchema(Schema):
     id = fields.Integer(dump_only=True)
     fee_name = fields.String(required=True, validate=validate.Length(min=1, max=100))
     fee_code = fields.String(required=True, validate=validate.Length(min=1, max=50))
-    applies_to_aircraft_classification_id = fields.Integer(required=True)
+    applies_to_classification_id = fields.Integer(allow_none=True, required=False, data_key='applies_to_classification_id')
     aircraft_classification_name = fields.String(dump_only=True)
     amount = fields.Decimal(
         required=True,
@@ -113,6 +120,9 @@ class FeeRuleSchema(Schema):
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
 
+    class Meta:
+        unknown = EXCLUDE
+
     @validates('simple_waiver_multiplier')
     def validate_simple_waiver_multiplier(self, value):
         """Validate simple waiver multiplier is required for SIMPLE_MULTIPLIER strategy."""
@@ -130,7 +140,7 @@ class CreateFeeRuleSchema(Schema):
     """Schema for creating a fee rule."""
     fee_name = fields.String(required=True, validate=validate.Length(min=1, max=100))
     fee_code = fields.String(required=True, validate=validate.Length(min=1, max=50))
-    applies_to_aircraft_classification_id = fields.Integer(required=True)
+    applies_to_classification_id = fields.Integer(allow_none=True, required=False, data_key='applies_to_classification_id')
     amount = fields.Decimal(
         required=True,
         validate=validate.Range(min=0),
@@ -172,12 +182,26 @@ class CreateFeeRuleSchema(Schema):
     )
     is_primary_fee = fields.Boolean(missing=False)
 
+    @validates_schema
+    def validate_classification_logic(self, data, **kwargs):
+        """Validate that if a classification_id is provided, it exists in the database."""
+        classification_id = data.get('applies_to_classification_id')
+        
+        # If classification_id is provided and not None, validate it exists
+        if classification_id is not None:
+            from ..models.aircraft_classification import AircraftClassification
+            if not AircraftClassification.query.get(classification_id):
+                raise ValidationError(
+                    f'Invalid applies_to_classification_id: classification with id {classification_id} does not exist',
+                    field_name='applies_to_classification_id'
+                )
+
 
 class UpdateFeeRuleSchema(Schema):
     """Schema for updating a fee rule."""
     fee_name = fields.String(validate=validate.Length(min=1, max=100))
     fee_code = fields.String(validate=validate.Length(min=1, max=50))
-    applies_to_aircraft_classification_id = fields.Integer()
+    applies_to_classification_id = fields.Integer(allow_none=True)
     amount = fields.Decimal(
         validate=validate.Range(min=0),
         as_string=True
@@ -213,6 +237,20 @@ class UpdateFeeRuleSchema(Schema):
     )
     is_primary_fee = fields.Boolean()
 
+    @validates_schema
+    def validate_classification_logic(self, data, **kwargs):
+        """Validate that if a classification_id is provided, it exists in the database."""
+        classification_id = data.get('applies_to_classification_id')
+        
+        # If classification_id is provided and not None, validate it exists
+        if classification_id is not None:
+            from ..models.aircraft_classification import AircraftClassification
+            if not AircraftClassification.query.get(classification_id):
+                raise ValidationError(
+                    f'Invalid applies_to_classification_id: classification with id {classification_id} does not exist',
+                    field_name='applies_to_classification_id'
+                )
+
 
 # Waiver Tiers Schemas
 class WaiverTierSchema(Schema):
@@ -236,6 +274,9 @@ class WaiverTierSchema(Schema):
     is_caa_specific_tier = fields.Boolean(missing=False)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+
+    class Meta:
+        unknown = EXCLUDE
 
 
 class CreateWaiverTierSchema(Schema):
@@ -283,11 +324,14 @@ class AircraftTypeConfigSchema(Schema):
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
 
+    class Meta:
+        unknown = EXCLUDE
+
 
 class FeeRuleOverrideSchema(Schema):
     """Schema for fee rule override."""
     id = fields.Integer(dump_only=True)
-    aircraft_type_id = fields.Integer(required=True)
+    aircraft_type_id = fields.Integer(allow_none=True)
     fee_rule_id = fields.Integer(required=True)
     override_amount = fields.Decimal(
         allow_none=True,
@@ -301,6 +345,9 @@ class FeeRuleOverrideSchema(Schema):
     )
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+
+    class Meta:
+        unknown = EXCLUDE
 
 
 # Fee Schedule Snapshot Schema for Versioning and Import
@@ -348,6 +395,9 @@ class FeeScheduleSnapshotSchema(Schema):
         required=True
     )
     
+    class Meta:
+        unknown = EXCLUDE
+
     @validates_schema
     def validate_internal_consistency(self, data, **kwargs):
         """
@@ -364,26 +414,26 @@ class FeeScheduleSnapshotSchema(Schema):
         # Validate fee rules reference valid classifications
         fee_rules = data.get('fee_rules', [])
         for i, fee_rule in enumerate(fee_rules):
-            classification_id = fee_rule.get('applies_to_aircraft_classification_id')
+            classification_id = fee_rule.get('applies_to_classification_id')
             if classification_id and classification_id not in classification_ids:
                 if 'fee_rules' not in errors:
                     errors['fee_rules'] = {}
                 if i not in errors['fee_rules']:
                     errors['fee_rules'][i] = {}
-                errors['fee_rules'][i]['applies_to_aircraft_classification_id'] = [
+                errors['fee_rules'][i]['applies_to_classification_id'] = [
                     f'Fee rule references non-existent classification ID: {classification_id}'
                 ]
         
         # Validate aircraft types reference valid classifications
         aircraft_types = data.get('aircraft_types', [])
         for i, aircraft_type in enumerate(aircraft_types):
-            classification_id = aircraft_type.get('default_aircraft_classification_id')
+            classification_id = aircraft_type.get('classification_id')
             if classification_id and classification_id not in classification_ids:
                 if 'aircraft_types' not in errors:
                     errors['aircraft_types'] = {}
                 if i not in errors['aircraft_types']:
                     errors['aircraft_types'][i] = {}
-                errors['aircraft_types'][i]['default_aircraft_classification_id'] = [
+                errors['aircraft_types'][i]['classification_id'] = [
                     f'Aircraft type references non-existent classification ID: {classification_id}'
                 ]
         

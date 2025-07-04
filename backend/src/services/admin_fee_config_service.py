@@ -420,8 +420,12 @@ class AdminFeeConfigService:
             fee_code = rule_data.get('fee_code')
             classification_id = rule_data.get('applies_to_classification_id') or rule_data.get('applies_to_aircraft_classification_id')
 
-            if not fee_code or not classification_id:
-                raise ValueError("fee_code and applies_to_classification_id are required.")
+            if not fee_code:
+                raise ValueError("fee_code is required.")
+            
+            # Convert empty string or 0 to None for global fees
+            if classification_id == "" or classification_id == 0:
+                classification_id = None
 
             # Check for an existing rule using the new unique key
             existing_rule = FeeRule.query.filter_by(
@@ -1001,6 +1005,21 @@ class AdminFeeConfigService:
             current_app.logger.error(f"Error fetching active fuel types: {str(e)}")
             raise
 
+    @staticmethod
+    def get_all_fuel_types() -> List[Dict[str, Any]]:
+        """
+        Get all fuel types including inactive ones.
+        
+        Returns a list of all fuel types (both active and inactive) for administrative
+        purposes where viewing inactive fuel types is needed.
+        """
+        try:
+            fuel_types = FuelType.query.order_by(FuelType.name).all()
+            return [fuel_type.to_dict() for fuel_type in fuel_types]
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Error fetching all fuel types: {str(e)}")
+            raise
+
     # Fuel Price Management
     @staticmethod
     def get_current_fuel_prices() -> List[Dict[str, Any]]:
@@ -1236,6 +1255,131 @@ class AdminFeeConfigService:
             raise
 
     @staticmethod
+    def _transform_legacy_data(configuration_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Transform legacy configuration data to match current schema expectations.
+        
+        This method handles backward compatibility by transforming:
+        1. Aircraft types missing classification_id
+        2. Fee rules with enum values that have class prefixes
+        3. Legacy field names from old schema versions
+        4. Missing or invalid ID references within the snapshot
+        
+        Args:
+            configuration_data: Raw configuration data from version history
+            
+        Returns:
+            Dict containing transformed configuration data
+        """
+        transformed_data = configuration_data.copy()
+        
+        # Extract available IDs for reference validation and mapping
+        classifications = transformed_data.get('classifications', [])
+        aircraft_types = transformed_data.get('aircraft_types', [])
+        fee_rules = transformed_data.get('fee_rules', [])
+        
+        classification_ids = {item['id'] for item in classifications if 'id' in item}
+        aircraft_type_ids = {item['id'] for item in aircraft_types if 'id' in item}
+        fee_rule_ids = {item['id'] for item in fee_rules if 'id' in item}
+        
+        # Get fallback IDs
+        fallback_classification_id = classifications[0]['id'] if classifications else 1
+        fallback_aircraft_type_id = aircraft_types[0]['id'] if aircraft_types else 1
+        fallback_fee_rule_id = fee_rules[0]['id'] if fee_rules else 1
+        
+        # Transform aircraft types
+        if 'aircraft_types' in transformed_data:
+            for at in transformed_data['aircraft_types']:
+                # Legacy field name mapping
+                if 'classification_id' not in at and 'default_aircraft_classification_id' in at:
+                    at['classification_id'] = at.pop('default_aircraft_classification_id')
+                # Set a default classification_id if missing
+                if 'classification_id' not in at or at['classification_id'] is None:
+                    at['classification_id'] = fallback_classification_id
+                # Fix invalid classification references
+                elif at['classification_id'] not in classification_ids:
+                    try:
+                        current_app.logger.warning(f"Aircraft type references invalid classification ID {at['classification_id']}, mapping to {fallback_classification_id}")
+                    except RuntimeError:
+                        pass  # No application context, skip logging
+                    at['classification_id'] = fallback_classification_id
+        
+        # Transform fee rules
+        if 'fee_rules' in transformed_data:
+            for fr in transformed_data['fee_rules']:
+                # Legacy field name mapping - check multiple possible legacy field names
+                if 'applies_to_classification_id' not in fr:
+                    if 'applies_to_aircraft_classification_id' in fr:
+                        fr['applies_to_classification_id'] = fr.pop('applies_to_aircraft_classification_id')
+                    elif 'applies_to_fee_category_id' in fr:
+                        # Very old field name
+                        fr['applies_to_classification_id'] = fr.pop('applies_to_fee_category_id')
+                    elif 'fee_category_id' in fr:
+                        # Another possible legacy field name
+                        fr['applies_to_classification_id'] = fr.pop('fee_category_id')
+                    else:
+                        # No classification reference found, assign to default
+                        fr['applies_to_classification_id'] = fallback_classification_id
+                
+                # Fix invalid classification references in fee rules
+                if fr.get('applies_to_classification_id') not in classification_ids:
+                    try:
+                        current_app.logger.warning(f"Fee rule references invalid classification ID {fr.get('applies_to_classification_id')}, mapping to {fallback_classification_id}")
+                    except RuntimeError:
+                        pass  # No application context, skip logging
+                    fr['applies_to_classification_id'] = fallback_classification_id
+                
+                # Transform enum values with class prefixes
+                if 'calculation_basis' in fr and isinstance(fr['calculation_basis'], str):
+                    if '.' in fr['calculation_basis']:
+                        fr['calculation_basis'] = fr['calculation_basis'].split('.')[-1]
+                if 'waiver_strategy' in fr and isinstance(fr['waiver_strategy'], str):
+                    if '.' in fr['waiver_strategy']:
+                        fr['waiver_strategy'] = fr['waiver_strategy'].split('.')[-1]
+                if 'caa_waiver_strategy_override' in fr and isinstance(fr['caa_waiver_strategy_override'], str):
+                    if '.' in fr['caa_waiver_strategy_override']:
+                        fr['caa_waiver_strategy_override'] = fr['caa_waiver_strategy_override'].split('.')[-1]
+        
+        # Fix aircraft type configs
+        aircraft_type_configs = transformed_data.get('aircraft_type_configs', [])
+        valid_configs = []
+        for config in aircraft_type_configs:
+            aircraft_type_id = config.get('aircraft_type_id')
+            if aircraft_type_id in aircraft_type_ids:
+                valid_configs.append(config)
+            else:
+                try:
+                    current_app.logger.warning(f"Removing aircraft type config with invalid aircraft_type_id {aircraft_type_id}")
+                except RuntimeError:
+                    pass  # No application context, skip logging
+        transformed_data['aircraft_type_configs'] = valid_configs
+        
+        # Fix overrides
+        overrides = transformed_data.get('overrides', [])
+        valid_overrides = []
+        for override in overrides:
+            aircraft_type_id = override.get('aircraft_type_id')
+            fee_rule_id = override.get('fee_rule_id')
+            classification_id = override.get('classification_id')
+            
+            # Check if references are valid
+            valid_aircraft_type = aircraft_type_id is None or aircraft_type_id in aircraft_type_ids
+            valid_fee_rule = fee_rule_id in fee_rule_ids
+            valid_classification = classification_id is None or classification_id in classification_ids
+            
+            if valid_aircraft_type and valid_fee_rule and valid_classification:
+                valid_overrides.append(override)
+            else:
+                try:
+                    current_app.logger.warning(f"Removing override with invalid references: aircraft_type_id={aircraft_type_id}, fee_rule_id={fee_rule_id}, classification_id={classification_id}")
+                except RuntimeError:
+                    pass  # No application context, skip logging
+        
+        transformed_data['overrides'] = valid_overrides
+        
+        return transformed_data
+
+    @staticmethod
     def restore_from_version(version_id: int) -> None:
         """
         Restore fee configuration from a specific version.
@@ -1261,10 +1405,11 @@ class AdminFeeConfigService:
             configuration_data = version.configuration_data
             current_app.logger.info(f"Fetched version {version_id}: {version.version_name}")
             
-            # Step 2: Validate the configuration data
+            # Step 2: Transform legacy data and validate
+            transformed_data = AdminFeeConfigService._transform_legacy_data(configuration_data)
             snapshot_schema = FeeScheduleSnapshotSchema()
             try:
-                validated_data: Dict[str, Any] = snapshot_schema.load(configuration_data)
+                validated_data: Dict[str, Any] = snapshot_schema.load(transformed_data)
                 current_app.logger.info(f"Configuration data validation successful for version {version_id}")
             except MarshmallowValidationError as e:
                 error_msg = f"Configuration validation failed for version {version_id}: {e.messages}"
@@ -1377,10 +1522,11 @@ class AdminFeeConfigService:
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
                 raise ValueError(f"Invalid JSON file: {str(e)}")
             
-            # Validate against schema
+            # Transform legacy data and validate against schema
+            transformed_data = AdminFeeConfigService._transform_legacy_data(import_data)
             snapshot_schema = FeeScheduleSnapshotSchema()
             try:
-                validated_data: Dict[str, Any] = snapshot_schema.load(import_data)
+                validated_data: Dict[str, Any] = snapshot_schema.load(transformed_data)
                 current_app.logger.info("Import data validation successful")
             except MarshmallowValidationError as e:
                 error_msg = f"Import validation failed: {e.messages}"
