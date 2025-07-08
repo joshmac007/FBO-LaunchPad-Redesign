@@ -50,10 +50,9 @@ interface FeeRuleFormDialogProps {
   onClose: () => void;
   onSubmit: (data: CreateFeeRuleRequest | UpdateFeeRuleRequest) => Promise<void>;
   rule: FeeRule | null;
-  categoryId: number;
 }
 
-export function FeeRuleFormDialog({ isOpen, onClose, onSubmit, rule, categoryId }: FeeRuleFormDialogProps) {
+export function FeeRuleFormDialog({ isOpen, onClose, onSubmit, rule }: FeeRuleFormDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -105,10 +104,7 @@ export function FeeRuleFormDialog({ isOpen, onClose, onSubmit, rule, categoryId 
 
   const handleSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsSubmitting(true);
-    const submissionData: CreateFeeRuleRequest | UpdateFeeRuleRequest = { 
-      ...values, 
-      applies_to_aircraft_classification_id: categoryId 
-    };
+    const submissionData: CreateFeeRuleRequest | UpdateFeeRuleRequest = values;
     await onSubmit(submissionData);
     setIsSubmitting(false);
   };

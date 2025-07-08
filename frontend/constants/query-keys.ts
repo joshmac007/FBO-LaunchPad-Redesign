@@ -12,8 +12,8 @@
 export const queryKeys = {
   // Fuel related queries
   fuel: {
-    types: (includeInactive?: boolean) => 
-      ['fuelTypes', { includeInactive: includeInactive ?? false }] as const,
+    types: (includeInactive = false) => 
+      ['fuelTypes', { includeInactive }] as const,
     prices: () => ['fuelPrices'] as const,
     orders: (filters?: Record<string, any>) => 
       ['fuelOrders', filters ?? {}] as const,

@@ -166,7 +166,7 @@ def create_system_permission_groups():
                 'description': 'Billing and fee calculation permissions',
                 'is_system_group': True,
                 'sort_order': 570,
-                'permissions': ['view_billing_info', 'calculate_fees', 'manage_fbo_fee_schedules', 'manage_fuel_prices']
+                'permissions': ['view_billing_info', 'calculate_fees', 'manage_fbo_fee_schedules', 'manage_fuel_prices', 'manage_fuel_types']
             },
             {
                 'name': 'dashboard_access_member',

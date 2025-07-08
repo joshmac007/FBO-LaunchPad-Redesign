@@ -33,7 +33,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { EditableFeeCell } from "./EditableFeeCell"
 import { EditableMinFuelCell } from "./EditableMinFuelCell"
-import { EditClassificationDefaultsDialog } from "./EditClassificationDefaultsDialog"
 import { NewAircraftTableRow } from "./NewAircraftTableRow"
 import { CreateClassificationDialog } from "./CreateClassificationDialog"
 import { MoveAircraftDialog } from "./MoveAircraftDialog"
@@ -182,6 +181,24 @@ export function FeeScheduleTable({
     }
   })
 
+  // Classification-level fee override mutation
+  const upsertClassificationOverrideMutation = useMutation({
+    mutationFn: ({ classificationId, feeRuleId, amount }: { classificationId: number; feeRuleId: number; amount: number }) => {
+      const payload =
+        viewMode === 'caa'
+          ? { classification_id: classificationId, fee_rule_id: feeRuleId, override_caa_amount: amount }
+          : { classification_id: classificationId, fee_rule_id: feeRuleId, override_amount: amount };
+      return upsertFeeRuleOverride(payload);
+    },
+    onError: (error) => {
+      toast.error("Failed to update classification fee override")
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
+      toast.success("Classification fee override updated successfully")
+    }
+  })
+
   const deleteOverrideMutation = useMutation({
     mutationFn: (params: { aircraft_type_id: number; fee_rule_id: number }) =>
       deleteFeeRuleOverride(params),
@@ -310,9 +327,33 @@ export function FeeScheduleTable({
         cell: ({ row }) => {
           const rowData = row.original;
           
-          // Classification rows span multiple columns - return empty
+          // Classification rows now have editable fee cells
           if (rowData.type === 'classification') {
-            return null;
+            // Find the classification-level override for this fee rule
+            const classificationOverride = data?.overrides?.find(override => 
+              override.classification_id === rowData.classification_id && 
+              override.fee_rule_id === rule.id
+            );
+            
+            // Use override value if exists, otherwise use the global rule amount
+            const displayValue = viewMode === 'caa' 
+              ? (classificationOverride?.override_caa_amount ?? rule.caa_override_amount ?? rule.amount)
+              : (classificationOverride?.override_amount ?? rule.amount);
+            
+            return (
+              <EditableFeeCell
+                value={displayValue}
+                isAircraftOverride={false}
+                onSave={(newValue) => {
+                  upsertClassificationOverrideMutation.mutate({
+                    classificationId: rowData.classification_id,
+                    feeRuleId: rule.id,
+                    amount: newValue
+                  });
+                }}
+                highlightOverrides={preferences.highlight_overrides}
+              />
+            );
           }
           
           if (rowData.type === 'aircraft') {
@@ -376,18 +417,10 @@ export function FeeScheduleTable({
       cell: ({ row }) => {
         const rowData = row.original;
         
-        // Classification rows have edit defaults and add aircraft buttons
+        // Classification rows have only add aircraft button
         if (rowData.type === 'classification') {
           return (
             <div className="flex items-center gap-1 justify-end">
-              <EditClassificationDefaultsDialog
-                classificationId={rowData.classification_id}
-                classificationName={rowData.classification_name}
-                classificationRules={primaryFeeRules}
-                currentOverrides={data?.overrides || []}
-                viewMode={viewMode}
-                iconOnly={true}
-              />
               <Button
                 size="sm"
                 variant="outline"
@@ -462,7 +495,7 @@ export function FeeScheduleTable({
         return null;
       },
     }),
-  ], [primaryFeeRules, viewMode, updateMinFuelMutation, upsertOverrideMutation, deleteOverrideMutation, collapsedClassifications, data?.overrides, addingToCategory])
+  ], [primaryFeeRules, viewMode, updateMinFuelMutation, upsertOverrideMutation, upsertClassificationOverrideMutation, deleteOverrideMutation, collapsedClassifications, data?.overrides, addingToCategory])
 
   // Configure the table
   const table = useReactTable({
@@ -703,7 +736,7 @@ export function FeeScheduleTable({
                       key={`new-aircraft-${row.original.classification_id}`}
                       categoryId={row.original.classification_id}
                       feeColumns={primaryFeeRules.map(rule => rule.fee_code)}
-                      primaryFeeRules={primaryFeeRules.filter(r => r.applies_to_classification_id === row.original.classification_id)}
+                      primaryFeeRules={primaryFeeRules}
                       onSuccess={() => {
                         setAddingToCategory(null)
                         queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })

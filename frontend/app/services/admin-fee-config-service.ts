@@ -57,14 +57,6 @@ export interface FeeRuleOverride {
   updated_at: string;
 }
 
-export interface AircraftTypeConfig {
-  id: number;
-  aircraft_type_id: number;
-  aircraft_type_name: string;
-  base_min_fuel_gallons_for_waiver: string | number;
-  created_at: string;
-  updated_at: string;
-}
 
 
 
@@ -236,7 +228,6 @@ export interface UpdateAircraftClassificationRequest {
 export interface CreateFeeRuleRequest {
   fee_name: string;
   fee_code: string;
-  applies_to_classification_id: number | null;
   amount: number;
   currency?: string;
   is_taxable?: boolean;
@@ -248,13 +239,11 @@ export interface CreateFeeRuleRequest {
   caa_override_amount?: number;
   caa_waiver_strategy_override?: 'NONE' | 'SIMPLE_MULTIPLIER' | 'TIERED_MULTIPLIER';
   caa_simple_waiver_multiplier_override?: number;
-  is_primary_fee?: boolean;
 }
 
 export interface UpdateFeeRuleRequest {
   fee_name?: string;
   fee_code?: string;
-  applies_to_classification_id?: number | null;
   amount?: number;
   currency?: string;
   is_taxable?: boolean;
@@ -266,7 +255,6 @@ export interface UpdateFeeRuleRequest {
   caa_override_amount?: number;
   caa_waiver_strategy_override?: 'NONE' | 'SIMPLE_MULTIPLIER' | 'TIERED_MULTIPLIER';
   caa_simple_waiver_multiplier_override?: number;
-  is_primary_fee?: boolean;
 }
 
 export interface CreateWaiverTierRequest {
@@ -676,14 +664,12 @@ export const exportFeeConfiguration = async (): Promise<void> => {
 
 // Fuel Management
 export const getFuelTypes = async (includeInactive?: boolean): Promise<FuelTypesResponse> => {
-  const url = new URL(`${API_BASE_URL}/admin/management/fuel-types`);
+  const url = new URL(`${API_BASE_URL}/admin/management/fuel-types`, window.location.origin);
   if (includeInactive) {
     url.searchParams.append('include_inactive', 'true');
   }
-  const response = await fetch(url.toString(), {
-    headers: getAuthHeaders(),
-  });
-  return handleApiResponse<FuelTypesResponse>(response);
+  const response = await fetch(url.toString(), { headers: getAuthHeaders() });
+  return handleApiResponse(response);
 };
 
 export interface CreateFuelTypeRequest {

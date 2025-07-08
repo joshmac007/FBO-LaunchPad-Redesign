@@ -62,6 +62,9 @@ class UserPreferencesSchema(Schema):
     highlight_overrides = fields.Boolean(
         required=False
     )
+    show_classification_defaults = fields.Boolean(
+        missing=True
+    )
 
 class ErrorResponseSchema(Schema):
     """Schema for error responses."""

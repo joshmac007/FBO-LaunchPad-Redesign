@@ -188,13 +188,11 @@ export function GeneralFeesTable({ generalServiceRules }: GeneralFeesTableProps)
         const createData: CreateFeeRuleRequest = {
           fee_name: getCurrentValue(row, 'fee_name') as string,
           fee_code: getCurrentValue(row, 'fee_code') as string,
-          applies_to_aircraft_classification_id: generalCategory.id,
           amount: getCurrentValue(row, 'amount') as number,
           is_taxable: getCurrentValue(row, 'is_taxable') as boolean || false,
           calculation_basis: 'FIXED_PRICE',
           waiver_strategy: 'NONE',
           has_caa_override: false,
-          is_primary_fee: false,
         }
         
         await createFeeRuleMutation.mutateAsync(createData)
@@ -470,13 +468,10 @@ export function GeneralFeesTable({ generalServiceRules }: GeneralFeesTableProps)
         isOpen={showCreateDialog}
         onClose={() => setShowCreateDialog(false)}
         onSuccess={handleCreateDialogSuccess}
-        availableCategories={generalCategory ? [{ id: generalCategory.id, name: generalCategory.name }] : []}
         defaultValues={{
-          applies_to_aircraft_classification_id: generalCategory?.id || 0,
           calculation_basis: 'FIXED_PRICE',
           waiver_strategy: 'NONE',
           has_caa_override: false,
-          is_primary_fee: false,
         }}
       />
     </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { z, type ZodType } from "zod"
 import { useForm } from "react-hook-form"
@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Save, DollarSign, AlertCircle } from "lucide-react"
-import { getFuelPrices, setFuelPrices, getFuelTypes, FuelPricesResponse, FuelTypesResponse, FuelType } from "@/app/services/admin-fee-config-service"
+import { getFuelPrices, setFuelPrices, getFuelTypes, FuelPricesResponse, FuelTypesResponse, FuelType, FuelPrice } from "@/app/services/admin-fee-config-service"
 import { Toaster } from "sonner"
 import { FuelTypeManagementDialog } from "./components/FuelTypeManagementDialog"
 import { queryKeys } from "@/constants/query-keys"
@@ -24,8 +24,8 @@ const createFuelPriceFormSchema = (fuelTypes: FuelType[]) => {
   
   fuelTypes.forEach(fuelType => {
     schemaFields[`fuel_${fuelType.id}`] = z.string().min(1, "Price is required").refine(
-      (val) => !isNaN(Number(val)) && Number(val) > 0, 
-      "Must be a positive number"
+      (val) => !isNaN(Number(val)) && Number(val) >= 0, // Allow zero as a valid price
+      "Price must be a non-negative number"
     )
   })
   
@@ -42,7 +42,7 @@ export default function FuelPricingPage() {
     data: fuelTypesData, 
     isLoading: fuelTypesLoading, 
     isError: fuelTypesError 
-  } = useQuery({
+  } = useQuery<FuelTypesResponse, Error>({
     queryKey: queryKeys.fuel.types(),
     queryFn: () => getFuelTypes(),
   })
@@ -54,17 +54,9 @@ export default function FuelPricingPage() {
     isError: fuelPricesError, 
     error,
     refetch 
-  } = useQuery({
+  } = useQuery<FuelPricesResponse, Error>({
     queryKey: queryKeys.fuel.prices(),
     queryFn: () => getFuelPrices(),
-    onError: (error) => {
-      console.error('Fuel prices query error:', error);
-      console.error('Error message:', error?.message);
-      console.error('Full error object:', JSON.stringify(error, null, 2));
-    },
-    onSuccess: (data) => {
-      console.log('Fuel prices loaded successfully:', data);
-    }
   })
 
   const isLoading = fuelTypesLoading || fuelPricesLoading
@@ -73,9 +65,12 @@ export default function FuelPricingPage() {
 
   // Convert price data to form-friendly format
   const getPriceByFuelTypeId = (fuelTypeId: number): string => {
-    if (!fuelPricesData?.fuel_prices) return ""
-    const priceEntry = fuelPricesData.fuel_prices.find(p => p.fuel_type_id === fuelTypeId)
-    return priceEntry?.price ? priceEntry.price.toString() : ""
+    if (!fuelPricesData?.fuel_prices) return "0.00";
+    const priceEntry = fuelPricesData.fuel_prices?.find((p: FuelPrice) => p.fuel_type_id === fuelTypeId);
+    // When a price is null (has never been set), it was defaulting to an empty string "",
+    // which caused the Zod schema validation to fail on form initialization.
+    // Defaulting to "0.00" ensures the initial value is valid.
+    return priceEntry?.price != null ? priceEntry.price.toString() : "0.00";
   }
 
   // Create form default values
@@ -87,7 +82,10 @@ export default function FuelPricingPage() {
     return values
   }
 
-  const formSchema = fuelTypes.length > 0 ? createFuelPriceFormSchema(fuelTypes) : z.object({})
+  // Memoize the schema to prevent re-creation on every render
+  const formSchema = useMemo(() => {
+    return fuelTypes.length > 0 ? createFuelPriceFormSchema(fuelTypes) : z.object({});
+  }, [fuelTypes]);
   
   const {
     register,
@@ -95,9 +93,17 @@ export default function FuelPricingPage() {
     formState: { errors, isDirty },
     reset
   } = useForm<FuelPriceFormData>({
-    resolver: zodResolver(formSchema),
-    values: getFormDefaultValues()
+    resolver: zodResolver(formSchema)
+    // Default values are now set asynchronously via useEffect below
   })
+
+  // When data is loaded, reset the form with the default values.
+  // This is the recommended pattern for async default values with react-hook-form.
+  useEffect(() => {
+    if (fuelTypes.length > 0 && fuelPricesData) {
+      reset(getFormDefaultValues());
+    }
+  }, [fuelTypes, fuelPricesData, reset]);
 
   // Save prices mutation
   const savePricesMutation = useMutation({

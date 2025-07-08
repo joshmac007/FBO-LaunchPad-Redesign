@@ -231,3 +231,240 @@ Of course. Here is a comprehensive and unambiguous task plan for an AI coder to 
 - Classification-specific fees are stored as FeeRuleOverride records with classification_id
 - fee_rules table has unique constraint on fee_code column
 - Backward compatibility maintained through proper downgrade implementation
+
+### Phase 2.1: Consolidate Fee Management UI into Single Workflow - ✅ COMPLETED
+
+**Date:** July 8, 2025  
+**Implemented by:** Claude Code
+
+**What was accomplished:**
+1. **FeeLibraryTab.tsx refactoring:**
+   - Removed `applies_to_classification_id` field from form schema and UI
+   - Removed `is_primary_fee` field from form schema and UI
+   - Removed classification selection dropdown from dialog
+   - Removed classification column from fee rules table
+   - Updated card description to reflect new purpose: "Manage global fee definitions. Classification-specific and aircraft-specific fees are set in the Fee Schedule."
+   - Removed unused imports and functions (`getAircraftClassifications`, `getClassificationName`)
+   - Simplified form submission to only handle global fee properties
+
+2. **Component interface updates:**
+   - Removed `availableCategories` prop from `FeeRuleFormDialog` interface
+   - Removed `categoryId` parameter from dialog components
+   - Updated mutation calls to use simplified payloads
+
+**Key changes made:**
+- **Lines 47-48, 87, 96:** Removed `applies_to_classification_id` and `is_primary_fee` from form defaults
+- **Lines 189-216:** Removed classification selection UI completely
+- **Lines 296-312:** Removed `is_primary_fee` toggle UI
+- **Lines 350-355:** Removed classification column from table header and rows
+- **Lines 20-27:** Removed unused imports for classification handling
+- **Lines 130-139:** Simplified form submission logic
+
+**Technical notes:**
+- The FeeLibraryTab now serves as a pure global fee definition manager
+- All UI for managing classification-specific fees has been removed
+- The component now aligns with the new three-tier hierarchy where global fees are the base level
+
+### Phase 2.2: Remove EditClassificationDefaultsDialog.tsx Component - ✅ COMPLETED
+
+**Date:** July 8, 2025  
+**Implemented by:** Claude Code
+
+**What was accomplished:**
+1. **Component removal:** Completely deleted `EditClassificationDefaultsDialog.tsx` file
+2. **Import cleanup:** Removed the import from `FeeScheduleTable.tsx`
+3. **Functionality migration:** The dialog's functionality is now integrated directly into the FeeScheduleTable classification header rows
+
+**Technical notes:**
+- The separate dialog created a confusing dual workflow for managing classification fees
+- Removing this component forces users to use the more intuitive inline editing in the main table
+- This elimination aligns with the task requirements to have a single, coherent workflow
+
+### Phase 2.3: Integrate Editable Classification Fees into FeeScheduleTable.tsx - ✅ COMPLETED
+
+**Date:** July 8, 2025  
+**Implemented by:** Claude Code
+
+**What was accomplished:**
+1. **New mutation added:** Created `upsertClassificationOverrideMutation` to handle classification-level fee updates
+2. **Classification row cells made editable:** Modified fee column cells to be editable for classification rows
+3. **Override value resolution:** Added logic to find and display classification-level override values
+4. **Actions column simplified:** Removed the EditClassificationDefaultsDialog button, leaving only the "Add Aircraft" button
+
+**Key changes made:**
+- **Lines 184-200:** Added new `upsertClassificationOverrideMutation` for classification-level overrides
+- **Lines 330-357:** Modified fee column cells to be editable for classification rows
+- **Lines 332-336:** Added logic to find classification-level overrides in the data
+- **Lines 339-341:** Added value resolution prioritizing override values over global values
+- **Lines 343-356:** Added EditableFeeCell component for inline editing
+- **Lines 420-438:** Simplified actions column to remove EditClassificationDefaultsDialog
+- **Line 498:** Updated dependencies array to include new mutation
+
+**Technical notes:**
+- Classification rows now have editable fee cells that create classification-level overrides
+- The override resolution follows the three-tier hierarchy: aircraft override > classification override > global fee
+- Users can now edit classification-level fees directly in the main table without separate dialogs
+- The mutation uses the same `upsertFeeRuleOverride` service but with `classification_id` instead of `aircraft_type_id`
+
+### Phase 2.4: Refactor FeeRuleDialog.tsx to Remove Deprecated UI - ✅ COMPLETED
+
+**Date:** July 8, 2025  
+**Implemented by:** Claude Code
+
+**What was accomplished:**
+1. **Schema updates:** Removed `applies_to_aircraft_classification_id` and `is_primary_fee` from form schema
+2. **Interface simplification:** Removed `availableCategories` prop from dialog interface
+3. **Form field removal:** Removed classification selection dropdown and primary fee toggle
+4. **Default values cleanup:** Removed deprecated field references from form defaults and reset logic
+
+**Key changes made:**
+- **Lines 38-55:** Updated form schema to remove deprecated fields
+- **Lines 59-65:** Simplified interface to remove `availableCategories` prop
+- **Lines 67-73:** Updated function signature to remove unused parameter
+- **Lines 78-91:** Cleaned up form default values
+- **Lines 97-110:** Updated reset logic to remove deprecated fields
+- **Lines 211-238:** Removed classification selection UI completely
+- **Lines 266-285:** Removed primary fee toggle UI
+
+**Technical notes:**
+- The dialog now only handles global fee properties (name, code, amount, taxability, etc.)
+- All classification-specific logic has been removed
+- The component is now aligned with the new three-tier approach where global fees are the base level
+
+### Phase 2.5: Refactor FeeRuleFormDialog.tsx to Remove Deprecated UI - ✅ COMPLETED
+
+**Date:** July 8, 2025  
+**Implemented by:** Claude Code
+
+**What was accomplished:**
+1. **Interface updates:** Removed `categoryId` parameter from dialog props
+2. **Submission logic simplification:** Removed `applies_to_aircraft_classification_id` from form submission
+3. **Component decoupling:** Removed dependency on category-specific logic
+
+**Key changes made:**
+- **Lines 48-53:** Removed `categoryId` from interface
+- **Lines 55:** Updated function signature to remove `categoryId` parameter
+- **Lines 105-110:** Simplified form submission to not include `applies_to_aircraft_classification_id`
+
+**Technical notes:**
+- The dialog now creates purely global fee rules
+- All category-specific logic has been removed
+- The component now aligns with the backend's global-only fee rule structure
+
+### Phase 2.6: Update useMutation Hooks in Parent Components - ✅ COMPLETED
+
+**Date:** July 8, 2025  
+**Implemented by:** Claude Code
+
+**What was accomplished:**
+1. **FeeColumnsTab.tsx updates:**
+   - Removed `is_primary_fee` toggle functionality
+   - Updated dialog calls to remove deprecated props
+   - Changed purpose from "column management" to "global fee definition management"
+   - Removed unused mutations and imports
+
+2. **GeneralFeesTable.tsx updates:**
+   - Updated CreateFeeRuleRequest to remove deprecated fields
+   - Removed `availableCategories` prop from FeeRuleDialog calls
+   - Simplified default values to remove deprecated fields
+
+**Key changes made:**
+- **FeeColumnsTab.tsx Lines 99-103:** Updated description to reflect new purpose
+- **FeeColumnsTab.tsx Lines 109-113:** Changed table headers to show default amounts instead of column toggles
+- **FeeColumnsTab.tsx Lines 118-122:** Removed checkbox UI and display fee amounts
+- **FeeColumnsTab.tsx Lines 157-164:** Simplified FeeRuleDialog call
+- **GeneralFeesTable.tsx Lines 188-196:** Updated CreateFeeRuleRequest to remove deprecated fields
+- **GeneralFeesTable.tsx Lines 467-476:** Simplified FeeRuleDialog call
+
+**Technical notes:**
+- The FeeColumnsTab now serves as a view of global fee definitions rather than a column toggle interface
+- All components now work with the simplified global fee rule structure
+- Parent components no longer pass deprecated props to child dialogs
+
+### Phase 2.7: Global Search Cleanup for Deprecated Terms - ✅ COMPLETED
+
+**Date:** July 8, 2025  
+**Implemented by:** Claude Code
+
+**What was accomplished:**
+1. **Comprehensive search and removal:** Searched for and removed all remaining references to deprecated terms
+2. **Key areas cleaned up:**
+   - Removed `applies_to_classification_id` filtering logic in FeeScheduleTable.tsx
+   - Removed `is_primary_fee` references in page.tsx main component
+   - Removed primary fee warning UI from main page
+   - Removed `is_primary_fee` display in ViewAircraftDetailsDialog.tsx
+   - Removed deprecated interface `AircraftTypeConfig` from service types
+
+**Key changes made:**
+- **FeeScheduleTable.tsx Line 739:** Removed classification filtering: `primaryFeeRules.filter(r => r.applies_to_classification_id === row.original.classification_id)`
+- **page.tsx Lines 36-39:** Simplified primaryFeeRules to show all global fee rules
+- **page.tsx Lines 55-77:** Removed primary fee warning UI completely
+- **ViewAircraftDetailsDialog.tsx Lines 168-170:** Removed "Primary" field display
+- **admin-fee-config-service.ts Lines 60-67:** Removed deprecated `AircraftTypeConfig` interface
+
+**Technical notes:**
+- All application logic now consistently works with the three-tier fee hierarchy
+- No deprecated fields or interfaces remain in the frontend codebase
+- The system is now fully aligned with the backend's simplified structure
+
+### Phase 2.8: Update getGlobalFeeSchedule Service Function - ✅ COMPLETED
+
+**Date:** July 8, 2025  
+**Implemented by:** Claude Code
+
+**What was accomplished:**
+1. **Service function review:** Verified that `getGlobalFeeSchedule` function is already correctly implemented
+2. **No changes needed:** The function properly calls the backend global endpoint without any deprecated parameters
+
+**Technical notes:**
+- The function at line 516 already correctly calls `/admin/fee-schedule/global`
+- No modifications were required as the function was already aligned with the new backend structure
+
+### Phase 2.9: Update Frontend Service Function and Type Definitions - ✅ COMPLETED
+
+**Date:** July 8, 2025  
+**Implemented by:** Claude Code
+
+**What was accomplished:**
+1. **Interface updates:** Removed deprecated fields from `CreateFeeRuleRequest` and `UpdateFeeRuleRequest`
+2. **Type cleanup:** Removed deprecated `AircraftTypeConfig` interface
+3. **Service alignment:** Ensured all service interfaces match the new backend schema
+
+**Key changes made:**
+- **Lines 228-242:** Removed `applies_to_classification_id` and `is_primary_fee` from `CreateFeeRuleRequest`
+- **Lines 244-258:** Removed `applies_to_classification_id` and `is_primary_fee` from `UpdateFeeRuleRequest`
+- **Lines 60-67:** Removed deprecated `AircraftTypeConfig` interface completely
+
+**Technical notes:**
+- All service interfaces now match the simplified backend schema
+- No deprecated fields remain in the type definitions
+- The frontend service layer is now fully aligned with the new three-tier architecture
+
+## Phase 2 Summary
+
+**Overall Impact:**
+Phase 2 successfully eliminated the confusing four-tier fee hierarchy in the frontend UI and replaced it with a clean, intuitive three-tier approach. The key achievement was consolidating fee management into a single workflow where:
+
+1. **Global fees** are managed in the Fee Types tab
+2. **Classification-specific fees** are set directly in the fee schedule table rows
+3. **Aircraft-specific fees** are set in individual aircraft cells
+
+**User Experience Improvements:**
+- Eliminated the confusing dual workflow for classification fees
+- Made fee management more intuitive with inline editing
+- Removed deprecated primary fee concept
+- Simplified dialogs to focus only on global fee properties
+
+**Technical Achievements:**
+- Removed all references to deprecated database fields
+- Aligned frontend components with the new backend structure
+- Implemented proper three-tier fee resolution logic
+- Eliminated redundant UI components and workflows
+
+**Code Quality:**
+- Removed ~200 lines of deprecated code
+- Simplified component interfaces
+- Improved type safety by removing deprecated fields
+- Enhanced maintainability through cleaner architecture
+
+The frontend now provides a streamlined, predictable fee management experience that directly reflects the three-tier hierarchy implemented in Phase 1.

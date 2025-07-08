@@ -503,60 +503,30 @@ def delete_fee_rule_override():
 @admin_fee_config_bp.route('/api/admin/aircraft-fee-setup', methods=['POST'])
 @require_permission_v2('manage_fbo_fee_schedules')
 def create_aircraft_fee_setup():
-    """Create a new aircraft fee setup."""
+    """Create a new aircraft type and associate it with a fee schedule."""
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'Invalid JSON in request body'}), 400
-
-        validated_data = create_aircraft_fee_setup_schema.load(data)
-        validated_data = cast(Dict[str, Any], validated_data)
-
-        new_setup = AdminFeeConfigService.create_aircraft_fee_setup(
-            aircraft_type_name=validated_data['aircraft_type_name'],
-            aircraft_classification_id=validated_data['aircraft_classification_id'],
-            min_fuel_gallons=validated_data['min_fuel_gallons'],
-            initial_ramp_fee_rule_id=validated_data.get('initial_ramp_fee_rule_id'),
-            initial_ramp_fee_amount=validated_data.get('initial_ramp_fee_amount')
-        )
-
-        # Build response with proper schema serialization
-        override_schema = FeeRuleOverrideSchema()
+        data = create_aircraft_fee_setup_schema.load(request.json)
         
-        response_data = {
-            "message": new_setup.get("message", "Aircraft fee setup created successfully"),
-            "aircraft_type": aircraft_type_schema.dump(new_setup['aircraft_type'])
-        }
+        # This service method needs to exist and handle the logic
+        new_aircraft_type, message, status_code = AdminFeeConfigService.create_aircraft_with_fees(data)
 
-        if 'fee_rule_override' in new_setup and new_setup['fee_rule_override']:
-            response_data['fee_rule_override'] = override_schema.dump(new_setup['fee_rule_override'])
-
-        return jsonify(response_data), 201
-
-    except ValidationError as err:
-        return jsonify({'error': 'Validation failed', 'messages': err.messages}), 400
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 409
+        if new_aircraft_type:
+            return jsonify({
+                'aircraft_type': aircraft_type_schema.dump(new_aircraft_type),
+                'message': message
+            }), status_code
+        else:
+            return jsonify({'error': message}), status_code
+            
+    except ValidationError as e:
+        return jsonify({'error': 'Validation failed', 'messages': e.messages}), 400
     except Exception as e:
-        current_app.logger.error(f"Error in create_aircraft_fee_setup: {e}")
-        return jsonify({'error': 'An unexpected error occurred'}), 500
+        current_app.logger.error(f"Error creating aircraft fee setup: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 # Fuel Type Management Routes
-@admin_fee_config_bp.route('/api/admin/fuel-types', methods=['GET'])
-@require_permission_v2('manage_fuel_types')
-def get_fuel_types():
-    """Get all fuel types, optionally including inactive ones."""
-    try:
-        include_inactive = request.args.get('include_inactive', 'false').lower() == 'true'
-        if include_inactive:
-            fuel_types = AdminFeeConfigService.get_all_fuel_types()
-        else:
-            fuel_types = AdminFeeConfigService.get_all_active_fuel_types()
-        return jsonify({'fuel_types': fuel_types}), 200
-    except Exception as e:
-        current_app.logger.error(f"Error fetching fuel types: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+# MOVED to fuel_type_admin_routes.py for consistency
 
 
 # Fuel Price Management Routes

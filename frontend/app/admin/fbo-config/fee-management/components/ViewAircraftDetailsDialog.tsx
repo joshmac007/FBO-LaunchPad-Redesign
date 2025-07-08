@@ -165,10 +165,6 @@ export const ViewAircraftDetailsDialog: React.FC<ViewAircraftDetailsDialogProps>
                           <span className="text-muted-foreground">Basis:</span>
                           <span>{rule.calculation_basis.replace('_', ' ')}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Primary:</span>
-                          <span>{rule.is_primary_fee ? 'Yes' : 'No'}</span>
-                        </div>
                       </div>
                       
                       {rule.waiver_strategy !== 'NONE' && (

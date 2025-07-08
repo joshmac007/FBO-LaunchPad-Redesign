@@ -18,12 +18,10 @@ import { PlusIcon, PencilIcon, TrashIcon } from "lucide-react"
 import { toast } from "sonner"
 import { 
   getFeeRules, 
-  getAircraftClassifications,
   createFeeRule, 
   updateFeeRule, 
   deleteFeeRule,
   type FeeRule,
-  type AircraftClassification,
   type CreateFeeRuleRequest,
   type UpdateFeeRuleRequest
 } from "@/app/services/admin-fee-config-service"
@@ -33,10 +31,9 @@ interface FeeRuleFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   feeRule?: FeeRule
-  classifications: AircraftClassification[]
 }
 
-function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: FeeRuleFormDialogProps) {
+function FeeRuleFormDialog({ open, onOpenChange, feeRule }: FeeRuleFormDialogProps) {
   const queryClient = useQueryClient()
   const isEdit = !!feeRule
 
@@ -53,7 +50,6 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
       calculation_basis: "FIXED_PRICE",
       waiver_strategy: "NONE",
       has_caa_override: false,
-      is_primary_fee: false,
     },
   })
 
@@ -63,9 +59,6 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
       form.reset({
         fee_name: feeRule.fee_name,
         fee_code: feeRule.fee_code,
-        applies_to_classification_id: feeRule.applies_to_classification_id === null 
-          ? "global" 
-          : feeRule.applies_to_classification_id,
         amount: feeRule.amount,
         currency: feeRule.currency,
         is_taxable: feeRule.is_taxable,
@@ -78,13 +71,11 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
         caa_override_amount: feeRule.caa_override_amount,
         caa_waiver_strategy_override: feeRule.caa_waiver_strategy_override,
         caa_simple_waiver_multiplier_override: feeRule.caa_simple_waiver_multiplier_override,
-        is_primary_fee: feeRule.is_primary_fee,
       });
     } else {
       form.reset({
         fee_name: "",
         fee_code: "",
-        applies_to_classification_id: 0,
         amount: 0,
         currency: "USD",
         is_taxable: false,
@@ -97,7 +88,6 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
         caa_override_amount: undefined,
         caa_waiver_strategy_override: undefined,
         caa_simple_waiver_multiplier_override: undefined,
-        is_primary_fee: false,
       });
     }
   }, [feeRule, form])
@@ -128,20 +118,10 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
   })
 
   const onSubmit = (data: FeeRuleFormData) => {
-    // Transform the applies_to_classification_id value: if it's "global", send as null
-    const transformedData = {
-      ...data,
-      applies_to_classification_id: data.applies_to_classification_id === "global" 
-        ? null 
-        : typeof data.applies_to_classification_id === 'string'
-          ? parseInt(data.applies_to_classification_id, 10)
-          : data.applies_to_classification_id
-    }
-    
     if (isEdit && feeRule) {
-      updateMutation.mutate({ id: feeRule.id, data: transformedData as UpdateFeeRuleRequest })
+      updateMutation.mutate({ id: feeRule.id, data: data as UpdateFeeRuleRequest })
     } else {
-      createMutation.mutate(transformedData as CreateFeeRuleRequest)
+      createMutation.mutate(data as CreateFeeRuleRequest)
     }
   }
 
@@ -186,34 +166,6 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="applies_to_classification_id"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Aircraft Classification</FormLabel>
-                  <Select 
-                    onValueChange={(value) => field.onChange(value === "global" ? "global" : parseInt(value))} 
-                    value={field.value === null ? "global" : field.value?.toString()}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select classification" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="global">Global Fee (applies to all aircraft)</SelectItem>
-                      {classifications.map((classification) => (
-                        <SelectItem key={classification.id} value={classification.id.toString()}>
-                          {classification.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
             <div className="grid grid-cols-2 gap-4">
               <FormField
@@ -293,23 +245,6 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule, classifications }: Fee
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="is_primary_fee"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <FormLabel>Show as Main Column</FormLabel>
-                      <div className="text-sm text-muted-foreground">
-                        Display this fee as a column in the main pricing table
-                      </div>
-                    </div>
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
 
             </div>
 
@@ -340,11 +275,6 @@ export function FeeLibraryTab() {
     queryFn: () => getFeeRules(),
   })
 
-  // Fetch aircraft classifications
-  const { data: classifications = [] } = useQuery<AircraftClassification[]>({
-    queryKey: ['aircraft-classifications'],
-    queryFn: () => getAircraftClassifications(),
-  })
 
   // Delete mutation
   const deleteMutation = useMutation({
@@ -377,13 +307,6 @@ export function FeeLibraryTab() {
     deleteMutation.mutate(feeRuleId)
   }
 
-  const getClassificationName = (classificationId: number | null) => {
-    if (classificationId === null || classificationId === undefined) {
-      return <Badge variant="outline">Global</Badge>
-    }
-    const classification = classifications.find(c => c.id === classificationId)
-    return classification?.name || "Unknown"
-  }
 
   return (
     <div className="space-y-6 p-6">
@@ -392,7 +315,7 @@ export function FeeLibraryTab() {
           <div className="flex justify-between items-center">
             <div>
               <CardTitle>Fee Types</CardTitle>
-              <CardDescription>Manage all the different types of fees you charge (like ramp fees, handling fees, etc.)</CardDescription>
+              <CardDescription>Manage global fee definitions. Classification-specific and aircraft-specific fees are set in the Fee Schedule.</CardDescription>
             </div>
             <Button onClick={handleCreateNew}>
               <PlusIcon className="h-4 w-4 mr-2" />
@@ -413,7 +336,6 @@ export function FeeLibraryTab() {
                 <TableRow>
                   <TableHead>Fee Name</TableHead>
                   <TableHead>Code</TableHead>
-                  <TableHead>Classification</TableHead>
                   <TableHead>Default Amount</TableHead>
                   <TableHead>Can Be Waived?</TableHead>
                   <TableHead>Actions</TableHead>
@@ -424,12 +346,8 @@ export function FeeLibraryTab() {
                   <TableRow key={rule.id}>
                     <TableCell className="font-medium">
                       {rule.fee_name}
-                      {rule.is_primary_fee && (
-                        <Badge variant="secondary" className="ml-2">Main Column</Badge>
-                      )}
                     </TableCell>
                     <TableCell>{rule.fee_code}</TableCell>
-                    <TableCell>{getClassificationName(rule.applies_to_classification_id)}</TableCell>
                     <TableCell>${rule.amount.toFixed(2)}</TableCell>
                     <TableCell>
                       {rule.is_potentially_waivable_by_fuel_uplift ? (
@@ -486,7 +404,6 @@ export function FeeLibraryTab() {
         open={formDialogOpen}
         onOpenChange={setFormDialogOpen}
         feeRule={editingFeeRule}
-        classifications={classifications}
       />
     </div>
   )

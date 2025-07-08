@@ -38,7 +38,6 @@ import { getAuthHeaders } from "@/app/services/api-config"
 const feeRuleSchema = z.object({
   fee_name: z.string().min(1, "Fee name is required"),
   fee_code: z.string().min(1, "Fee code is required"),
-  applies_to_aircraft_classification_id: z.number().min(1, "Fee category is required"),
   amount: z.string()
     .min(1, "Amount is required")
     .refine((val) => !isNaN(Number(val)) && Number(val) >= 0, {
@@ -53,7 +52,6 @@ const feeRuleSchema = z.object({
   caa_override_amount: z.string().optional(),
   caa_waiver_strategy_override: z.enum(['NONE', 'SIMPLE_MULTIPLIER', 'TIERED_MULTIPLIER']).optional(),
   caa_simple_waiver_multiplier_override: z.string().optional(),
-  is_primary_fee: z.boolean(),
 })
 
 type FeeRuleFormData = z.infer<typeof feeRuleSchema>
@@ -64,7 +62,6 @@ interface FeeRuleDialogProps {
   onSuccess: () => void
   initialData?: FeeRule | null
   defaultValues?: Partial<FeeRuleFormData>
-  availableCategories: Array<{ id: number; name: string }>
 }
 
 export function FeeRuleDialog({
@@ -73,7 +70,6 @@ export function FeeRuleDialog({
   onSuccess,
   initialData = null,
   defaultValues = {},
-  availableCategories,
 }: FeeRuleDialogProps) {
   const isEditing = !!initialData
 
@@ -82,7 +78,6 @@ export function FeeRuleDialog({
     defaultValues: {
       fee_name: initialData?.fee_name || "",
       fee_code: initialData?.fee_code || "",
-      applies_to_aircraft_classification_id: initialData?.applies_to_aircraft_classification_id || defaultValues.applies_to_aircraft_classification_id || 0,
       amount: initialData?.amount?.toString() || defaultValues.amount?.toString() || "",
       is_taxable: initialData?.is_taxable ?? defaultValues.is_taxable ?? true,
       is_potentially_waivable_by_fuel_uplift: initialData?.is_potentially_waivable_by_fuel_uplift ?? defaultValues.is_potentially_waivable_by_fuel_uplift ?? false,
@@ -93,7 +88,6 @@ export function FeeRuleDialog({
       caa_override_amount: initialData?.caa_override_amount?.toString() || defaultValues.caa_override_amount?.toString() || "",
       caa_waiver_strategy_override: initialData?.caa_waiver_strategy_override || defaultValues.caa_waiver_strategy_override || undefined,
       caa_simple_waiver_multiplier_override: initialData?.caa_simple_waiver_multiplier_override?.toString() || defaultValues.caa_simple_waiver_multiplier_override?.toString() || "",
-      is_primary_fee: initialData?.is_primary_fee ?? defaultValues.is_primary_fee ?? false,
     },
   })
 
@@ -103,7 +97,6 @@ export function FeeRuleDialog({
       form.reset({
         fee_name: "",
         fee_code: "",
-        applies_to_aircraft_classification_id: defaultValues.applies_to_aircraft_classification_id || 0,
         amount: defaultValues.amount?.toString() || "",
         is_taxable: defaultValues.is_taxable ?? true,
         is_potentially_waivable_by_fuel_uplift: defaultValues.is_potentially_waivable_by_fuel_uplift ?? false,
@@ -114,7 +107,6 @@ export function FeeRuleDialog({
         caa_override_amount: defaultValues.caa_override_amount?.toString() || "",
         caa_waiver_strategy_override: defaultValues.caa_waiver_strategy_override || undefined,
         caa_simple_waiver_multiplier_override: defaultValues.caa_simple_waiver_multiplier_override?.toString() || "",
-        is_primary_fee: defaultValues.is_primary_fee ?? false,
       })
     }
   }, [isOpen, isEditing, defaultValues, form])
@@ -208,54 +200,24 @@ export function FeeRuleDialog({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="applies_to_aircraft_classification_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fee Category</FormLabel>
-                      <Select
-                        onValueChange={(value) => field.onChange(parseInt(value))}
-                        value={field.value?.toString()}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select category" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {availableCategories.map((category) => (
-                            <SelectItem key={category.id} value={category.id.toString()}>
-                              {category.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="amount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Amount</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+              <FormField
+                control={form.control}
+                name="amount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Amount</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
             {/* Settings */}
@@ -263,27 +225,6 @@ export function FeeRuleDialog({
               <h3 className="text-lg font-medium">Settings</h3>
               
               <div className="space-y-3">
-                <FormField
-                  control={form.control}
-                  name="is_primary_fee"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>Display as Primary Column</FormLabel>
-                        <p className="text-sm text-muted-foreground">
-                          Show this fee as a column in the main fee schedule table
-                        </p>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-
                 <FormField
                   control={form.control}
                   name="is_taxable"
