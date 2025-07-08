@@ -15,6 +15,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Save, DollarSign, AlertCircle } from "lucide-react"
 import { getFuelPrices, setFuelPrices, getFuelTypes, FuelPricesResponse, FuelTypesResponse, FuelType } from "@/app/services/admin-fee-config-service"
 import { Toaster } from "sonner"
+import { FuelTypeManagementDialog } from "./components/FuelTypeManagementDialog"
+import { queryKeys } from "@/constants/query-keys"
 
 // Dynamic form schema generator for price inputs
 const createFuelPriceFormSchema = (fuelTypes: FuelType[]) => {
@@ -41,7 +43,7 @@ export default function FuelPricingPage() {
     isLoading: fuelTypesLoading, 
     isError: fuelTypesError 
   } = useQuery({
-    queryKey: ['fuel-types'],
+    queryKey: queryKeys.fuel.types(),
     queryFn: () => getFuelTypes(),
   })
 
@@ -53,8 +55,16 @@ export default function FuelPricingPage() {
     error,
     refetch 
   } = useQuery({
-    queryKey: ['fuel-prices'],
+    queryKey: queryKeys.fuel.prices(),
     queryFn: () => getFuelPrices(),
+    onError: (error) => {
+      console.error('Fuel prices query error:', error);
+      console.error('Error message:', error?.message);
+      console.error('Full error object:', JSON.stringify(error, null, 2));
+    },
+    onSuccess: (data) => {
+      console.log('Fuel prices loaded successfully:', data);
+    }
   })
 
   const isLoading = fuelTypesLoading || fuelPricesLoading
@@ -100,7 +110,7 @@ export default function FuelPricingPage() {
     },
     onSuccess: () => {
       toast.success("Fuel prices saved successfully")
-      queryClient.invalidateQueries({ queryKey: ['fuel-prices'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.fuel.prices() })
     },
     onError: (error: Error) => {
       toast.error(`Failed to save prices: ${error.message}`)
@@ -185,6 +195,9 @@ export default function FuelPricingPage() {
           <CardTitle className="flex items-center gap-2">
             <DollarSign className="h-5 w-5" />
             Current Fuel Prices
+            <div className="ml-auto">
+              <FuelTypeManagementDialog />
+            </div>
           </CardTitle>
           <CardDescription>
             Set the current fuel prices per gallon. All prices are in USD.

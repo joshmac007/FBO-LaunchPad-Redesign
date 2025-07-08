@@ -12,6 +12,7 @@ import {
   type FeeCalculationResult,
 } from "../services/fee-service"
 import { getAircraftList, type Aircraft } from "../services/aircraft-service"
+import { getFuelTypes, type FuelType } from "../services/admin-fee-config-service"
 import { AlertCircle, Calculator, DollarSign } from "lucide-react"
 import { usePermissions } from "../contexts/permission-context"
 
@@ -41,22 +42,30 @@ const FeeCalculator: React.FC<FeeCalculatorProps> = ({
   const [error, setError] = useState<string | null>(null)
 
   const [aircraft, setAircraft] = useState<Aircraft[]>([])
+  const [fuelTypes, setFuelTypes] = useState<FuelType[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isFuelTypesLoading, setIsFuelTypesLoading] = useState(false)
 
   const { hasPermission } = usePermissions()
 
-  // Load aircraft
+  // Load aircraft and fuel types
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true)
+      setIsFuelTypesLoading(true)
       try {
-        const aircraftData = await getAircraftList()
+        const [aircraftData, fuelTypesData] = await Promise.all([
+          getAircraftList(),
+          getFuelTypes()
+        ])
         setAircraft(aircraftData)
+        setFuelTypes(fuelTypesData.fuel_types)
       } catch (err) {
         console.error("Error loading data:", err)
         setError("Failed to load required data. Please try again.")
       } finally {
         setIsLoading(false)
+        setIsFuelTypesLoading(false)
       }
     }
 
@@ -186,9 +195,17 @@ const FeeCalculator: React.FC<FeeCalculatorProps> = ({
                   <SelectValue placeholder="Select fuel type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Jet A">Jet A</SelectItem>
-                  <SelectItem value="Jet A-1">Jet A-1</SelectItem>
-                  <SelectItem value="Avgas 100LL">Avgas 100LL</SelectItem>
+                  {isFuelTypesLoading ? (
+                    <div className="flex items-center justify-center py-2">
+                      <span className="text-sm text-muted-foreground">Loading fuel types...</span>
+                    </div>
+                  ) : (
+                    fuelTypes.map((fuelType) => (
+                      <SelectItem key={fuelType.id} value={fuelType.name}>
+                        {fuelType.name}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>

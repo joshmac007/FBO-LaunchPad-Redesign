@@ -1,6 +1,7 @@
 """Marshmallow schemas for admin fee configuration API endpoints."""
 
 from marshmallow import Schema, fields, validate, validates, ValidationError, validates_schema
+from marshmallow import EXCLUDE
 
 
 # Aircraft Types Schemas
@@ -13,7 +14,7 @@ class AircraftTypeSchema(Schema):
         validate=validate.Range(min=0),
         as_string=True
     )
-    default_aircraft_classification_id = fields.Integer(allow_none=True)
+    classification_id = fields.Integer(required=True, data_key='classification_id')
     default_max_gross_weight_lbs = fields.Decimal(
         allow_none=True,
         validate=validate.Range(min=0),
@@ -21,6 +22,9 @@ class AircraftTypeSchema(Schema):
     )
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+
+    class Meta:
+        unknown = EXCLUDE
 
 
 class UpdateAircraftTypeFuelWaiverSchema(Schema):
@@ -40,6 +44,9 @@ class AircraftClassificationSchema(Schema):
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
 
+    class Meta:
+        unknown = EXCLUDE
+
 
 class CreateAircraftClassificationSchema(Schema):
     """Schema for creating an aircraft classification."""
@@ -52,26 +59,7 @@ class UpdateAircraftClassificationSchema(Schema):
 
 
 # Aircraft Type to Classification Mapping Schemas (Deprecated)
-class AircraftTypeMappingSchema(Schema):
-    """Schema for aircraft type to classification mapping (deprecated)."""
-    id = fields.Integer(dump_only=True)
-    aircraft_type_id = fields.Integer(required=True)
-    aircraft_type_name = fields.String(dump_only=True)
-    aircraft_classification_id = fields.Integer(required=True)
-    aircraft_classification_name = fields.String(dump_only=True)
-    created_at = fields.DateTime(dump_only=True)
-    updated_at = fields.DateTime(dump_only=True)
 
-
-class CreateAircraftTypeMappingSchema(Schema):
-    """Schema for creating aircraft type to classification mapping (deprecated)."""
-    aircraft_type_id = fields.Integer(required=True)
-    aircraft_classification_id = fields.Integer(required=True)
-
-
-class UpdateAircraftTypeMappingSchema(Schema):
-    """Schema for updating aircraft type to classification mapping (deprecated)."""
-    aircraft_classification_id = fields.Integer(required=True)
 
 
 class CSVUploadResultSchema(Schema):
@@ -87,7 +75,6 @@ class FeeRuleSchema(Schema):
     id = fields.Integer(dump_only=True)
     fee_name = fields.String(required=True, validate=validate.Length(min=1, max=100))
     fee_code = fields.String(required=True, validate=validate.Length(min=1, max=50))
-    applies_to_aircraft_classification_id = fields.Integer(required=True)
     aircraft_classification_name = fields.String(dump_only=True)
     amount = fields.Decimal(
         required=True,
@@ -128,9 +115,11 @@ class FeeRuleSchema(Schema):
         validate=validate.Range(min=0),
         as_string=True
     )
-    is_primary_fee = fields.Boolean(missing=False)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+
+    class Meta:
+        unknown = EXCLUDE
 
     @validates('simple_waiver_multiplier')
     def validate_simple_waiver_multiplier(self, value):
@@ -149,7 +138,6 @@ class CreateFeeRuleSchema(Schema):
     """Schema for creating a fee rule."""
     fee_name = fields.String(required=True, validate=validate.Length(min=1, max=100))
     fee_code = fields.String(required=True, validate=validate.Length(min=1, max=50))
-    applies_to_aircraft_classification_id = fields.Integer(required=True)
     amount = fields.Decimal(
         required=True,
         validate=validate.Range(min=0),
@@ -189,14 +177,15 @@ class CreateFeeRuleSchema(Schema):
         validate=validate.Range(min=0),
         as_string=True
     )
-    is_primary_fee = fields.Boolean(missing=False)
+
+    # Note: Classification-specific validation has been removed
+    # All fee rules are now global with overrides handled separately
 
 
 class UpdateFeeRuleSchema(Schema):
     """Schema for updating a fee rule."""
     fee_name = fields.String(validate=validate.Length(min=1, max=100))
     fee_code = fields.String(validate=validate.Length(min=1, max=50))
-    applies_to_aircraft_classification_id = fields.Integer()
     amount = fields.Decimal(
         validate=validate.Range(min=0),
         as_string=True
@@ -230,7 +219,9 @@ class UpdateFeeRuleSchema(Schema):
         validate=validate.Range(min=0),
         as_string=True
     )
-    is_primary_fee = fields.Boolean()
+
+    # Note: Classification-specific validation has been removed
+    # All fee rules are now global with overrides handled separately
 
 
 # Waiver Tiers Schemas
@@ -255,6 +246,9 @@ class WaiverTierSchema(Schema):
     is_caa_specific_tier = fields.Boolean(missing=False)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+
+    class Meta:
+        unknown = EXCLUDE
 
 
 class CreateWaiverTierSchema(Schema):
@@ -289,24 +283,12 @@ class CreateAircraftFeeSetupSchema(Schema):
     initial_ramp_fee_amount = fields.Float(allow_none=True, validate=validate.Range(min=0))
 
 
-class AircraftTypeConfigSchema(Schema):
-    """Schema for aircraft type configuration."""
-    id = fields.Integer(dump_only=True)
-    aircraft_type_id = fields.Integer(required=True)
-    aircraft_type_name = fields.String(dump_only=True)
-    base_min_fuel_gallons_for_waiver = fields.Decimal(
-        required=True,
-        validate=validate.Range(min=0),
-        as_string=True
-    )
-    created_at = fields.DateTime(dump_only=True)
-    updated_at = fields.DateTime(dump_only=True)
 
 
 class FeeRuleOverrideSchema(Schema):
     """Schema for fee rule override."""
     id = fields.Integer(dump_only=True)
-    aircraft_type_id = fields.Integer(required=True)
+    aircraft_type_id = fields.Integer(allow_none=True)
     fee_rule_id = fields.Integer(required=True)
     override_amount = fields.Decimal(
         allow_none=True,
@@ -320,6 +302,9 @@ class FeeRuleOverrideSchema(Schema):
     )
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+
+    class Meta:
+        unknown = EXCLUDE
 
 
 # Fee Schedule Snapshot Schema for Versioning and Import
@@ -342,11 +327,6 @@ class FeeScheduleSnapshotSchema(Schema):
         validate=validate.Length(min=1)
     )
     
-    # Aircraft Type Configurations
-    aircraft_type_configs = fields.List(
-        fields.Nested(AircraftTypeConfigSchema),
-        required=True
-    )
     
     # Fee Rules
     fee_rules = fields.List(
@@ -367,6 +347,9 @@ class FeeScheduleSnapshotSchema(Schema):
         required=True
     )
     
+    class Meta:
+        unknown = EXCLUDE
+
     @validates_schema
     def validate_internal_consistency(self, data, **kwargs):
         """
@@ -382,42 +365,22 @@ class FeeScheduleSnapshotSchema(Schema):
         
         # Validate fee rules reference valid classifications
         fee_rules = data.get('fee_rules', [])
-        for i, fee_rule in enumerate(fee_rules):
-            classification_id = fee_rule.get('applies_to_aircraft_classification_id')
-            if classification_id and classification_id not in classification_ids:
-                if 'fee_rules' not in errors:
-                    errors['fee_rules'] = {}
-                if i not in errors['fee_rules']:
-                    errors['fee_rules'][i] = {}
-                errors['fee_rules'][i]['applies_to_aircraft_classification_id'] = [
-                    f'Fee rule references non-existent classification ID: {classification_id}'
-                ]
+        # Note: applies_to_classification_id field has been deprecated
+        # All fee rules are now global with overrides handled separately
         
         # Validate aircraft types reference valid classifications
         aircraft_types = data.get('aircraft_types', [])
         for i, aircraft_type in enumerate(aircraft_types):
-            classification_id = aircraft_type.get('default_aircraft_classification_id')
+            classification_id = aircraft_type.get('classification_id')
             if classification_id and classification_id not in classification_ids:
                 if 'aircraft_types' not in errors:
                     errors['aircraft_types'] = {}
                 if i not in errors['aircraft_types']:
                     errors['aircraft_types'][i] = {}
-                errors['aircraft_types'][i]['default_aircraft_classification_id'] = [
+                errors['aircraft_types'][i]['classification_id'] = [
                     f'Aircraft type references non-existent classification ID: {classification_id}'
                 ]
         
-        # Validate aircraft type configs reference valid aircraft types
-        aircraft_type_configs = data.get('aircraft_type_configs', [])
-        for i, config in enumerate(aircraft_type_configs):
-            aircraft_type_id = config.get('aircraft_type_id')
-            if aircraft_type_id and aircraft_type_id not in aircraft_type_ids:
-                if 'aircraft_type_configs' not in errors:
-                    errors['aircraft_type_configs'] = {}
-                if i not in errors['aircraft_type_configs']:
-                    errors['aircraft_type_configs'][i] = {}
-                errors['aircraft_type_configs'][i]['aircraft_type_id'] = [
-                    f'Aircraft type config references non-existent aircraft type ID: {aircraft_type_id}'
-                ]
         
         # Validate overrides reference valid aircraft types and fee rules
         overrides = data.get('overrides', [])

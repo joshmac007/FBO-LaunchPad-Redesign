@@ -52,17 +52,15 @@ class UserListResponseSchema(Schema):
 class UserPreferencesSchema(Schema):
     """Schema for user preferences validation."""
     fee_schedule_view_size = fields.String(
-        validate=validate.OneOf(['default', 'compact']),
-        missing='default',
-        default='default'
+        validate=validate.OneOf(['compact', 'standard', 'detailed']),
+        required=False
     )
     fee_schedule_sort_order = fields.String(
-        missing='classification_name:asc',
-        default='classification_name:asc'
+        validate=validate.OneOf(['alphabetical', 'amount_asc', 'amount_desc', 'classification']),
+        required=False
     )
     highlight_overrides = fields.Boolean(
-        missing=True,
-        default=True
+        required=False
     )
 
 class ErrorResponseSchema(Schema):

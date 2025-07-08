@@ -31,7 +31,6 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import {
-  updateAircraftClassificationMapping,
   updateAircraftTypeClassification,
 } from "@/app/services/admin-fee-config-service"
 import { useToast } from "@/hooks/use-toast"

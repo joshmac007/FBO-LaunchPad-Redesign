@@ -16,7 +16,6 @@ from .fuel_type import FuelType
 # Receipt system models
 from .aircraft_type import AircraftType
 from .aircraft_classification import AircraftClassification
-from .fbo_aircraft_type_config import AircraftTypeConfig
 from .fee_rule import FeeRule, CalculationBasis, WaiverStrategy
 from .waiver_tier import WaiverTier
 from .receipt import Receipt, ReceiptStatus
@@ -48,7 +47,6 @@ __all__ = [
     # Receipt system exports
     'AircraftType',
     'AircraftClassification',
-    'AircraftTypeConfig',
     'FeeRule',
     'CalculationBasis',
     'WaiverStrategy',

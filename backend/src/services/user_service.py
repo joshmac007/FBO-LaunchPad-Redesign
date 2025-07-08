@@ -776,8 +776,12 @@ class UserService:
             if not user:
                 return None, f"User with ID {user_id} not found", 404
             
-            # Get existing preferences or initialize empty dict
-            existing_preferences = user.preferences or {}
+            # Get existing preferences or initialize with defaults
+            existing_preferences = user.preferences or {
+                'fee_schedule_view_size': 'standard',
+                'fee_schedule_sort_order': 'alphabetical',
+                'highlight_overrides': True
+            }
             
             # Merge validated data into existing preferences
             updated_preferences = {**existing_preferences, **preferences}

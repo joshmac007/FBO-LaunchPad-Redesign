@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { getAircraftByTailNumber, createCSRAircraft, type Aircraft, getAircraftTypes, type AircraftType } from "../services/aircraft-service"
+import { getFuelTypes, type FuelType } from "../services/admin-fee-config-service"
 
 interface AircraftLookupProps {
   onAircraftFound?: (aircraft: Aircraft) => void
@@ -24,11 +25,6 @@ interface AircraftCreationData {
   fuel_type: string
 }
 
-// Common fuel types
-const FUEL_TYPES = [
-  "Jet A",
-  "100LL",
-]
 
 export default function AircraftLookup({
   onAircraftFound,
@@ -57,6 +53,10 @@ export default function AircraftLookup({
   // Aircraft types state
   const [aircraftTypes, setAircraftTypes] = useState<AircraftType[]>([])
   const [isLoadingTypes, setIsLoadingTypes] = useState(false)
+  
+  // Fuel types state
+  const [fuelTypes, setFuelTypes] = useState<FuelType[]>([])
+  const [isLoadingFuelTypes, setIsLoadingFuelTypes] = useState(false)
 
   // Fetch aircraft types when dialog opens
   useEffect(() => {
@@ -75,6 +75,24 @@ export default function AircraftLookup({
         })
     }
   }, [showCreateDialog, aircraftTypes.length])
+
+  // Fetch fuel types when dialog opens
+  useEffect(() => {
+    if (showCreateDialog && fuelTypes.length === 0) {
+      setIsLoadingFuelTypes(true)
+      getFuelTypes()
+        .then((response) => {
+          setFuelTypes(response.fuel_types)
+        })
+        .catch((error) => {
+          console.error("Failed to fetch fuel types:", error)
+          // Show error but don't prevent dialog from opening
+        })
+        .finally(() => {
+          setIsLoadingFuelTypes(false)
+        })
+    }
+  }, [showCreateDialog, fuelTypes.length])
 
   // Remove automatic lookup - only trigger on button click or Enter key
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -365,11 +383,23 @@ export default function AircraftLookup({
                     <SelectValue placeholder="Select fuel type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {FUEL_TYPES.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
-                      </SelectItem>
-                    ))}
+                    {isLoadingFuelTypes ? (
+                      <div className="flex items-center justify-center py-2">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Loading fuel types...
+                      </div>
+                    ) : (
+                      <>
+                        {fuelTypes.map((fuelType) => (
+                          <SelectItem key={fuelType.id} value={fuelType.name}>
+                            {fuelType.name}
+                          </SelectItem>
+                        ))}
+                        <SelectItem key="other" value="Other">
+                          Other
+                        </SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
                 

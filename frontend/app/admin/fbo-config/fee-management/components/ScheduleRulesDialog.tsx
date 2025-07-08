@@ -13,38 +13,55 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs"
-import { FeeColumnsTab } from "./FeeColumnsTab"
-import { WaiverTiersTab } from "./WaiverTiersTab"
+import { FeeScheduleSettingsTab } from "./FeeScheduleSettingsTab"
+import { FeeLibraryTab } from "./FeeLibraryTab"
+import { WaiverSystemTab } from "./WaiverSystemTab"
+import { ClassificationsTab } from "./ClassificationsTab"
+import { ImportExportTab } from "./ImportExportTab"
 
 interface ScheduleRulesDialogProps {
-  // No props needed for global architecture
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
 export function ScheduleRulesDialog({ open, onOpenChange }: ScheduleRulesDialogProps) {
-  const [activeTab, setActiveTab] = useState("fee-columns")
+  const [activeTab, setActiveTab] = useState("display-settings")
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Schedule Rules Configuration</DialogTitle>
+          <DialogTitle>Configure Fees & Rules</DialogTitle>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="fee-columns">Fee Columns</TabsTrigger>
-            <TabsTrigger value="waiver-tiers">Waiver Tiers</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="display-settings">Display Settings</TabsTrigger>
+            <TabsTrigger value="fee-types">Fee Types</TabsTrigger>
+            <TabsTrigger value="fuel-waivers">Fuel Waivers</TabsTrigger>
+            <TabsTrigger value="aircraft-groups">Aircraft Classifications</TabsTrigger>
+            <TabsTrigger value="bulk-tools">Import / Export</TabsTrigger>
           </TabsList>
           
           <div className="flex-1 overflow-y-auto">
-            <TabsContent value="fee-columns" className="mt-0">
-              <FeeColumnsTab />
+            <TabsContent value="display-settings" className="mt-0">
+              <FeeScheduleSettingsTab />
             </TabsContent>
             
-            <TabsContent value="waiver-tiers" className="mt-0">
-              <WaiverTiersTab />
+            <TabsContent value="fee-types" className="mt-0">
+              <FeeLibraryTab />
+            </TabsContent>
+            
+            <TabsContent value="fuel-waivers" className="mt-0">
+              <WaiverSystemTab />
+            </TabsContent>
+            
+            <TabsContent value="aircraft-groups" className="mt-0">
+              <ClassificationsTab />
+            </TabsContent>
+            
+            <TabsContent value="bulk-tools" className="mt-0">
+              <ImportExportTab />
             </TabsContent>
           </div>
         </Tabs>

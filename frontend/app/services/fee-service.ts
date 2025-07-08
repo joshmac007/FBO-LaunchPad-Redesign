@@ -84,18 +84,27 @@ function getMockAvailableServices(): AvailableService[] {
   ]
 }
 
-// Local fee calculation
+// Local fee calculation (offline mode fallback)
 function calculateFeesLocally(request: FeeCalculationRequest): FeeCalculationResult {
-  // Base fuel prices per gallon
-  const basePrices = {
-    "Jet A": 5.25,
-    "Jet A+": 5.75,
-    Avgas: 6.5,
-    "Sustainable Aviation Fuel": 7.25,
+  // Base fuel prices per gallon - fallback values for offline mode
+  // Note: In online mode, actual fuel prices are retrieved from the API
+  const getBaseFuelPrice = (fuelType: string): number => {
+    // Normalize fuel type name for matching
+    const normalizedType = fuelType.toLowerCase().trim()
+    
+    // Common fuel type price mappings (fallback values)
+    if (normalizedType.includes('jet a')) return 5.25
+    if (normalizedType.includes('avgas') || normalizedType.includes('100ll')) return 6.5
+    if (normalizedType.includes('sustainable') || normalizedType.includes('saf')) return 7.25
+    if (normalizedType.includes('diesel')) return 4.5
+    if (normalizedType.includes('mogas')) return 4.0
+    
+    // Default fallback price
+    return 5.25
   }
 
   // Get base price for fuel type
-  const baseFuelPrice = basePrices[request.fuelType as keyof typeof basePrices] || 5.25
+  const baseFuelPrice = getBaseFuelPrice(request.fuelType)
 
   // Aircraft factor (would normally be looked up from a database)
   // For demo purposes, we'll use the last digit of the aircraft ID

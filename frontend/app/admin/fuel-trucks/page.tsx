@@ -52,9 +52,8 @@ import {
   type FuelTruckCreateRequest,
   type FuelTruckUpdateRequest,
 } from "../../services/fuel-truck-service"
+import { getFuelTypes, type FuelType } from "../../services/admin-fee-config-service"
 import { toast } from "sonner"
-
-const FUEL_TYPES = ["Jet A", "Jet A-1", "Avgas 100LL", "Diesel"]
 
 const truckFormSchema = z.object({
   truck_number: z.string().min(1, { message: "Truck number is required." }),
@@ -78,6 +77,10 @@ export default function FuelTruckManagementPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all")
   const [fuelTypeFilter, setFuelTypeFilter] = useState("all")
+  
+  // Fuel types state
+  const [fuelTypes, setFuelTypes] = useState<FuelType[]>([])
+  const [isFuelTypesLoading, setIsFuelTypesLoading] = useState(false)
 
   const [isLoadingPage, setIsLoadingPage] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -115,8 +118,23 @@ export default function FuelTruckManagementPage() {
     }
   }
 
+  // Fetch fuel types
+  const fetchFuelTypes = async () => {
+    setIsFuelTypesLoading(true)
+    try {
+      const response = await getFuelTypes()
+      setFuelTypes(response.fuel_types)
+    } catch (error) {
+      console.error("Failed to fetch fuel types:", error)
+      // Don't prevent page from loading if fuel types fail
+    } finally {
+      setIsFuelTypesLoading(false)
+    }
+  }
+
   useEffect(() => {
     fetchTrucks()
+    fetchFuelTypes()
   }, [])
 
   useEffect(() => {
@@ -285,9 +303,18 @@ export default function FuelTruckManagementPage() {
                             <SelectValue placeholder="Select fuel type" />
                           </SelectTrigger>
                           <SelectContent>
-                            {FUEL_TYPES.map((type) => (
-                              <SelectItem key={type} value={type}>{type}</SelectItem>
-                            ))}
+                            {isFuelTypesLoading ? (
+                              <div className="flex items-center justify-center py-2">
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                Loading...
+                              </div>
+                            ) : (
+                              fuelTypes.map((fuelType) => (
+                                <SelectItem key={fuelType.id} value={fuelType.name}>
+                                  {fuelType.name}
+                                </SelectItem>
+                              ))
+                            )}
                           </SelectContent>
                         </Select>
                       </FormControl>
@@ -356,7 +383,21 @@ export default function FuelTruckManagementPage() {
             </Select>
             <Select value={fuelTypeFilter} onValueChange={setFuelTypeFilter}>
               <SelectTrigger className="w-full md:w-[180px]"><SelectValue placeholder="Filter by fuel type" /></SelectTrigger>
-              <SelectContent><SelectItem value="all">All Fuel Types</SelectItem>{FUEL_TYPES.map((type) => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent>
+              <SelectContent>
+                <SelectItem value="all">All Fuel Types</SelectItem>
+                {isFuelTypesLoading ? (
+                  <div className="flex items-center justify-center py-2">
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Loading...
+                  </div>
+                ) : (
+                  fuelTypes.map((fuelType) => (
+                    <SelectItem key={fuelType.id} value={fuelType.name}>
+                      {fuelType.name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
             </Select>
           </div>
         </CardContent>
@@ -420,7 +461,20 @@ export default function FuelTruckManagementPage() {
               <div className="grid gap-2"><Label htmlFor="fuel_type-edit">Fuel Type</Label>
                 <Select value={editTruckData.fuel_type || ""} onValueChange={(value) => setEditTruckData({ ...editTruckData, fuel_type: value })} disabled={isSubmitting}>
                   <SelectTrigger id="fuel_type-edit"><SelectValue placeholder="Select fuel type" /></SelectTrigger>
-                  <SelectContent>{FUEL_TYPES.map((type) => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent>
+                  <SelectContent>
+                    {isFuelTypesLoading ? (
+                      <div className="flex items-center justify-center py-2">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Loading...
+                      </div>
+                    ) : (
+                      fuelTypes.map((fuelType) => (
+                        <SelectItem key={fuelType.id} value={fuelType.name}>
+                          {fuelType.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
                 </Select>
               </div>
               <div className="grid gap-2"><Label htmlFor="capacity-edit">Capacity (Gallons)</Label><Input id="capacity-edit" type="number" value={editTruckData.capacity || 0} onChange={(e) => setEditTruckData({ ...editTruckData, capacity: Number.parseInt(e.target.value) || 0 })} disabled={isSubmitting} /></div>

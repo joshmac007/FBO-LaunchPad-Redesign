@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import csv
 import io
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Union
 from sqlalchemy import and_, or_, desc, asc, func
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -25,6 +25,15 @@ from src.services.aircraft_service import AircraftService
 from flask import current_app
 import logging
 import traceback
+from ..models.fuel_type import FuelType
+from ..extensions import db
+from ..models.fuel_order import FuelOrder, FuelOrderStatus, FuelOrderPriority
+from ..models.user import User, UserRole
+from ..models.aircraft import Aircraft
+from ..models.fuel_truck import FuelTruck
+from ..models.customer import Customer
+from ..models.fuel_type import FuelType
+from .aircraft_service import AircraftService
 
 logger = logging.getLogger(__name__)
 
@@ -302,10 +311,15 @@ class FuelOrderService:
                     return None, f"Customer with ID {customer_id} not found.", 400
 
             # --- Create and commit the FuelOrder ---
+            # Convert fuel_type string to fuel_type_id
+            fuel_type_id = AircraftService._get_fuel_type_id(order_data['fuel_type'])
+            if fuel_type_id is None:
+                return None, f"Invalid fuel type: {order_data['fuel_type']}. Please use a valid fuel type.", 400
+                
             new_fuel_order = FuelOrder()
             new_fuel_order.tail_number = tail_number
             new_fuel_order.customer_id = order_data.get('customer_id')
-            new_fuel_order.fuel_type = order_data['fuel_type']
+            new_fuel_order.fuel_type_id = fuel_type_id
             new_fuel_order.additive_requested = order_data.get('additive_requested', False)
             new_fuel_order.requested_amount = Decimal(order_data['requested_amount'])
             new_fuel_order.assigned_lst_user_id = assigned_lst_user_id
@@ -386,7 +400,13 @@ class FuelOrderService:
                 
                 fuel_type = filters.get('fuel_type')
                 if fuel_type:
-                    query = query.filter(FuelOrder.fuel_type == fuel_type)
+                    # Convert fuel_type string to fuel_type_id for filtering
+                    fuel_type_id = AircraftService._get_fuel_type_id(fuel_type)
+                    if fuel_type_id is not None:
+                        query = query.filter(FuelOrder.fuel_type_id == fuel_type_id)
+                    else:
+                        # If invalid fuel type, return no results
+                        return None, f"Invalid fuel type for filtering: {fuel_type}"
                 
                 start_date = filters.get('start_date')
                 if start_date:

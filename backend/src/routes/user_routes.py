@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify, g
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..utils.enhanced_auth_decorators_v2 import require_permission_v2
 from ..models.user import UserRole
 from ..services.user_service import UserService
@@ -411,10 +412,10 @@ def get_user(user_id):
         return jsonify({"error": "Server error"}), 500
 
 @user_bp.route('/me/preferences', methods=['PATCH'])
-@require_permission_v2('view_profile')
+@jwt_required()
 def update_user_preferences():
     """Update current user's preferences.
-    Requires view_profile permission.
+    No special permission required - users can always update their own preferences.
     ---
     tags:
       - Users
@@ -447,11 +448,6 @@ def update_user_preferences():
         content:
           application/json:
             schema: ErrorResponseSchema
-      403:
-        description: Forbidden (missing permission)
-        content:
-          application/json:
-            schema: ErrorResponseSchema
       500:
         description: Server error
         content:
@@ -459,10 +455,20 @@ def update_user_preferences():
             schema: ErrorResponseSchema
     """
     try:
-        # Get current user from token
-        current_user = g.current_user
-        if not current_user:
+        # Get current user from JWT token
+        current_user_id = get_jwt_identity()
+        if not current_user_id:
             return jsonify({"error": "User not found"}), 401
+        
+        # Convert to integer and get user object
+        try:
+            current_user_id = int(current_user_id)
+            from ..models.user import User
+            current_user = User.query.get(current_user_id)
+            if not current_user:
+                return jsonify({"error": "User not found"}), 401
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid user identifier"}), 401
         
         # Load and validate request data
         schema = UserPreferencesSchema()

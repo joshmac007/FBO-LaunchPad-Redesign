@@ -18,6 +18,8 @@ print_usage() {
     echo "  start          Start the application (will auto-seed if database is empty)"
     echo "  reseed         Force reseed the database (clears all data and reseeds)"
     echo "  fresh          Stop containers, remove volumes, and start fresh"
+    echo "  verify         Verify permission groups setup"
+    echo "  fix-perms      Fix permission groups if missing"
     echo "  status         Show status of containers and database"
     echo "  logs           Show application logs"
     echo "  stop           Stop all containers"
@@ -49,12 +51,35 @@ get_compose_cmd() {
     fi
 }
 
+verify_permission_groups() {
+    echo -e "${GREEN}Verifying permission groups setup...${NC}"
+    $(get_compose_cmd) exec backend flask create-permission-groups verify
+}
+
+fix_permission_groups() {
+    echo -e "${YELLOW}Fixing permission groups setup...${NC}"
+    echo -e "${GREEN}Creating permission groups and role assignments...${NC}"
+    $(get_compose_cmd) exec backend flask create-permission-groups run
+    echo -e "${GREEN}Permission groups setup complete!${NC}"
+}
+
 start_application() {
     echo -e "${GREEN}Starting FBO LaunchPad application...${NC}"
     $(get_compose_cmd) up -d
     echo -e "${GREEN}Application started! Database will be auto-seeded if empty.${NC}"
-    echo -e "${YELLOW}Checking logs for seeding status...${NC}"
-    sleep 5
+    echo -e "${YELLOW}Waiting for application to initialize...${NC}"
+    sleep 10
+    
+    # Verify permission groups were created
+    echo -e "${YELLOW}Verifying permission groups setup...${NC}"
+    if ! $(get_compose_cmd) exec backend flask create-permission-groups verify > /dev/null 2>&1; then
+        echo -e "${YELLOW}Permission groups may not be set up correctly. Running fix...${NC}"
+        fix_permission_groups
+    else
+        echo -e "${GREEN}Permission groups verified successfully!${NC}"
+    fi
+    
+    echo -e "${YELLOW}Checking application logs...${NC}"
     $(get_compose_cmd) logs backend | tail -20
 }
 
@@ -68,6 +93,8 @@ force_reseed() {
         $(get_compose_cmd) exec backend flask seed run
         echo -e "${GREEN}Creating permission groups and role assignments...${NC}"
         $(get_compose_cmd) exec backend flask create-permission-groups run
+        echo -e "${GREEN}Verifying permission groups setup...${NC}"
+        $(get_compose_cmd) exec backend flask create-permission-groups verify
         echo -e "${GREEN}Database reseeded successfully with permission groups!${NC}"
     else
         echo -e "${YELLOW}Operation cancelled.${NC}"
@@ -84,8 +111,20 @@ fresh_start() {
         $(get_compose_cmd) down -v
         echo -e "${GREEN}Starting fresh...${NC}"
         $(get_compose_cmd) up -d
-        echo -e "${GREEN}Fresh start complete! Database will be seeded automatically with permission groups.${NC}"
-        sleep 5
+        echo -e "${GREEN}Fresh start complete! Database will be seeded automatically.${NC}"
+        echo -e "${YELLOW}Waiting for application to initialize...${NC}"
+        sleep 15
+        
+        # Verify permission groups were created
+        echo -e "${YELLOW}Verifying permission groups setup...${NC}"
+        if ! $(get_compose_cmd) exec backend flask create-permission-groups verify > /dev/null 2>&1; then
+            echo -e "${YELLOW}Permission groups may not be set up correctly. Running fix...${NC}"
+            fix_permission_groups
+        else
+            echo -e "${GREEN}Permission groups verified successfully!${NC}"
+        fi
+        
+        echo -e "${YELLOW}Checking application logs...${NC}"
         $(get_compose_cmd) logs backend | tail -20
     else
         echo -e "${YELLOW}Operation cancelled.${NC}"
@@ -101,19 +140,30 @@ show_status() {
 from src.app import create_app
 from src.extensions import db
 from src.models.user import User
+from src.models.permission_group import PermissionGroup
 
 try:
     app = create_app()
     with app.app_context():
         user_count = User.query.count()
+        group_count = PermissionGroup.query.count()
         print(f'Database connection: OK')
         print(f'Total users in database: {user_count}')
+        print(f'Total permission groups: {group_count}')
+        
         if user_count > 0:
             users = User.query.all()
             print('Existing users:')
             for user in users:
                 roles = ', '.join([role.name for role in user.roles])
                 print(f'  - {user.email} ({roles})')
+        
+        if group_count == 0:
+            print('⚠️  WARNING: No permission groups found! Users may not have proper permissions.')
+            print('   Run: ./reseed_database.sh fix-perms')
+        else:
+            print(f'✅ Permission groups are set up correctly.')
+            
 except Exception as e:
     print(f'Database connection: FAILED - {e}')
 " 2>/dev/null || echo -e "${RED}Cannot connect to database or backend not running${NC}"
@@ -142,6 +192,12 @@ case "${1:-start}" in
         ;;
     fresh)
         fresh_start
+        ;;
+    verify)
+        verify_permission_groups
+        ;;
+    fix-perms)
+        fix_permission_groups
         ;;
     status)
         show_status
