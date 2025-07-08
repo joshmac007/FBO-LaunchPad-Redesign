@@ -15,7 +15,7 @@ from ...schemas.admin_fee_config_schemas import (
     CSVUploadResultSchema,
     FeeRuleSchema, CreateFeeRuleSchema, UpdateFeeRuleSchema,
     WaiverTierSchema, CreateWaiverTierSchema, UpdateWaiverTierSchema,
-    CreateAircraftFeeSetupSchema, AircraftTypeConfigSchema, 
+    CreateAircraftFeeSetupSchema, 
     FeeRuleOverrideSchema, FeeScheduleSnapshotSchema
 )
 from ...utils.enhanced_auth_decorators_v2 import require_permission_v2
@@ -521,12 +521,10 @@ def create_aircraft_fee_setup():
         )
 
         # Build response with proper schema serialization
-        aircraft_config_schema = AircraftTypeConfigSchema()
         override_schema = FeeRuleOverrideSchema()
         
         response_data = {
             "message": new_setup.get("message", "Aircraft fee setup created successfully"),
-            "aircraft_config": aircraft_config_schema.dump(new_setup['aircraft_config']),
             "aircraft_type": aircraft_type_schema.dump(new_setup['aircraft_type'])
         }
 

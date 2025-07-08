@@ -18,7 +18,7 @@ from ...schemas import ErrorResponseSchema
 from .routes import admin_bp
 
 
-@admin_bp.route('/fuel-types', methods=['GET'])
+@admin_bp.route('/management/fuel-types', methods=['GET'])
 @require_permission_v2('manage_fuel_types')
 def get_admin_fuel_types():
     """
@@ -77,7 +77,7 @@ def get_admin_fuel_types():
         return jsonify({'error': 'Failed to retrieve fuel types'}), 500
 
 
-@admin_bp.route('/fuel-types/<int:fuel_type_id>', methods=['GET'])
+@admin_bp.route('/management/fuel-types/<int:fuel_type_id>', methods=['GET'])
 @require_permission_v2('manage_fuel_types')
 def get_admin_fuel_type(fuel_type_id):
     """
@@ -132,7 +132,7 @@ def get_admin_fuel_type(fuel_type_id):
         return jsonify({'error': 'Failed to retrieve fuel type'}), 500
 
 
-@admin_bp.route('/fuel-types', methods=['POST'])
+@admin_bp.route('/management/fuel-types', methods=['POST'])
 @require_permission_v2('manage_fuel_types')
 def create_admin_fuel_type():
     """
@@ -220,7 +220,7 @@ def create_admin_fuel_type():
         return jsonify({'error': 'Failed to create fuel type'}), 500
 
 
-@admin_bp.route('/fuel-types/<int:fuel_type_id>', methods=['PUT'])
+@admin_bp.route('/management/fuel-types/<int:fuel_type_id>', methods=['PUT'])
 @require_permission_v2('manage_fuel_types')
 def update_admin_fuel_type(fuel_type_id):
     """
@@ -313,7 +313,7 @@ def update_admin_fuel_type(fuel_type_id):
         return jsonify({'error': 'Failed to update fuel type'}), 500
 
 
-@admin_bp.route('/fuel-types/<int:fuel_type_id>', methods=['DELETE'])
+@admin_bp.route('/management/fuel-types/<int:fuel_type_id>', methods=['DELETE'])
 @require_permission_v2('manage_fuel_types')
 def delete_admin_fuel_type(fuel_type_id):
     """
@@ -363,11 +363,11 @@ def delete_admin_fuel_type(fuel_type_id):
             return jsonify({'error': message}), status_code
             
     except Exception as e:
-        current_app.logger.error(f"Error in delete_admin_fuel_type: {str(e)}")
-        return jsonify({'error': 'Failed to delete fuel type'}), 500
+        current_app.logger.error(f"Error deleting fuel type: {e}")
+        return jsonify({"error": "Failed to delete fuel type"}), 500
 
 
-@admin_bp.route('/fuel-types/<int:fuel_type_id>/usage-stats', methods=['GET'])
+@admin_bp.route('/management/fuel-types/<int:fuel_type_id>/usage-stats', methods=['GET'])
 @require_permission_v2('manage_fuel_types')
 def get_fuel_type_usage_stats(fuel_type_id):
     """

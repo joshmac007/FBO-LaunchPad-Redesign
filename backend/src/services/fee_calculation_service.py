@@ -107,11 +107,9 @@ class FeeCalculationService:
             )
             
             # 3. Evaluate tiered waivers
-            # Get base minimum fuel gallons for waiver from aircraft type
+            # Get base minimum fuel gallons for waiver from aircraft type (single source of truth)
             base_min_fuel_for_waiver = None
-            if data['aircraft_config']:
-                base_min_fuel_for_waiver = data['aircraft_config'].base_min_fuel_gallons_for_waiver
-            elif data['aircraft_type']:
+            if data['aircraft_type']:
                 base_min_fuel_for_waiver = data['aircraft_type'].base_min_fuel_gallons_for_waiver
             
             waived_fee_codes = self._evaluate_waivers(
@@ -229,20 +227,11 @@ class FeeCalculationService:
         Returns:
             Dictionary containing all fetched data
         """
-        from ..models.aircraft_type_config import AircraftTypeConfig
-        
         # Fetch customer
         customer = db.session.get(Customer, context.customer_id)
         
         # Fetch aircraft type
         aircraft_type = db.session.get(AircraftType, context.aircraft_type_id)
-        
-        # Fetch aircraft configuration (for waiver minimum fuel gallons)
-        aircraft_config = None
-        if aircraft_type:
-            aircraft_config = AircraftTypeConfig.query.filter_by(
-                aircraft_type_id=aircraft_type.id
-            ).first()
         
         # Find aircraft's fee category (now global relationship)
         aircraft_aircraft_classification_id = None
@@ -258,7 +247,6 @@ class FeeCalculationService:
         return {
             'customer': customer,
             'aircraft_type': aircraft_type,
-            'aircraft_config': aircraft_config,
             'aircraft_aircraft_classification_id': aircraft_aircraft_classification_id,
             'fee_rules': fee_rules,
             'waiver_tiers': waiver_tiers
@@ -271,13 +259,12 @@ class FeeCalculationService:
         additional_services: List[Dict[str, Any]]
     ) -> List[FeeRule]:
         """
-        Filter fee rules using the four-tier hierarchy to determine applicable rules.
+        Filter fee rules using the simplified three-tier hierarchy to determine applicable rules.
         
-        Four-tier hierarchy (highest to lowest priority):
+        Three-tier hierarchy (highest to lowest priority):
         1. Aircraft-specific override
         2. Classification-specific override  
-        3. Classification-specific base fee
-        4. Global base fee
+        3. Global base fee
         
         Args:
             all_rules: All fee rules
@@ -318,11 +305,13 @@ class FeeCalculationService:
                     key = (fee_code, 'classification')
                     overrides[key] = override
         
-        # Next, process all FeeRule records
-        for rule in all_rules:
+        # Next, process all FeeRule records (all rules are now global)
+        global_rules = all_rules
+        
+        for rule in global_rules:
             fee_code = rule.fee_code
             
-            # For each fee_code, determine the final rule using the four-tier hierarchy:
+            # For each fee_code, determine the final rule using the three-tier hierarchy:
             # 1. Check for aircraft-specific override
             aircraft_override_key = (fee_code, 'aircraft')
             if aircraft_type_id and aircraft_override_key in overrides:
@@ -341,21 +330,14 @@ class FeeCalculationService:
                     resolved_rules[fee_code] = modified_rule
                     continue
             
-            # 3. Check for classification-specific base fee
-            if rule.applies_to_aircraft_classification_id == aircraft_aircraft_classification_id:
-                resolved_rules[fee_code] = rule
-                continue
-            
-            # 4. Use global base fee (only if no higher tier rule exists)
-            if rule.applies_to_aircraft_classification_id is None:
-                if fee_code not in resolved_rules:
-                    resolved_rules[fee_code] = rule
+            # 3. Use global base fee (if no overrides exist)
+            resolved_rules[fee_code] = rule
         
         # Additional services override - explicit request always wins
         additional_fee_codes = {service['fee_code'] for service in additional_services}
         for fee_code in additional_fee_codes:
-            # Find the corresponding rule from master list and unconditionally place it
-            for rule in all_rules:
+            # Find the corresponding global rule from master list and unconditionally place it
+            for rule in global_rules:
                 if rule.fee_code == fee_code:
                     resolved_rules[fee_code] = rule
                     break
@@ -378,7 +360,6 @@ class FeeCalculationService:
             id=base_rule.id,
             fee_name=base_rule.fee_name,
             fee_code=base_rule.fee_code,
-            applies_to_aircraft_classification_id=base_rule.applies_to_aircraft_classification_id,
             amount=override.override_amount if override.override_amount is not None else base_rule.amount,
             currency=base_rule.currency,
             is_taxable=base_rule.is_taxable,
@@ -390,7 +371,6 @@ class FeeCalculationService:
             caa_override_amount=override.override_caa_amount if override.override_caa_amount is not None else base_rule.caa_override_amount,
             caa_waiver_strategy_override=base_rule.caa_waiver_strategy_override,
             caa_simple_waiver_multiplier_override=base_rule.caa_simple_waiver_multiplier_override,
-            is_primary_fee=base_rule.is_primary_fee,
             created_at=base_rule.created_at,
             updated_at=base_rule.updated_at
         )

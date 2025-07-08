@@ -197,16 +197,7 @@ export function WaiverSystemTab() {
   const createMutation = useMutation({
     mutationFn: createWaiverTier,
     onSuccess: (newTier) => {
-      queryClient.setQueryData<WaiverTier[]>(['waiver-tiers'], (old) => {
-        if (!old) return [newTier]
-        return [...old, newTier]
-      })
-
-      setTiers((prev) => {
-        const updated = [...prev, newTier]
-        return updated.sort((a, b) => a.tier_priority - b.tier_priority)
-      })
-
+      queryClient.invalidateQueries({ queryKey: ['waiver-tiers'] })
       form.reset()
       toast.success("Waiver rule created successfully")
     },
@@ -217,73 +208,30 @@ export function WaiverSystemTab() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteWaiverTier,
-    onMutate: async (tierId: number) => {
-      // Optimistically remove from cache and local state
-      await queryClient.cancelQueries({ queryKey: ['waiver-tiers'] })
-
-      const previous = queryClient.getQueryData<WaiverTier[]>(['waiver-tiers'])
-
-      if (previous) {
-        queryClient.setQueryData<WaiverTier[]>(['waiver-tiers'], previous.filter((t) => t.id !== tierId))
-      }
-
-      setTiers((prev) => prev.filter((t) => t.id !== tierId))
-
-      return { previous }
-    },
-    onError: (error: any, _tierId, context) => {
-      // Rollback on error
-      if (context?.previous) {
-        queryClient.setQueryData(['waiver-tiers'], context.previous)
-        setTiers(context.previous)
-      }
-      toast.error(error.message || "Failed to delete waiver rule")
-    },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['waiver-tiers'] })
       toast.success("Waiver rule deleted successfully")
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to delete waiver rule")
     },
   })
 
   const reorderMutation = useMutation({
     mutationFn: reorderWaiverTiers,
-    onError: (error: any, _updates, context) => {
-      toast.error(error.message || "Failed to reorder waiver rules")
-      // Rollback order
-      if (context?.previous) setTiers(context.previous)
-    },
-    onMutate: async (updates: { tier_id: number; new_priority: number }[]) => {
-      await queryClient.cancelQueries({ queryKey: ['waiver-tiers'] })
-
-      const previous = queryClient.getQueryData<WaiverTier[]>(['waiver-tiers'])
-
-      // Apply optimistic ordering to state
-      setTiers((prev) => {
-        const map: Record<number, number> = {}
-        updates.forEach(u => map[u.tier_id] = u.new_priority)
-        const reordered = prev.map(t => map[t.id] ? { ...t, tier_priority: map[t.id] } : t)
-        return reordered.sort((a,b)=>a.tier_priority-b.tier_priority)
-      })
-
-      return { previous }
-    },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['waiver-tiers'] })
       toast.success("Waiver rules reordered successfully")
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to reorder waiver rules")
     },
   })
 
   const updateMutation = useMutation({
     mutationFn: ({ tierId, data }: { tierId: number; data: UpdateWaiverTierRequest }) => updateWaiverTier(tierId, data),
     onSuccess: (updatedTier) => {
-      queryClient.setQueryData<WaiverTier[]>(['waiver-tiers'], (old) => {
-        if (!old) return [updatedTier]
-        return old.map((t) => (t.id === updatedTier.id ? updatedTier : t))
-      })
-
-      setTiers((prev) => {
-        const replaced = prev.map((t) => (t.id === updatedTier.id ? updatedTier : t))
-        return replaced.sort((a, b) => a.tier_priority - b.tier_priority)
-      })
-
+      queryClient.invalidateQueries({ queryKey: ['waiver-tiers'] })
       toast.success("Waiver rule updated successfully")
       setEditingTier(null)
       form.reset({

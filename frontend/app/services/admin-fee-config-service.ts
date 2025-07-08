@@ -676,15 +676,13 @@ export const exportFeeConfiguration = async (): Promise<void> => {
 
 // Fuel Management
 export const getFuelTypes = async (includeInactive?: boolean): Promise<FuelTypesResponse> => {
-  const url = includeInactive 
-    ? `${API_BASE_URL}/admin/fuel-types?include_inactive=true`
-    : `${API_BASE_URL}/admin/fuel-types`;
-  
-  const response = await fetch(url, {
-    method: 'GET',
+  const url = new URL(`${API_BASE_URL}/admin/management/fuel-types`);
+  if (includeInactive) {
+    url.searchParams.append('include_inactive', 'true');
+  }
+  const response = await fetch(url.toString(), {
     headers: getAuthHeaders(),
   });
-
   return handleApiResponse<FuelTypesResponse>(response);
 };
 
@@ -702,32 +700,33 @@ export interface UpdateFuelTypeRequest {
 }
 
 export const createFuelType = async (data: CreateFuelTypeRequest): Promise<FuelType> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fuel-types`, {
+  const response = await fetch(`${API_BASE_URL}/admin/management/fuel-types`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
-
   return handleApiResponse<FuelType>(response);
 };
 
 export const updateFuelType = async (fuelTypeId: number, data: UpdateFuelTypeRequest): Promise<FuelType> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fuel-types/${fuelTypeId}`, {
+  const response = await fetch(`${API_BASE_URL}/admin/management/fuel-types/${fuelTypeId}`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
-
   return handleApiResponse<FuelType>(response);
 };
 
 export const deleteFuelType = async (fuelTypeId: number): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/admin/fuel-types/${fuelTypeId}`, {
+  const response = await fetch(`${API_BASE_URL}/admin/management/fuel-types/${fuelTypeId}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
-
-  await handleApiResponse<void>(response);
+  // Expecting 204 No Content, which handleApiResponse can treat as an error.
+  if (!response.ok) {
+    throw new Error(`Failed to delete fuel type. Status: ${response.status}`);
+  }
+  // No content to return on successful deletion.
 };
 
 export const getFuelPrices = async (): Promise<FuelPricesResponse> => {

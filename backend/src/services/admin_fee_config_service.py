@@ -24,7 +24,7 @@ from ..extensions import db
 from ..models import (
     AircraftType, AircraftClassification,
     FeeRule, WaiverTier, CalculationBasis, WaiverStrategy,
-    AircraftTypeConfig, FeeRuleOverride, FuelPrice, FuelTypeEnum, FuelType,
+    FeeRuleOverride, FuelPrice, FuelTypeEnum, FuelType,
     FeeScheduleVersion
 )
 from ..schemas.fuel_type_schemas import (
@@ -32,7 +32,7 @@ from ..schemas.fuel_type_schemas import (
 )
 from ..schemas.admin_fee_config_schemas import (
     FeeScheduleSnapshotSchema, AircraftClassificationSchema, AircraftTypeSchema,
-    FeeRuleSchema, WaiverTierSchema, AircraftTypeConfigSchema, FeeRuleOverrideSchema
+    FeeRuleSchema, WaiverTierSchema, FeeRuleOverrideSchema
 )
 from marshmallow import ValidationError as MarshmallowValidationError
 from .aircraft_service import AircraftService
@@ -105,27 +105,17 @@ class AdminFeeConfigService:
             if not aircraft_type:
                 raise ValueError("Aircraft type not found")
             
-            # Create or update aircraft type config
-            config = AircraftTypeConfig.query.filter_by(
-                aircraft_type_id=aircraft_type_id
-            ).first()
-            
-            if config:
-                config.base_min_fuel_gallons_for_waiver = base_min_fuel_gallons
-            else:
-                config = AircraftTypeConfig()
-                config.aircraft_type_id = aircraft_type_id
-                config.base_min_fuel_gallons_for_waiver = base_min_fuel_gallons
-                db.session.add(config)
+            # Update the aircraft type directly (consolidated to single source of truth)
+            aircraft_type.base_min_fuel_gallons_for_waiver = base_min_fuel_gallons
             
             db.session.commit()
             
             return {
-                'id': config.id,
-                'aircraft_type_id': config.aircraft_type_id,
+                'id': aircraft_type.id,
+                'aircraft_type_id': aircraft_type.id,
                 'aircraft_type_name': aircraft_type.name,
-                'base_min_fuel_gallons_for_waiver': float(config.base_min_fuel_gallons_for_waiver),
-                'updated_at': config.updated_at.isoformat()
+                'base_min_fuel_gallons_for_waiver': float(aircraft_type.base_min_fuel_gallons_for_waiver),
+                'updated_at': aircraft_type.updated_at.isoformat()
             }
         except SQLAlchemyError as e:
             db.session.rollback()
@@ -134,13 +124,21 @@ class AdminFeeConfigService:
 
     @staticmethod
     def get_aircraft_type_configs() -> List[Dict[str, Any]]:
-        """Get all aircraft type configurations."""
+        """Get all aircraft type configurations (now consolidated in AircraftType model)."""
         try:
-            configs = AircraftTypeConfig.query.options(
-                joinedload(AircraftTypeConfig.aircraft_type)  # type: ignore
-            ).all()
+            aircraft_types = AircraftType.query.all()
             
-            return [dict(config.to_dict()) for config in configs]
+            return [
+                {
+                    'id': aircraft_type.id,
+                    'aircraft_type_id': aircraft_type.id,
+                    'aircraft_type_name': aircraft_type.name,
+                    'base_min_fuel_gallons_for_waiver': float(aircraft_type.base_min_fuel_gallons_for_waiver),
+                    'created_at': aircraft_type.created_at.isoformat(),
+                    'updated_at': aircraft_type.updated_at.isoformat()
+                }
+                for aircraft_type in aircraft_types
+            ]
         except SQLAlchemyError as e:
             current_app.logger.error(f"Error fetching aircraft type configs: {str(e)}")
             raise
@@ -246,10 +244,7 @@ class AdminFeeConfigService:
             if not classification:
                 return False
             
-            # Check if classification is referenced by fee rules
-            fee_rules_count = FeeRule.query.filter_by(applies_to_classification_id=classification_id).count()
-            if fee_rules_count > 0:
-                raise ValueError("Cannot delete aircraft classification that is referenced by fee rules")
+            # Note: Fee rules are now global, no need to check for classification references
             
             # Check if classification is referenced by aircraft types
             aircraft_types_count = AircraftType.query.filter_by(classification_id=classification_id).count()
@@ -388,15 +383,10 @@ class AdminFeeConfigService:
     # Fee Rules CRUD
     @staticmethod
     def get_fee_rules(category_id: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Get all fee rules, optionally filtered by fee category."""
+        """Get all fee rules. Note: category_id parameter is deprecated since fee rules are now global."""
         try:
-            query = FeeRule.query
-            
-            # Apply category filter if provided
-            if category_id is not None:
-                query = query.filter_by(applies_to_classification_id=category_id)
-            
-            rules = query.options(joinedload(FeeRule.classification)).all()
+            # All fee rules are now global, ignore category_id parameter
+            rules = FeeRule.query.all()
             
             return [rule.to_dict() for rule in rules]
         except SQLAlchemyError as e:
@@ -407,7 +397,7 @@ class AdminFeeConfigService:
     def get_fee_rule(rule_id: int) -> Optional[Dict[str, Any]]:
         """Get a single fee rule by ID."""
         try:
-            rule = FeeRule.query.options(joinedload(FeeRule.classification)).get(rule_id)
+            rule = FeeRule.query.get(rule_id)
             return rule.to_dict() if rule else None
         except SQLAlchemyError as e:
             current_app.logger.error(f"Error fetching fee rule: {str(e)}")
@@ -415,30 +405,28 @@ class AdminFeeConfigService:
 
     @staticmethod
     def create_fee_rule(rule_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create or update a fee rule (upsert)."""
+        """Create or update a global fee rule (upsert)."""
         try:
             fee_code = rule_data.get('fee_code')
-            classification_id = rule_data.get('applies_to_classification_id') or rule_data.get('applies_to_aircraft_classification_id')
+            
+            # Reject any attempts to create classification-specific rules
+            if 'applies_to_classification_id' in rule_data and rule_data['applies_to_classification_id'] is not None:
+                raise ValueError("Fee rules are now global only. Use FeeRuleOverride for classification-specific pricing.")
+            if 'applies_to_aircraft_classification_id' in rule_data and rule_data['applies_to_aircraft_classification_id'] is not None:
+                raise ValueError("Fee rules are now global only. Use FeeRuleOverride for classification-specific pricing.")
 
             if not fee_code:
                 raise ValueError("fee_code is required.")
-            
-            # Convert empty string or 0 to None for global fees
-            if classification_id == "" or classification_id == 0:
-                classification_id = None
 
-            # Check for an existing rule using the new unique key
-            existing_rule = FeeRule.query.filter_by(
-                fee_code=fee_code,
-                applies_to_classification_id=classification_id
-            ).first()
+            # Check for an existing global rule with this fee_code
+            existing_rule = FeeRule.query.filter_by(fee_code=fee_code).first()
 
             if existing_rule:
                 # Update existing rule
                 AdminFeeConfigService._apply_rule_data(existing_rule, rule_data)
                 rule_id = existing_rule.id
             else:
-                # Create new rule
+                # Create new global rule
                 rule = FeeRule(**AdminFeeConfigService._prepare_rule_data(rule_data))
                 db.session.add(rule)
                 db.session.flush()
@@ -453,8 +441,8 @@ class AdminFeeConfigService:
             
         except IntegrityError as e:
             db.session.rollback()
-            if 'uq_fee_rule_code_classification' in str(e):
-                raise ValueError("Fee rule with this code already exists for this classification")
+            if 'fee_code' in str(e).lower():
+                raise ValueError("Fee rule with this code already exists")
             raise
         except SQLAlchemyError as e:
             db.session.rollback()
@@ -463,18 +451,11 @@ class AdminFeeConfigService:
     
     @staticmethod
     def _prepare_rule_data(rule_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Prepare rule data for creating a new FeeRule."""
-        classification_id = rule_data.get('applies_to_classification_id') or rule_data.get('applies_to_aircraft_classification_id')
-        
-        # Verify the aircraft classification exists
-        aircraft_classification = AircraftClassification.query.get(classification_id)
-        if not aircraft_classification:
-            raise ValueError("Aircraft classification not found")
+        """Prepare rule data for creating a new global FeeRule."""
         
         prepared_data = {
             'fee_name': rule_data['fee_name'],
             'fee_code': rule_data['fee_code'],
-            'applies_to_classification_id': classification_id,
             'amount': rule_data['amount'],
             'currency': rule_data.get('currency', 'USD'),
             'is_taxable': rule_data.get('is_taxable', False),
@@ -485,28 +466,18 @@ class AdminFeeConfigService:
             'has_caa_override': rule_data.get('has_caa_override', False),
             'caa_override_amount': rule_data.get('caa_override_amount'),
             'caa_waiver_strategy_override': WaiverStrategy[rule_data['caa_waiver_strategy_override']] if rule_data.get('caa_waiver_strategy_override') else None,
-            'caa_simple_waiver_multiplier_override': rule_data.get('caa_simple_waiver_multiplier_override'),
-            'is_primary_fee': rule_data.get('is_primary_fee', False)
+            'caa_simple_waiver_multiplier_override': rule_data.get('caa_simple_waiver_multiplier_override')
         }
         return prepared_data
     
     @staticmethod
     def _apply_rule_data(rule: FeeRule, rule_data: Dict[str, Any]):
-        """Apply rule data to an existing FeeRule object."""
-        classification_id = rule_data.get('applies_to_classification_id') or rule_data.get('applies_to_aircraft_classification_id')
-        
-        # Verify the aircraft classification exists if being updated
-        if classification_id and classification_id != rule.applies_to_classification_id:
-            aircraft_classification = AircraftClassification.query.get(classification_id)
-            if not aircraft_classification:
-                raise ValueError("Aircraft classification not found")
-            rule.applies_to_classification_id = classification_id
+        """Apply rule data to an existing global FeeRule object."""
         
         # Update fields
         for field in ['fee_name', 'fee_code', 'amount', 'currency', 'is_taxable', 
                      'is_potentially_waivable_by_fuel_uplift', 'simple_waiver_multiplier',
-                     'has_caa_override', 'caa_override_amount', 'caa_simple_waiver_multiplier_override',
-                     'is_primary_fee']:
+                     'has_caa_override', 'caa_override_amount', 'caa_simple_waiver_multiplier_override']:
             if field in rule_data:
                 setattr(rule, field, rule_data[field])
         
@@ -720,7 +691,6 @@ class AdminFeeConfigService:
                 joinedload(AircraftType.classification)  # type: ignore
             ).all()
             overrides = FeeRuleOverride.query.all()
-            aircraft_config = AircraftTypeConfig.query.all()
 
             # Enhanced aircraft types with classification names
             enhanced_aircraft_types = []
@@ -733,8 +703,7 @@ class AdminFeeConfigService:
                 "categories": [c.to_dict() for c in categories],
                 "rules": [r.to_dict() for r in rules],
                 "aircraft_types": enhanced_aircraft_types,
-                "overrides": [o.to_dict() for o in overrides],
-                "aircraft_config": [ac.to_dict() for ac in aircraft_config]
+                "overrides": [o.to_dict() for o in overrides]
             }
         except SQLAlchemyError as e:
             current_app.logger.error(f"Error fetching consolidated fee schedule: {str(e)}")
@@ -750,16 +719,12 @@ class AdminFeeConfigService:
         aircraft_types = AircraftType.query.order_by(AircraftType.name).all()
         fee_rules = FeeRule.query.order_by(FeeRule.fee_name).all()
         overrides = FeeRuleOverride.query.all()
-        aircraft_configs = AircraftTypeConfig.query.all()
 
         classification_overrides_map = {
             (o.classification_id, o.fee_rule_id): o.to_dict() for o in overrides if o.classification_id
         }
         aircraft_overrides_map = {
             (o.aircraft_type_id, o.fee_rule_id): o.to_dict() for o in overrides if o.aircraft_type_id
-        }
-        aircraft_config_map = {
-            config.aircraft_type_id: config for config in aircraft_configs
         }
 
         schedule = []
@@ -771,11 +736,6 @@ class AdminFeeConfigService:
             
             for aircraft_type in classification_aircraft:
                 aircraft_data = aircraft_type.to_dict()
-                
-                # Override minimum fuel value with data from AircraftTypeConfig if available
-                aircraft_config = aircraft_config_map.get(aircraft_type.id)
-                if aircraft_config:
-                    aircraft_data['base_min_fuel_gallons_for_waiver'] = float(aircraft_config.base_min_fuel_gallons_for_waiver)
                 
                 aircraft_fees = {}
                 
@@ -912,7 +872,7 @@ class AdminFeeConfigService:
         A comprehensive service method to:
         1. Find or create an AircraftType.
         2. Set the aircraft's classification.
-        3. Create a config for min fuel waiver.
+        3. Set the min fuel waiver directly on AircraftType.
         4. Optionally, create an initial FeeRuleOverride for the aircraft.
         All operations are performed in a single atomic transaction.
         """
@@ -937,28 +897,19 @@ class AdminFeeConfigService:
             if not aircraft_classification:
                 raise ValueError(f"Aircraft classification with ID {aircraft_classification_id} not found.")
 
-            # 3. Update aircraft type's classification if it exists
+            # 3. Update aircraft type's classification and min fuel if it exists
             if aircraft_type.classification_id != aircraft_classification_id:
                 aircraft_type.classification_id = aircraft_classification_id
+            
+            # Update the base min fuel gallons directly on the aircraft type
+            aircraft_type.base_min_fuel_gallons_for_waiver = min_fuel_gallons
 
-            # 4. Create or update AircraftTypeConfig
-            config = AircraftTypeConfig.query.filter_by(
-                aircraft_type_id=aircraft_type.id
-            ).first()
-
-            if config:
-                config.base_min_fuel_gallons_for_waiver = min_fuel_gallons
-            else:
-                config = AircraftTypeConfig()
-                config.aircraft_type_id = aircraft_type.id
-                config.base_min_fuel_gallons_for_waiver = min_fuel_gallons
-                db.session.add(config)
-
-            # 5. Create initial FeeRuleOverride if parameters are provided
-            # Note: Override is now created for the classification, not the specific aircraft type
+            # 4. Create initial FeeRuleOverride if parameters are provided
+            # Note: Override is now created for the aircraft type directly
+            override = None
             if initial_ramp_fee_rule_id is not None and initial_ramp_fee_amount is not None:
                 override = FeeRuleOverride()
-                override.classification_id = aircraft_classification_id
+                override.aircraft_type_id = aircraft_type.id
                 override.fee_rule_id = initial_ramp_fee_rule_id
                 override.override_amount = initial_ramp_fee_amount
                 db.session.add(override)
@@ -969,13 +920,11 @@ class AdminFeeConfigService:
             result = {
                 "message": "Aircraft fee setup completed successfully.",
                 "aircraft_type_id": aircraft_type.id,
-                "aircraft_type": aircraft_type,
-                "aircraft_config_id": config.id,
-                "aircraft_config": config
+                "aircraft_type": aircraft_type
             }
             
             # Add override if it was created
-            if initial_ramp_fee_rule_id is not None and initial_ramp_fee_amount is not None:
+            if override is not None:
                 result["fee_rule_override"] = override
                 
             return result
@@ -1202,6 +1151,306 @@ class AdminFeeConfigService:
     # ==========================================
 
     @staticmethod
+    def _diff_configurations(current_data: Dict[str, Any], backup_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Compare two configuration snapshots and generate a changeset for restoration.
+        
+        Args:
+            current_data: Current database configuration snapshot
+            backup_data: Target backup configuration snapshot
+            
+        Returns:
+            Dict containing create, update, and delete operations for each data type:
+            {
+                'classifications': {'create': [...], 'update': [...], 'delete': [...]},
+                'aircraft_types': {'create': [...], 'update': [...], 'delete': [...]},
+                'fee_rules': {'create': [...], 'update': [...], 'delete': [...]},
+                'overrides': {'create': [...], 'update': [...], 'delete': [...]},
+                'waiver_tiers': {'create': [...], 'update': [...], 'delete': [...]},
+                'aircraft_type_configs': {'create': [...], 'update': [...], 'delete': [...]}
+            }
+        """
+        def _compare_entities(current_list: List[Dict], backup_list: List[Dict], id_field: str = 'id') -> Dict[str, List]:
+            """
+            Compare two lists of entities and return create, update, delete operations.
+            
+            This enhanced comparison handles edge cases like None vs 0, JSON array content
+            comparison, and type-aware comparisons for robust diff detection.
+            """
+            # Create lookup dictionaries
+            current_by_id = {item[id_field]: item for item in current_list}
+            backup_by_id = {item[id_field]: item for item in backup_list}
+            
+            # Find operations needed
+            create_ops = []
+            update_ops = []
+            delete_ops = []
+            
+            # Items to create: in backup but not in current
+            for backup_id, backup_item in backup_by_id.items():
+                if backup_id not in current_by_id:
+                    create_ops.append(backup_item)
+            
+            # Items to update: in both but different
+            for backup_id, backup_item in backup_by_id.items():
+                if backup_id in current_by_id:
+                    current_item = current_by_id[backup_id]
+                    if _items_differ(current_item, backup_item):
+                        update_ops.append(backup_item)
+            
+            # Items to delete: in current but not in backup
+            for current_id in current_by_id:
+                if current_id not in backup_by_id:
+                    delete_ops.append(current_id)
+            
+            return {
+                'create': create_ops,
+                'update': update_ops,
+                'delete': delete_ops
+            }
+        
+        def _items_differ(current_item: Dict, backup_item: Dict) -> bool:
+            """
+            Enhanced comparison that handles edge cases properly.
+            
+            Handles:
+            - None vs 0 vs empty string distinctions
+            - JSON array content comparison (not just reference)
+            - Decimal/float precision normalization
+            - Case-sensitive string comparisons
+            """
+            # Remove timestamps for comparison
+            current_clean = {k: v for k, v in current_item.items() if k not in ['created_at', 'updated_at']}
+            backup_clean = {k: v for k, v in backup_item.items() if k not in ['created_at', 'updated_at']}
+            
+            # Get all unique keys from both items
+            all_keys = set(current_clean.keys()) | set(backup_clean.keys())
+            
+            for key in all_keys:
+                current_val = current_clean.get(key)
+                backup_val = backup_clean.get(key)
+                
+                # Handle missing keys (one has the key, other doesn't)
+                if key not in current_clean or key not in backup_clean:
+                    return True
+                
+                # Enhanced value comparison
+                if not _values_equal(current_val, backup_val):
+                    return True
+            
+            return False
+        
+        def _values_equal(val1, val2) -> bool:
+            """
+            Deep value comparison that handles type coercion and edge cases.
+            """
+            # Handle exact match first (most common case)
+            if val1 == val2:
+                return True
+            
+            # Handle None comparisons explicitly
+            if val1 is None or val2 is None:
+                return val1 is val2
+            
+            # Handle numeric comparisons (None vs 0 should be different)
+            if isinstance(val1, (int, float)) and isinstance(val2, (int, float)):
+                return abs(float(val1) - float(val2)) < 1e-10  # Handle float precision
+            
+            # Handle list/array comparisons (e.g., fees_waived_codes in WaiverTier)
+            if isinstance(val1, list) and isinstance(val2, list):
+                # Compare sorted versions to handle order differences
+                try:
+                    return sorted(val1) == sorted(val2)
+                except TypeError:
+                    # If items aren't sortable, compare as-is
+                    return val1 == val2
+            
+            # Handle string comparisons (case-sensitive)
+            if isinstance(val1, str) and isinstance(val2, str):
+                return val1 == val2
+            
+            # For all other types, use default equality
+            return val1 == val2
+        
+        # Compare each data type
+        changeset = {
+            'classifications': _compare_entities(
+                current_data.get('classifications', []), 
+                backup_data.get('classifications', [])
+            ),
+            'aircraft_types': _compare_entities(
+                current_data.get('aircraft_types', []), 
+                backup_data.get('aircraft_types', [])
+            ),
+            'fee_rules': _compare_entities(
+                current_data.get('fee_rules', []), 
+                backup_data.get('fee_rules', [])
+            ),
+            'overrides': _compare_entities(
+                current_data.get('overrides', []), 
+                backup_data.get('overrides', [])
+            ),
+            'waiver_tiers': _compare_entities(
+                current_data.get('waiver_tiers', []), 
+                backup_data.get('waiver_tiers', [])
+            ),
+            'aircraft_type_configs': _compare_entities(
+                current_data.get('aircraft_type_configs', []), 
+                backup_data.get('aircraft_type_configs', [])
+            )
+        }
+        
+        return changeset
+
+    @staticmethod
+    def _apply_configuration_changeset(changeset: Dict[str, Any]) -> None:
+        """
+        Apply a configuration changeset using the safe Diff and Apply strategy.
+        
+        This method performs database operations in the correct dependency order:
+        
+        DELETION ORDER (reverse dependency):
+        1. FeeRuleOverrides (depend on aircraft types and fee rules)
+        2. WaiverTiers (no dependencies)
+        3. FeeRules (depend on classifications)
+        4. AircraftTypes (depend on classifications)
+        5. AircraftClassifications (other entities depend on them)
+        
+        CREATION ORDER (dependency order):
+        1. AircraftClassifications (no dependencies)
+        2. AircraftTypes (depend on classifications)
+        3. FeeRules (depend on classifications)
+        4. FeeRuleOverrides (depend on aircraft types and fee rules)
+        5. WaiverTiers (no foreign key dependencies)
+        
+        Args:
+            changeset: Dictionary containing create, update, and delete operations
+        """
+        # Execute deletions in reverse dependency order
+        # 1. Delete FeeRuleOverrides first (depend on aircraft types and fee rules)
+        for override_id in changeset['overrides']['delete']:
+            override = FeeRuleOverride.query.get(override_id)
+            if override:
+                db.session.delete(override)
+        
+        # 2. Delete WaiverTiers (no dependencies)
+        for tier_id in changeset['waiver_tiers']['delete']:
+            tier = WaiverTier.query.get(tier_id)
+            if tier:
+                db.session.delete(tier)
+        
+        # 4. Delete FeeRules (depend on classifications)
+        for rule_id in changeset['fee_rules']['delete']:
+            rule = FeeRule.query.get(rule_id)
+            if rule:
+                db.session.delete(rule)
+        
+        # 5. Delete AircraftTypes (depend on classifications)
+        for aircraft_type_id in changeset['aircraft_types']['delete']:
+            aircraft_type = AircraftType.query.get(aircraft_type_id)
+            if aircraft_type:
+                db.session.delete(aircraft_type)
+        
+        # 6. Delete AircraftClassifications last (other entities depend on them)
+        for classification_id in changeset['classifications']['delete']:
+            classification = AircraftClassification.query.get(classification_id)
+            if classification:
+                db.session.delete(classification)
+        
+        # Execute creations in dependency order
+        # 1. Create AircraftClassifications first (no dependencies)
+        for classification_data in changeset['classifications']['create']:
+            # Remove timestamp fields as they will be auto-generated
+            clean_data = {k: v for k, v in classification_data.items() if k not in ['created_at', 'updated_at']}
+            classification = AircraftClassification(**clean_data)
+            db.session.add(classification)
+        
+        db.session.flush()  # Get IDs for foreign keys
+        
+        # 2. Create AircraftTypes (depend on classifications)
+        for aircraft_type_data in changeset['aircraft_types']['create']:
+            clean_data = {k: v for k, v in aircraft_type_data.items() if k not in ['created_at', 'updated_at']}
+            aircraft_type = AircraftType(**clean_data)
+            db.session.add(aircraft_type)
+        
+        db.session.flush()  # Get IDs for foreign keys
+        
+        # 3. Create FeeRules (depend on classifications)
+        for fee_rule_data in changeset['fee_rules']['create']:
+            clean_data = {k: v for k, v in fee_rule_data.items() if k not in ['created_at', 'updated_at']}
+            # Handle enum conversions
+            if 'calculation_basis' in clean_data and isinstance(clean_data['calculation_basis'], str):
+                clean_data['calculation_basis'] = CalculationBasis[clean_data['calculation_basis']]
+            if 'waiver_strategy' in clean_data and isinstance(clean_data['waiver_strategy'], str):
+                clean_data['waiver_strategy'] = WaiverStrategy[clean_data['waiver_strategy']]
+            if 'caa_waiver_strategy_override' in clean_data and clean_data['caa_waiver_strategy_override'] and isinstance(clean_data['caa_waiver_strategy_override'], str):
+                clean_data['caa_waiver_strategy_override'] = WaiverStrategy[clean_data['caa_waiver_strategy_override']]
+            
+            fee_rule = FeeRule(**clean_data)
+            db.session.add(fee_rule)
+        
+        db.session.flush()  # Get IDs for foreign keys
+        
+        # 4. Create FeeRuleOverrides (depend on aircraft types and fee rules)
+        for override_data in changeset['overrides']['create']:
+            clean_data = {k: v for k, v in override_data.items() if k not in ['created_at', 'updated_at']}
+            override = FeeRuleOverride(**clean_data)
+            db.session.add(override)
+        
+        # 6. Create WaiverTiers (no foreign key dependencies)
+        for waiver_tier_data in changeset['waiver_tiers']['create']:
+            clean_data = {k: v for k, v in waiver_tier_data.items() if k not in ['created_at', 'updated_at']}
+            waiver_tier = WaiverTier(**clean_data)
+            db.session.add(waiver_tier)
+        
+        # Execute updates
+        # Update AircraftClassifications
+        for classification_data in changeset['classifications']['update']:
+            classification = AircraftClassification.query.get(classification_data['id'])
+            if classification:
+                for key, value in classification_data.items():
+                    if key not in ['id', 'created_at', 'updated_at']:
+                        setattr(classification, key, value)
+        
+        # Update AircraftTypes
+        for aircraft_type_data in changeset['aircraft_types']['update']:
+            aircraft_type = AircraftType.query.get(aircraft_type_data['id'])
+            if aircraft_type:
+                for key, value in aircraft_type_data.items():
+                    if key not in ['id', 'created_at', 'updated_at']:
+                        setattr(aircraft_type, key, value)
+        
+        # Update FeeRules
+        for fee_rule_data in changeset['fee_rules']['update']:
+            fee_rule = FeeRule.query.get(fee_rule_data['id'])
+            if fee_rule:
+                for key, value in fee_rule_data.items():
+                    if key not in ['id', 'created_at', 'updated_at']:
+                        if key == 'calculation_basis' and isinstance(value, str):
+                            value = CalculationBasis[value]
+                        elif key == 'waiver_strategy' and isinstance(value, str):
+                            value = WaiverStrategy[value]
+                        elif key == 'caa_waiver_strategy_override' and value and isinstance(value, str):
+                            value = WaiverStrategy[value]
+                        setattr(fee_rule, key, value)
+        
+        # Update FeeRuleOverrides
+        for override_data in changeset['overrides']['update']:
+            override = FeeRuleOverride.query.get(override_data['id'])
+            if override:
+                for key, value in override_data.items():
+                    if key not in ['id', 'created_at', 'updated_at']:
+                        setattr(override, key, value)
+        
+        # Update WaiverTiers
+        for waiver_tier_data in changeset['waiver_tiers']['update']:
+            waiver_tier = WaiverTier.query.get(waiver_tier_data['id'])
+            if waiver_tier:
+                for key, value in waiver_tier_data.items():
+                    if key not in ['id', 'created_at', 'updated_at']:
+                        setattr(waiver_tier, key, value)
+
+    @staticmethod
     def _create_configuration_snapshot() -> Dict[str, Any]:
         """
         Create a complete snapshot of the current fee configuration.
@@ -1209,7 +1458,6 @@ class AdminFeeConfigService:
         This function queries and serializes all configuration tables:
         - AircraftClassification
         - AircraftType
-        - AircraftTypeConfig
         - FeeRule
         - FeeRuleOverride
         - WaiverTier
@@ -1221,7 +1469,6 @@ class AdminFeeConfigService:
             # Initialize schemas for serialization
             classification_schema = AircraftClassificationSchema(many=True)
             aircraft_type_schema = AircraftTypeSchema(many=True)
-            aircraft_type_config_schema = AircraftTypeConfigSchema(many=True)
             fee_rule_schema = FeeRuleSchema(many=True)
             fee_rule_override_schema = FeeRuleOverrideSchema(many=True)
             waiver_tier_schema = WaiverTierSchema(many=True)
@@ -1229,7 +1476,6 @@ class AdminFeeConfigService:
             # Query all configuration data
             classifications = AircraftClassification.query.all()
             aircraft_types = AircraftType.query.all()
-            aircraft_type_configs = AircraftTypeConfig.query.all()
             fee_rules = FeeRule.query.all()
             fee_rule_overrides = FeeRuleOverride.query.all()
             waiver_tiers = WaiverTier.query.all()
@@ -1238,7 +1484,6 @@ class AdminFeeConfigService:
             snapshot = {
                 'classifications': classification_schema.dump(classifications),
                 'aircraft_types': aircraft_type_schema.dump(aircraft_types),
-                'aircraft_type_configs': aircraft_type_config_schema.dump(aircraft_type_configs),
                 'fee_rules': fee_rule_schema.dump(fee_rules),
                 'overrides': fee_rule_override_schema.dump(fee_rule_overrides),
                 'waiver_tiers': waiver_tier_schema.dump(waiver_tiers)
@@ -1340,19 +1585,9 @@ class AdminFeeConfigService:
                     if '.' in fr['caa_waiver_strategy_override']:
                         fr['caa_waiver_strategy_override'] = fr['caa_waiver_strategy_override'].split('.')[-1]
         
-        # Fix aircraft type configs
-        aircraft_type_configs = transformed_data.get('aircraft_type_configs', [])
-        valid_configs = []
-        for config in aircraft_type_configs:
-            aircraft_type_id = config.get('aircraft_type_id')
-            if aircraft_type_id in aircraft_type_ids:
-                valid_configs.append(config)
-            else:
-                try:
-                    current_app.logger.warning(f"Removing aircraft type config with invalid aircraft_type_id {aircraft_type_id}")
-                except RuntimeError:
-                    pass  # No application context, skip logging
-        transformed_data['aircraft_type_configs'] = valid_configs
+        # Remove aircraft_type_configs from legacy data (no longer used)
+        if 'aircraft_type_configs' in transformed_data:
+            del transformed_data['aircraft_type_configs']
         
         # Fix overrides
         overrides = transformed_data.get('overrides', [])
@@ -1382,13 +1617,15 @@ class AdminFeeConfigService:
     @staticmethod
     def restore_from_version(version_id: int) -> None:
         """
-        Restore fee configuration from a specific version.
+        Restore fee configuration from a specific version using Diff and Apply strategy.
         
-        Implements the Validate-then-Act pattern:
-        1. Fetch the configuration JSON from the database
-        2. Validate the entire JSON against FeeScheduleSnapshotSchema
-        3. If validation fails, log error and raise ValueError (no DB writes)
-        4. If validation succeeds, perform Wipe & Replace in atomic transaction
+        This method uses a safer "Diff and Apply" approach instead of "Wipe & Replace":
+        1. Fetch the version from the database
+        2. Load the backup configuration from version.configuration_data
+        3. Fetch the current configuration from the database
+        4. Call _diff_configurations to get the changeset
+        5. Open a transaction and execute database operations based on the changeset
+        6. Operations are performed in the correct order to respect foreign key constraints
         
         Args:
             version_id: The ID of the version to restore from
@@ -1402,76 +1639,28 @@ class AdminFeeConfigService:
             if not version:
                 raise ValueError(f"Version {version_id} not found")
             
-            configuration_data = version.configuration_data
             current_app.logger.info(f"Fetched version {version_id}: {version.version_name}")
             
-            # Step 2: Transform legacy data and validate
-            transformed_data = AdminFeeConfigService._transform_legacy_data(configuration_data)
-            snapshot_schema = FeeScheduleSnapshotSchema()
-            try:
-                validated_data: Dict[str, Any] = snapshot_schema.load(transformed_data)
-                current_app.logger.info(f"Configuration data validation successful for version {version_id}")
-            except MarshmallowValidationError as e:
-                error_msg = f"Configuration validation failed for version {version_id}: {e.messages}"
-                current_app.logger.error(error_msg)
-                raise ValueError(error_msg)
+            # Step 2: Load the backup configuration
+            backup_configuration_data = version.configuration_data
+            transformed_backup_data = AdminFeeConfigService._transform_legacy_data(backup_configuration_data)
             
-            # Step 3: Perform Wipe & Replace in atomic transaction
-            with db.session.begin():
-                current_app.logger.info(f"Starting atomic restore operation for version {version_id}")
-                
-                # Delete existing data in dependency order
-                FeeRuleOverride.query.delete()
-                AircraftTypeConfig.query.delete()
-                WaiverTier.query.delete()
-                FeeRule.query.delete()
-                AircraftType.query.delete()
-                AircraftClassification.query.delete()
-                
-                # Insert new data in dependency order
-                # 1. Aircraft Classifications (no dependencies)
-                classifications_data = validated_data.get('classifications', [])
-                for classification_data in classifications_data:
-                    classification = AircraftClassification(**classification_data)
-                    db.session.add(classification)
-                
-                db.session.flush()  # Get IDs for foreign keys
-                
-                # 2. Aircraft Types (depend on classifications)
-                aircraft_types_data = validated_data.get('aircraft_types', [])
-                for aircraft_type_data in aircraft_types_data:
-                    aircraft_type = AircraftType(**aircraft_type_data)
-                    db.session.add(aircraft_type)
-                
-                db.session.flush()  # Get IDs for foreign keys
-                
-                # 3. Fee Rules (depend on classifications)
-                fee_rules_data = validated_data.get('fee_rules', [])
-                for fee_rule_data in fee_rules_data:
-                    fee_rule = FeeRule(**fee_rule_data)
-                    db.session.add(fee_rule)
-                
-                db.session.flush()  # Get IDs for foreign keys
-                
-                # 4. Aircraft Type Configs (depend on aircraft types)
-                aircraft_type_configs_data = validated_data.get('aircraft_type_configs', [])
-                for config_data in aircraft_type_configs_data:
-                    config = AircraftTypeConfig(**config_data)
-                    db.session.add(config)
-                
-                # 5. Fee Rule Overrides (depend on aircraft types and fee rules)
-                overrides_data = validated_data.get('overrides', [])
-                for override_data in overrides_data:
-                    override = FeeRuleOverride(**override_data)
-                    db.session.add(override)
-                
-                # 6. Waiver Tiers (no foreign key dependencies)
-                waiver_tiers_data = validated_data.get('waiver_tiers', [])
-                for waiver_tier_data in waiver_tiers_data:
-                    waiver_tier = WaiverTier(**waiver_tier_data)
-                    db.session.add(waiver_tier)
-                
-                current_app.logger.info(f"Successfully restored configuration from version {version_id}")
+            # Step 3: Fetch current configuration from database
+            current_configuration_data = AdminFeeConfigService._create_configuration_snapshot()
+            
+            # Step 4: Call _diff_configurations with current and backup data
+            changeset = AdminFeeConfigService._diff_configurations(current_configuration_data, transformed_backup_data)
+            
+            current_app.logger.info(f"Generated changeset for version {version_id}: "
+                                  f"Classifications: {len(changeset['classifications']['create'])} create, "
+                                  f"{len(changeset['classifications']['update'])} update, "
+                                  f"{len(changeset['classifications']['delete'])} delete")
+            
+            # Step 5: Open transaction and apply changeset
+            with db.session.begin_nested() as transaction:
+                current_app.logger.info(f"Starting atomic diff-and-apply restore operation for version {version_id}")
+                AdminFeeConfigService._apply_configuration_changeset(changeset)
+                current_app.logger.info(f"Successfully restored configuration from version {version_id} using diff-and-apply strategy")
                 
         except SQLAlchemyError as e:
             current_app.logger.error(f"Database error during restore from version {version_id}: {str(e)}")
@@ -1480,12 +1669,15 @@ class AdminFeeConfigService:
     @staticmethod
     def import_configuration_from_file(file_stream, user_id: int) -> None:
         """
-        Import fee configuration from an uploaded JSON file.
+        Import fee configuration from an uploaded JSON file using safe Diff and Apply strategy.
+        
+        This method now uses the same safe "Diff and Apply" approach as restore_from_version.
         
         Follows this sequence:
         1. Create automatic backup (separate committed transaction)
         2. Read and validate JSON from file against FeeScheduleSnapshotSchema
-        3. If validation succeeds, perform Wipe & Replace in new transaction
+        3. Generate diff between current state and import data
+        4. Apply changeset using safe Diff and Apply strategy in transaction
         
         Args:
             file_stream: File-like object containing JSON configuration
@@ -1522,73 +1714,23 @@ class AdminFeeConfigService:
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
                 raise ValueError(f"Invalid JSON file: {str(e)}")
             
-            # Transform legacy data and validate against schema
+            # Step 3: Transform legacy data and validate against schema
             transformed_data = AdminFeeConfigService._transform_legacy_data(import_data)
-            snapshot_schema = FeeScheduleSnapshotSchema()
-            try:
-                validated_data: Dict[str, Any] = snapshot_schema.load(transformed_data)
-                current_app.logger.info("Import data validation successful")
-            except MarshmallowValidationError as e:
-                error_msg = f"Import validation failed: {e.messages}"
-                current_app.logger.error(error_msg)
-                raise ValueError(error_msg)
             
-            # Step 3: Perform Wipe & Replace in new transaction
+            # Step 4: Fetch current configuration and generate diff
+            current_configuration_data = AdminFeeConfigService._create_configuration_snapshot()
+            changeset = AdminFeeConfigService._diff_configurations(current_configuration_data, transformed_data)
+            
+            current_app.logger.info(f"Generated import changeset: "
+                                  f"Classifications: {len(changeset['classifications']['create'])} create, "
+                                  f"{len(changeset['classifications']['update'])} update, "
+                                  f"{len(changeset['classifications']['delete'])} delete")
+            
+            # Step 5: Apply changeset using safe Diff and Apply strategy
             with db.session.begin():
-                current_app.logger.info("Starting atomic import operation")
-                
-                # Delete existing data in dependency order
-                FeeRuleOverride.query.delete()
-                AircraftTypeConfig.query.delete()
-                WaiverTier.query.delete()
-                FeeRule.query.delete()
-                AircraftType.query.delete()
-                AircraftClassification.query.delete()
-                
-                # Insert new data in dependency order
-                # 1. Aircraft Classifications (no dependencies)
-                classifications_data = validated_data.get('classifications', [])
-                for classification_data in classifications_data:
-                    classification = AircraftClassification(**classification_data)
-                    db.session.add(classification)
-                
-                db.session.flush()  # Get IDs for foreign keys
-                
-                # 2. Aircraft Types (depend on classifications)
-                aircraft_types_data = validated_data.get('aircraft_types', [])
-                for aircraft_type_data in aircraft_types_data:
-                    aircraft_type = AircraftType(**aircraft_type_data)
-                    db.session.add(aircraft_type)
-                
-                db.session.flush()  # Get IDs for foreign keys
-                
-                # 3. Fee Rules (depend on classifications)
-                fee_rules_data = validated_data.get('fee_rules', [])
-                for fee_rule_data in fee_rules_data:
-                    fee_rule = FeeRule(**fee_rule_data)
-                    db.session.add(fee_rule)
-                
-                db.session.flush()  # Get IDs for foreign keys
-                
-                # 4. Aircraft Type Configs (depend on aircraft types)
-                aircraft_type_configs_data = validated_data.get('aircraft_type_configs', [])
-                for config_data in aircraft_type_configs_data:
-                    config = AircraftTypeConfig(**config_data)
-                    db.session.add(config)
-                
-                # 5. Fee Rule Overrides (depend on aircraft types and fee rules)
-                overrides_data = validated_data.get('overrides', [])
-                for override_data in overrides_data:
-                    override = FeeRuleOverride(**override_data)
-                    db.session.add(override)
-                
-                # 6. Waiver Tiers (no foreign key dependencies)
-                waiver_tiers_data = validated_data.get('waiver_tiers', [])
-                for waiver_tier_data in waiver_tiers_data:
-                    waiver_tier = WaiverTier(**waiver_tier_data)
-                    db.session.add(waiver_tier)
-                
-                current_app.logger.info("Successfully imported configuration from file")
+                current_app.logger.info("Starting atomic diff-and-apply import operation")
+                AdminFeeConfigService._apply_configuration_changeset(changeset)
+                current_app.logger.info("Successfully imported configuration from file using diff-and-apply strategy")
                 
         except SQLAlchemyError as e:
             current_app.logger.error(f"Database error during import: {str(e)}")

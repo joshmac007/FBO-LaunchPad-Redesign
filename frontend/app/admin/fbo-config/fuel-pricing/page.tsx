@@ -57,6 +57,14 @@ export default function FuelPricingPage() {
   } = useQuery({
     queryKey: queryKeys.fuel.prices(),
     queryFn: () => getFuelPrices(),
+    onError: (error) => {
+      console.error('Fuel prices query error:', error);
+      console.error('Error message:', error?.message);
+      console.error('Full error object:', JSON.stringify(error, null, 2));
+    },
+    onSuccess: (data) => {
+      console.log('Fuel prices loaded successfully:', data);
+    }
   })
 
   const isLoading = fuelTypesLoading || fuelPricesLoading
