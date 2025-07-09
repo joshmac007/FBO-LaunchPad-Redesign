@@ -34,6 +34,7 @@ import {
   UpdateFeeRuleRequest,
 } from "@/app/services/admin-fee-config-service"
 import { getAuthHeaders } from "@/app/services/api-config"
+import { useUserPreferences } from "@/app/contexts/user-preferences-context"
 
 const feeRuleSchema = z.object({
   fee_name: z.string().min(1, "Fee name is required"),
@@ -52,6 +53,7 @@ const feeRuleSchema = z.object({
   caa_override_amount: z.string().optional(),
   caa_waiver_strategy_override: z.enum(['NONE', 'SIMPLE_MULTIPLIER', 'TIERED_MULTIPLIER']).optional(),
   caa_simple_waiver_multiplier_override: z.string().optional(),
+  display_as_column: z.boolean().optional(),
 })
 
 type FeeRuleFormData = z.infer<typeof feeRuleSchema>
@@ -59,7 +61,7 @@ type FeeRuleFormData = z.infer<typeof feeRuleSchema>
 interface FeeRuleDialogProps {
   isOpen: boolean
   onClose: () => void
-  onSuccess: () => void
+  onSuccess: (data: FeeRuleFormData) => void
   initialData?: FeeRule | null
   defaultValues?: Partial<FeeRuleFormData>
 }
@@ -72,6 +74,7 @@ export function FeeRuleDialog({
   defaultValues = {},
 }: FeeRuleDialogProps) {
   const isEditing = !!initialData
+  const { preferences, updatePreferences } = useUserPreferences()
 
   const form = useForm<FeeRuleFormData>({
     resolver: zodResolver(feeRuleSchema),
@@ -88,33 +91,59 @@ export function FeeRuleDialog({
       caa_override_amount: initialData?.caa_override_amount?.toString() || defaultValues.caa_override_amount?.toString() || "",
       caa_waiver_strategy_override: initialData?.caa_waiver_strategy_override || defaultValues.caa_waiver_strategy_override || undefined,
       caa_simple_waiver_multiplier_override: initialData?.caa_simple_waiver_multiplier_override?.toString() || defaultValues.caa_simple_waiver_multiplier_override?.toString() || "",
+      display_as_column: isEditing && initialData 
+        ? preferences.fee_schedule_column_codes?.includes(initialData.fee_code) ?? false
+        : defaultValues.display_as_column ?? false,
     },
   })
 
   React.useEffect(() => {
-    if (isOpen && !isEditing) {
-      // Reset form when opening in create mode
-      form.reset({
-        fee_name: "",
-        fee_code: "",
-        amount: defaultValues.amount?.toString() || "",
-        is_taxable: defaultValues.is_taxable ?? true,
-        is_potentially_waivable_by_fuel_uplift: defaultValues.is_potentially_waivable_by_fuel_uplift ?? false,
-        calculation_basis: defaultValues.calculation_basis || 'FIXED_PRICE',
-        waiver_strategy: defaultValues.waiver_strategy || 'NONE',
-        simple_waiver_multiplier: defaultValues.simple_waiver_multiplier?.toString() || "",
-        has_caa_override: defaultValues.has_caa_override ?? false,
-        caa_override_amount: defaultValues.caa_override_amount?.toString() || "",
-        caa_waiver_strategy_override: defaultValues.caa_waiver_strategy_override || undefined,
-        caa_simple_waiver_multiplier_override: defaultValues.caa_simple_waiver_multiplier_override?.toString() || "",
-      })
+    if (isOpen) {
+      if (!isEditing) {
+        // Reset form when opening in create mode
+        form.reset({
+          fee_name: "",
+          fee_code: "",
+          amount: defaultValues.amount?.toString() || "",
+          is_taxable: defaultValues.is_taxable ?? true,
+          is_potentially_waivable_by_fuel_uplift: defaultValues.is_potentially_waivable_by_fuel_uplift ?? false,
+          calculation_basis: defaultValues.calculation_basis || 'FIXED_PRICE',
+          waiver_strategy: defaultValues.waiver_strategy || 'NONE',
+          simple_waiver_multiplier: defaultValues.simple_waiver_multiplier?.toString() || "",
+          has_caa_override: defaultValues.has_caa_override ?? false,
+          caa_override_amount: defaultValues.caa_override_amount?.toString() || "",
+          caa_waiver_strategy_override: defaultValues.caa_waiver_strategy_override || undefined,
+          caa_simple_waiver_multiplier_override: defaultValues.caa_simple_waiver_multiplier_override?.toString() || "",
+          display_as_column: defaultValues.display_as_column ?? false,
+        })
+      } else if (initialData) {
+        // Reset form with data when opening in edit mode, including current column state
+        form.reset({
+          fee_name: initialData.fee_name,
+          fee_code: initialData.fee_code,
+          amount: initialData.amount?.toString() || "",
+          is_taxable: initialData.is_taxable,
+          is_potentially_waivable_by_fuel_uplift: initialData.is_potentially_waivable_by_fuel_uplift,
+          calculation_basis: initialData.calculation_basis,
+          waiver_strategy: initialData.waiver_strategy || 'NONE',
+          simple_waiver_multiplier: initialData.simple_waiver_multiplier?.toString() || "",
+          has_caa_override: initialData.has_caa_override ?? false,
+          caa_override_amount: initialData.caa_override_amount?.toString() || "",
+          caa_waiver_strategy_override: initialData.caa_waiver_strategy_override || undefined,
+          caa_simple_waiver_multiplier_override: initialData.caa_simple_waiver_multiplier_override?.toString() || "",
+          display_as_column: preferences.fee_schedule_column_codes?.includes(initialData.fee_code) ?? false,
+        })
+      }
     }
-  }, [isOpen, isEditing, defaultValues, form])
+  }, [isOpen, isEditing, defaultValues, form, initialData, preferences.fee_schedule_column_codes])
 
   const onSubmit = async (data: FeeRuleFormData) => {
     try {
+      // Extract display_as_column from data before sending to API
+      const { display_as_column, ...apiData } = data
+      
       const submitData = {
-        ...data,
+        ...apiData,
         amount: parseFloat(data.amount),
         simple_waiver_multiplier: data.simple_waiver_multiplier ? parseFloat(data.simple_waiver_multiplier) : undefined,
         caa_override_amount: data.caa_override_amount ? parseFloat(data.caa_override_amount) : undefined,
@@ -147,11 +176,34 @@ export function FeeRuleDialog({
         }
       }
 
-      onSuccess()
+      // Handle column preferences for both create and edit modes
+      await handleColumnPreferences(data, initialData)
+      
+      onSuccess(data)
       onClose()
     } catch (error) {
       console.error('Error saving fee rule:', error)
       // Error handling could be enhanced with toast notifications
+    }
+  }
+
+  const handleColumnPreferences = async (data: FeeRuleFormData, existingData?: FeeRule | null) => {
+    try {
+      const currentCodes = preferences.fee_schedule_column_codes || []
+      const feeCode = data.fee_code
+      const shouldDisplay = data.display_as_column
+      const currentlyDisplayed = currentCodes.includes(feeCode)
+
+      // Only update preferences if there's a change
+      if (shouldDisplay !== currentlyDisplayed) {
+        const newCodes = shouldDisplay 
+          ? [...currentCodes, feeCode]
+          : currentCodes.filter(code => code !== feeCode)
+        
+        await updatePreferences({ fee_schedule_column_codes: newCodes })
+      }
+    } catch (error) {
+      console.error('Failed to update column preferences:', error)
     }
   }
 
@@ -261,6 +313,32 @@ export function FeeRuleDialog({
                         <FormLabel>Waivable by Fuel Uplift</FormLabel>
                         <p className="text-sm text-muted-foreground">
                           This fee can be waived based on fuel uplift amounts
+                        </p>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="display_as_column"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel>
+                          {isEditing ? "Display as a primary column in the fee schedule" : "Display as a primary column in the fee schedule"}
+                        </FormLabel>
+                        <p className="text-sm text-muted-foreground">
+                          {isEditing 
+                            ? "Toggle whether this fee appears as a column in the main fee schedule table"
+                            : "This fee will be shown as a column in the main fee schedule table"
+                          }
                         </p>
                       </div>
                     </FormItem>

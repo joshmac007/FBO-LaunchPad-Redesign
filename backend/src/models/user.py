@@ -80,7 +80,10 @@ class User(db.Model):
             self.preferences = {
                 'fee_schedule_view_size': 'standard',
                 'fee_schedule_sort_order': 'alphabetical',
-                'highlight_overrides': True
+                'highlight_overrides': True,
+                'show_classification_defaults': True,
+                'dismissed_tooltips': [],
+                'fee_schedule_column_codes': []
             }
 
     def set_password(self, password):

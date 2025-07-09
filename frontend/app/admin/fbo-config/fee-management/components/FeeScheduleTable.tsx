@@ -22,6 +22,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuCheckboxItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -71,20 +77,20 @@ export interface AircraftRowData {
 export type TableRowData = ClassificationRowData | AircraftRowData;
 
 interface FeeScheduleTableProps {
-  viewMode: 'standard' | 'caa'
   searchTerm: string
   primaryFeeRules: GlobalFeeRule[]
   globalData?: GlobalFeeSchedule
+  showClassificationDefaults?: boolean
 }
 
 export function FeeScheduleTable({
-  viewMode,
   searchTerm,
   primaryFeeRules,
-  globalData
+  globalData,
+  showClassificationDefaults = true
 }: FeeScheduleTableProps) {
   const queryClient = useQueryClient()
-  const { preferences } = useUserPreferences()
+  const { preferences, updatePreferences } = useUserPreferences()
   const [addingToCategory, setAddingToCategory] = useState<number | null>(null)
   const [showCreateClassificationDialog, setShowCreateClassificationDialog] = useState(false)
   const [showMoveAircraftDialog, setShowMoveAircraftDialog] = useState(false)
@@ -131,7 +137,7 @@ export function FeeScheduleTable({
     const rows: TableRowData[] = []
     
     filteredSchedule.forEach(classification => {
-      // Add classification header row
+      // Always add classification header row
       rows.push({
         id: `classification-${classification.id}`,
         type: 'classification',
@@ -141,7 +147,7 @@ export function FeeScheduleTable({
         aircraft_types: classification.aircraft_types
       })
       
-      // Add aircraft rows under this classification (only if not collapsed)
+      // Add aircraft rows under this classification if not collapsed
       if (!collapsedClassifications[classification.id]) {
         classification.aircraft_types.forEach(aircraft => {
           rows.push({
@@ -165,10 +171,7 @@ export function FeeScheduleTable({
   // Mutations with simple invalidation strategy
   const upsertOverrideMutation = useMutation({
     mutationFn: ({ aircraftTypeId, feeRuleId, amount }: { aircraftTypeId: number; feeRuleId: number; amount: number }) => {
-      const payload =
-        viewMode === 'caa'
-          ? { aircraft_type_id: aircraftTypeId, fee_rule_id: feeRuleId, override_caa_amount: amount }
-          : { aircraft_type_id: aircraftTypeId, fee_rule_id: feeRuleId, override_amount: amount };
+      const payload = { aircraft_type_id: aircraftTypeId, fee_rule_id: feeRuleId, override_amount: amount };
       return upsertFeeRuleOverride(payload);
     },
     onError: (error) => {
@@ -184,10 +187,7 @@ export function FeeScheduleTable({
   // Classification-level fee override mutation
   const upsertClassificationOverrideMutation = useMutation({
     mutationFn: ({ classificationId, feeRuleId, amount }: { classificationId: number; feeRuleId: number; amount: number }) => {
-      const payload =
-        viewMode === 'caa'
-          ? { classification_id: classificationId, fee_rule_id: feeRuleId, override_caa_amount: amount }
-          : { classification_id: classificationId, fee_rule_id: feeRuleId, override_amount: amount };
+      const payload = { classification_id: classificationId, fee_rule_id: feeRuleId, override_amount: amount };
       return upsertFeeRuleOverride(payload);
     },
     onError: (error) => {
@@ -296,6 +296,10 @@ export function FeeScheduleTable({
         const rowData = row.original;
         
         if (rowData.type === 'classification') {
+          // If showClassificationDefaults is false, render empty cell
+          if (!showClassificationDefaults) {
+            return null;
+          }
           return null;
         }
         
@@ -318,17 +322,17 @@ export function FeeScheduleTable({
     ...primaryFeeRules.map(rule => 
       columnHelper.display({
         id: `fee_${rule.id}`,
-        header: () => (
-          <>
-            {rule.fee_name}
-            {viewMode === 'caa' && rule.has_caa_override && ' (CAA)'}
-          </>
-        ),
+        header: () => rule.fee_name,
         cell: ({ row }) => {
           const rowData = row.original;
           
           // Classification rows now have editable fee cells
           if (rowData.type === 'classification') {
+            // If showClassificationDefaults is false, render empty cell
+            if (!showClassificationDefaults) {
+              return null;
+            }
+            
             // Find the classification-level override for this fee rule
             const classificationOverride = data?.overrides?.find(override => 
               override.classification_id === rowData.classification_id && 
@@ -336,14 +340,13 @@ export function FeeScheduleTable({
             );
             
             // Use override value if exists, otherwise use the global rule amount
-            const displayValue = viewMode === 'caa' 
-              ? (classificationOverride?.override_caa_amount ?? rule.caa_override_amount ?? rule.amount)
-              : (classificationOverride?.override_amount ?? rule.amount);
+            const displayValue = classificationOverride?.override_amount ?? rule.amount;
             
             return (
               <EditableFeeCell
                 value={displayValue}
                 isAircraftOverride={false}
+                isClassificationDefault={true}
                 onSave={(newValue) => {
                   upsertClassificationOverrideMutation.mutate({
                     classificationId: rowData.classification_id,
@@ -377,12 +380,8 @@ export function FeeScheduleTable({
               );
             }
 
-            const displayValue = viewMode === 'caa' 
-              ? feeDetail.final_caa_display_value 
-              : feeDetail.final_display_value;
-            const isOverride = viewMode === 'caa'
-              ? feeDetail.is_caa_aircraft_override
-              : feeDetail.is_aircraft_override;
+            const displayValue = feeDetail.final_display_value;
+            const isOverride = feeDetail.is_aircraft_override;
 
             return (
               <EditableFeeCell
@@ -419,6 +418,11 @@ export function FeeScheduleTable({
         
         // Classification rows have only add aircraft button
         if (rowData.type === 'classification') {
+          // If showClassificationDefaults is false, render empty cell
+          if (!showClassificationDefaults) {
+            return null;
+          }
+          
           return (
             <div className="flex items-center gap-1 justify-end">
               <Button
@@ -495,7 +499,7 @@ export function FeeScheduleTable({
         return null;
       },
     }),
-  ], [primaryFeeRules, viewMode, updateMinFuelMutation, upsertOverrideMutation, upsertClassificationOverrideMutation, deleteOverrideMutation, collapsedClassifications, data?.overrides, addingToCategory])
+  ], [primaryFeeRules, updateMinFuelMutation, upsertOverrideMutation, upsertClassificationOverrideMutation, deleteOverrideMutation, collapsedClassifications, data?.overrides, addingToCategory])
 
   // Configure the table
   const table = useReactTable({
@@ -569,6 +573,20 @@ export function FeeScheduleTable({
     }))
   }
 
+  // Context menu handler for column toggle
+  const handleContextMenuColumnToggle = async (feeCode: string, isChecked: boolean) => {
+    try {
+      const currentCodes = preferences.fee_schedule_column_codes || []
+      const newCodes = isChecked 
+        ? [...currentCodes, feeCode]
+        : currentCodes.filter(code => code !== feeCode)
+      
+      await updatePreferences({ fee_schedule_column_codes: newCodes })
+    } catch (error) {
+      console.error('Failed to update column visibility:', error)
+    }
+  }
+
   // Loading state
   if (isLoading) {
     return (
@@ -632,42 +650,57 @@ export function FeeScheduleTable({
           tableLayout: 'fixed',
           width: '100%'
         }}>
-        <TableHeader>
-          {table.getHeaderGroups().map(headerGroup => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map(header => {
-                                 // Define column-specific classes with consistent width styles
-                 let headerClassName = ''
-                 let headerStyle = {}
-                 if (header.id.startsWith('fee_')) {
-                   headerClassName = 'hidden md:table-cell text-center px-2 py-2'
-                   headerStyle = { width: '12%' }
-                 } else if (header.id === 'expander') {
-                   headerClassName = 'px-2 py-2'
-                   headerStyle = { width: '8%' }
-                 } else if (header.id === 'name') {
-                   headerClassName = 'px-3 py-2'
-                   headerStyle = { width: '30%' }
-                 } else if (header.id === 'min_fuel') {
-                   headerClassName = 'text-center px-2 py-2'
-                   headerStyle = { width: '12%' }
-                 } else if (header.id === 'actions') {
-                   headerClassName = 'text-right pl-3 pr-1 py-2'
-                   headerStyle = { width: '14%' }
-                 }
-                
-                return (
-                  <TableHead key={header.id} className={headerClassName} style={headerStyle}>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())
-                    }
-                  </TableHead>
-                )
-              })}
-            </TableRow>
-          ))}
-        </TableHeader>
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <TableHeader>
+              {table.getHeaderGroups().map(headerGroup => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map(header => {
+                                     // Define column-specific classes with consistent width styles
+                     let headerClassName = ''
+                     let headerStyle = {}
+                     if (header.id.startsWith('fee_')) {
+                       headerClassName = 'hidden md:table-cell text-center px-2 py-2'
+                       headerStyle = { width: '12%' }
+                     } else if (header.id === 'expander') {
+                       headerClassName = 'px-2 py-2'
+                       headerStyle = { width: '8%' }
+                     } else if (header.id === 'name') {
+                       headerClassName = 'px-3 py-2'
+                       headerStyle = { width: '30%' }
+                     } else if (header.id === 'min_fuel') {
+                       headerClassName = 'text-center px-2 py-2'
+                       headerStyle = { width: '12%' }
+                     } else if (header.id === 'actions') {
+                       headerClassName = 'text-right pl-3 pr-1 py-2'
+                       headerStyle = { width: '14%' }
+                     }
+                    
+                    return (
+                      <TableHead key={header.id} className={headerClassName} style={headerStyle}>
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())
+                        }
+                      </TableHead>
+                    )
+                  })}
+                </TableRow>
+              ))}
+            </TableHeader>
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            {globalData?.fee_rules?.map((rule) => (
+              <ContextMenuCheckboxItem
+                key={rule.id}
+                checked={preferences.fee_schedule_column_codes?.includes(rule.fee_code) || false}
+                onCheckedChange={(checked) => handleContextMenuColumnToggle(rule.fee_code, checked)}
+              >
+                {rule.fee_name}
+              </ContextMenuCheckboxItem>
+            ))}
+          </ContextMenuContent>
+        </ContextMenu>
         <TableBody>
           {table.getRowModel().rows.map(row => (
             <React.Fragment key={row.id}>
@@ -705,9 +738,7 @@ export function FeeScheduleTable({
                         const rowData = row.original as AircraftRowData
                         const feeRuleId = cell.column.id.replace('fee_', '')
                         const feeDetail = rowData.fees?.[feeRuleId]
-                        return viewMode === 'caa' 
-                          ? feeDetail?.is_caa_aircraft_override 
-                          : feeDetail?.is_aircraft_override
+                        return feeDetail?.is_aircraft_override
                       })()
                     : false
 
@@ -758,7 +789,6 @@ export function FeeScheduleTable({
         open={showViewAircraftDialog}
         onOpenChange={setShowViewAircraftDialog}
         feeRules={primaryFeeRules}
-        viewMode={viewMode}
       />
 
       {/* Move Aircraft Dialog */}

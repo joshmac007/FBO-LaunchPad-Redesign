@@ -65,6 +65,16 @@ class UserPreferencesSchema(Schema):
     show_classification_defaults = fields.Boolean(
         missing=True
     )
+    dismissed_tooltips = fields.List(
+        fields.String(),
+        required=False,
+        missing=[]
+    )
+    fee_schedule_column_codes = fields.List(
+        fields.String(),
+        required=False,
+        missing=[]
+    )
 
 class ErrorResponseSchema(Schema):
     """Schema for error responses."""

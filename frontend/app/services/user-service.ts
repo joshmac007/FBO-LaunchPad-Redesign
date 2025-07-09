@@ -91,7 +91,15 @@ export async function getActiveLSTs(): Promise<User[]> {
       email: briefUser.email,
       roles: [{ id: 0, name: briefUser.role }], // Brief response only has role string
       is_active: briefUser.is_active,
-      created_at: undefined // Not included in brief response
+      created_at: undefined, // Not included in brief response
+      preferences: { // Default preferences for brief user response
+        fee_schedule_view_size: 'standard',
+        fee_schedule_sort_order: 'alphabetical',
+        highlight_overrides: true,
+        show_classification_defaults: true,
+        dismissed_tooltips: [],
+        fee_schedule_column_codes: []
+      }
     }))
 
     return users
@@ -209,5 +217,20 @@ export async function updateUserPreferences(preferences: Partial<UserPreferences
     headers: getAuthHeaders(),
     body: JSON.stringify(preferences),
   })
-  return handleApiResponse<UserPreferencesResponse>(response)
+  const data = await handleApiResponse<UserPreferencesResponse>(response)
+  
+  // Update the user object in localStorage with the new preferences
+  // so they persist across page refreshes
+  const userData = localStorage.getItem("fboUser")
+  if (userData) {
+    try {
+      const user = JSON.parse(userData)
+      user.preferences = data.preferences
+      localStorage.setItem("fboUser", JSON.stringify(user))
+    } catch (error) {
+      console.error("Failed to update user preferences in localStorage:", error)
+    }
+  }
+  
+  return data
 }

@@ -780,7 +780,10 @@ class UserService:
             existing_preferences = user.preferences or {
                 'fee_schedule_view_size': 'standard',
                 'fee_schedule_sort_order': 'alphabetical',
-                'highlight_overrides': True
+                'highlight_overrides': True,
+                'show_classification_defaults': True,
+                'dismissed_tooltips': [],
+                'fee_schedule_column_codes': []
             }
             
             # Merge validated data into existing preferences

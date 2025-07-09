@@ -14,8 +14,10 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { PlusIcon, PencilIcon, TrashIcon } from "lucide-react"
 import { toast } from "sonner"
+import { useUserPreferences } from "@/app/contexts/user-preferences-context"
 import { 
   getFeeRules, 
   createFeeRule, 
@@ -35,6 +37,7 @@ interface FeeRuleFormDialogProps {
 
 function FeeRuleFormDialog({ open, onOpenChange, feeRule }: FeeRuleFormDialogProps) {
   const queryClient = useQueryClient()
+  const { preferences, updatePreferences } = useUserPreferences()
   const isEdit = !!feeRule
 
   const form = useForm<FeeRuleFormData>({
@@ -50,6 +53,7 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule }: FeeRuleFormDialogPro
       calculation_basis: "FIXED_PRICE",
       waiver_strategy: "NONE",
       has_caa_override: false,
+      display_as_column: false,
     },
   })
 
@@ -71,6 +75,8 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule }: FeeRuleFormDialogPro
         caa_override_amount: feeRule.caa_override_amount,
         caa_waiver_strategy_override: feeRule.caa_waiver_strategy_override,
         caa_simple_waiver_multiplier_override: feeRule.caa_simple_waiver_multiplier_override,
+        // Set display_as_column based on current user preferences
+        display_as_column: preferences.fee_schedule_column_codes?.includes(feeRule.fee_code) || false,
       });
     } else {
       form.reset({
@@ -88,14 +94,30 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule }: FeeRuleFormDialogPro
         caa_override_amount: undefined,
         caa_waiver_strategy_override: undefined,
         caa_simple_waiver_multiplier_override: undefined,
+        display_as_column: false,
       });
     }
-  }, [feeRule, form])
+  }, [feeRule, form, preferences.fee_schedule_column_codes])
 
   const createMutation = useMutation({
-    mutationFn: createFeeRule,
-    onSuccess: () => {
+    mutationFn: ({ apiData, originalData }: { apiData: any, originalData: FeeRuleFormData }) => {
+      return createFeeRule(apiData)
+    },
+    onSuccess: async (newFeeRule, { originalData }) => {
       queryClient.invalidateQueries({ queryKey: ['fee-rules'] })
+      queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
+      
+      // Handle display_as_column preference
+      if (originalData.display_as_column) {
+        try {
+          const currentCodes = preferences.fee_schedule_column_codes || []
+          const newCodes = [...currentCodes, originalData.fee_code]
+          await updatePreferences({ fee_schedule_column_codes: newCodes })
+        } catch (error) {
+          console.error('Failed to update column preferences:', error)
+        }
+      }
+      
       onOpenChange(false)
       form.reset()
       toast.success("Fee type created successfully")
@@ -106,9 +128,31 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule }: FeeRuleFormDialogPro
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: UpdateFeeRuleRequest }) => updateFeeRule(id, data),
-    onSuccess: () => {
+    mutationFn: ({ id, apiData, originalData }: { id: number; apiData: UpdateFeeRuleRequest; originalData: FeeRuleFormData }) => updateFeeRule(id, apiData),
+    onSuccess: async (updatedFeeRule, { originalData }) => {
       queryClient.invalidateQueries({ queryKey: ['fee-rules'] })
+      queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
+      
+      // Handle display_as_column preference for updates
+      if (originalData.display_as_column !== undefined && originalData.fee_code) {
+        try {
+          const currentCodes = preferences.fee_schedule_column_codes || []
+          const shouldDisplay = originalData.display_as_column
+          const currentlyDisplayed = currentCodes.includes(originalData.fee_code)
+
+          // Only update preferences if there's a change
+          if (shouldDisplay !== currentlyDisplayed) {
+            const newCodes = shouldDisplay 
+              ? [...currentCodes, originalData.fee_code]
+              : currentCodes.filter(code => code !== originalData.fee_code)
+            
+            await updatePreferences({ fee_schedule_column_codes: newCodes })
+          }
+        } catch (error) {
+          console.error('Failed to update column preferences:', error)
+        }
+      }
+      
       onOpenChange(false)
       toast.success("Fee type updated successfully")
     },
@@ -118,10 +162,20 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule }: FeeRuleFormDialogPro
   })
 
   const onSubmit = (data: FeeRuleFormData) => {
+    // Extract display_as_column from data before sending to API
+    const { display_as_column, ...apiData } = data
+    
     if (isEdit && feeRule) {
-      updateMutation.mutate({ id: feeRule.id, data: data as UpdateFeeRuleRequest })
+      updateMutation.mutate({ 
+        id: feeRule.id, 
+        apiData: apiData as UpdateFeeRuleRequest, 
+        originalData: data 
+      })
     } else {
-      createMutation.mutate(data as CreateFeeRuleRequest)
+      createMutation.mutate({ 
+        apiData: apiData as CreateFeeRuleRequest, 
+        originalData: data 
+      })
     }
   }
 
@@ -245,6 +299,26 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule }: FeeRuleFormDialogPro
                 )}
               />
 
+              <FormField
+                control={form.control}
+                name="display_as_column"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <FormLabel>Display as Primary Column</FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        {isEdit 
+                          ? "Toggle whether this fee appears as a column in the main fee schedule table"
+                          : "Show this fee as a column in the main fee schedule table"
+                        }
+                      </div>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
 
             </div>
 
@@ -265,6 +339,7 @@ function FeeRuleFormDialog({ open, onOpenChange, feeRule }: FeeRuleFormDialogPro
 
 export function FeeLibraryTab() {
   const queryClient = useQueryClient()
+  const { preferences, updatePreferences } = useUserPreferences()
   const [formDialogOpen, setFormDialogOpen] = useState(false)
   const [editingFeeRule, setEditingFeeRule] = useState<FeeRule | undefined>()
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<number | null>(null)
@@ -307,6 +382,20 @@ export function FeeLibraryTab() {
     deleteMutation.mutate(feeRuleId)
   }
 
+  const handleColumnToggle = async (feeCode: string, isChecked: boolean) => {
+    try {
+      const currentCodes = preferences.fee_schedule_column_codes || []
+      const newCodes = isChecked 
+        ? [...currentCodes, feeCode]
+        : currentCodes.filter(code => code !== feeCode)
+      
+      await updatePreferences({ fee_schedule_column_codes: newCodes })
+      toast.success(`Column ${isChecked ? 'enabled' : 'disabled'} successfully`)
+    } catch (error) {
+      toast.error('Failed to update column visibility')
+    }
+  }
+
 
   return (
     <div className="space-y-6 p-6">
@@ -338,6 +427,7 @@ export function FeeLibraryTab() {
                   <TableHead>Code</TableHead>
                   <TableHead>Default Amount</TableHead>
                   <TableHead>Can Be Waived?</TableHead>
+                  <TableHead>Displayed as Column</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -355,6 +445,17 @@ export function FeeLibraryTab() {
                       ) : (
                         <Badge variant="secondary">No</Badge>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          checked={preferences.fee_schedule_column_codes?.includes(rule.fee_code) || false}
+                          onCheckedChange={(checked) => handleColumnToggle(rule.fee_code, checked as boolean)}
+                        />
+                        <span className="text-sm text-muted-foreground">
+                          {preferences.fee_schedule_column_codes?.includes(rule.fee_code) ? "Visible" : "Hidden"}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex space-x-2">

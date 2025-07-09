@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { GripVerticalIcon, TrashIcon, PlusIcon, EditIcon, FuelIcon, InfoIcon } from "lucide-react"
 import { toast } from "sonner"
+import { DismissibleTooltip } from "@/components/ui/dismissible-tooltip"
 import { 
   getWaiverTiers, 
   getFeeRules,
@@ -336,20 +337,18 @@ export function WaiverSystemTab() {
       {/* Header with explanation */}
       <div className="space-y-2">
         <h2 className="text-2xl font-bold">Fuel-Based Fee Waivers</h2>
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <InfoIcon className="h-5 w-5 text-blue-600 mt-0.5" />
-            <div className="space-y-2">
-              <p className="font-medium text-blue-900">How it works:</p>
-              <ul className="text-sm text-blue-800 space-y-1">
-                <li>• Each aircraft type has a minimum fuel requirement (e.g., 200 gallons for a Citation)</li>
-                <li>• You can create rules that waive fees when customers purchase minimum fuel or more</li>
-                <li>• You can also waive additional fees when they purchase multiples of minimum fuel (e.g., 1.5× or 2×)</li>
-                <li>• Rules are checked in order - the first matching rule applies</li>
-              </ul>
-            </div>
-          </div>
-        </div>
+        <DismissibleTooltip
+          id="fuel-waiver-how-it-works"
+          variant="info"
+          title="How it works:"
+        >
+          <ul className="space-y-1">
+            <li>• Each aircraft type has a minimum fuel requirement (e.g., 200 gallons for a Citation)</li>
+            <li>• You can create rules that waive fees when customers purchase minimum fuel or more</li>
+            <li>• You can also waive additional fees when they purchase multiples of minimum fuel (e.g., 1.5× or 2×)</li>
+            <li>• Rules are checked in order - the first matching rule applies</li>
+          </ul>
+        </DismissibleTooltip>
       </div>
 
       {/* Active Waiver Rules */}

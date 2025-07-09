@@ -79,6 +79,7 @@ const FeeEditForm = ({
 interface EditableFeeCellProps {
   value: number | null
   isAircraftOverride: boolean
+  isClassificationDefault?: boolean
   onSave: (newValue: number) => void
   onRevert?: () => void
   disabled?: boolean
@@ -90,6 +91,7 @@ interface EditableFeeCellProps {
 export function EditableFeeCell({
   value,
   isAircraftOverride,
+  isClassificationDefault = false,
   onSave,
   onRevert,
   disabled = false,
@@ -135,7 +137,9 @@ export function EditableFeeCell({
           "text-sm",
           isAircraftOverride 
             ? (highlightOverrides ? "font-semibold text-foreground" : "text-foreground")
-            : "italic text-muted-foreground"
+            : isClassificationDefault
+              ? "font-semibold text-foreground"
+              : "italic text-muted-foreground"
         )}
       >
         {displayValue}

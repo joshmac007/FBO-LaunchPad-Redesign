@@ -6,13 +6,11 @@ import { GlobalFeeRule } from '@/app/services/admin-fee-config-service';
 interface ExpandedFeeDetailsProps {
   row: Row<TableRowData>;
   feeColumns: GlobalFeeRule[];
-  viewMode: 'standard' | 'caa';
 }
 
 export const ExpandedFeeDetails: React.FC<ExpandedFeeDetailsProps> = ({ 
   row, 
-  feeColumns, 
-  viewMode 
+  feeColumns 
 }) => {
   // Ensure we're dealing with an aircraft row
   if (row.original.type !== 'aircraft') {
@@ -29,15 +27,12 @@ export const ExpandedFeeDetails: React.FC<ExpandedFeeDetailsProps> = ({
           const feeInfo = aircraftData.fees[rule.id.toString()];
           if (!feeInfo) return null;
           
-          const displayValue = viewMode === 'caa' 
-            ? feeInfo.final_caa_display_value 
-            : feeInfo.final_display_value;
+          const displayValue = feeInfo.final_display_value;
           
           return (
             <li key={rule.id} className="flex flex-col">
               <span className="text-sm text-muted-foreground">
                 {rule.fee_name}
-                {viewMode === 'caa' && rule.has_caa_override && ' (CAA)'}
               </span>
               <span className="font-medium">${displayValue.toFixed(2)}</span>
             </li>

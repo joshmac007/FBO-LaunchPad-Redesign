@@ -16,7 +16,6 @@ interface ViewAircraftDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   feeRules: GlobalFeeRule[];
-  viewMode: 'standard' | 'caa';
 }
 
 export const ViewAircraftDetailsDialog: React.FC<ViewAircraftDetailsDialogProps> = ({
@@ -24,7 +23,6 @@ export const ViewAircraftDetailsDialog: React.FC<ViewAircraftDetailsDialogProps>
   open,
   onOpenChange,
   feeRules,
-  viewMode,
 }) => {
   if (!aircraft) return null;
 
@@ -67,7 +65,7 @@ export const ViewAircraftDetailsDialog: React.FC<ViewAircraftDetailsDialogProps>
           {/* Fee Schedule */}
           <div>
             <h3 className="text-lg font-semibold mb-3">
-              Fee Schedule {viewMode === 'caa' && <Badge variant="secondary">CAA View</Badge>}
+              Fee Schedule
             </h3>
             <div className="space-y-3">
               {feeRules.map(rule => {
@@ -92,15 +90,9 @@ export const ViewAircraftDetailsDialog: React.FC<ViewAircraftDetailsDialogProps>
                   );
                 }
 
-                const displayValue = viewMode === 'caa' 
-                  ? feeDetail.final_caa_display_value 
-                  : feeDetail.final_display_value;
-                const isOverride = viewMode === 'caa'
-                  ? feeDetail.is_caa_aircraft_override
-                  : feeDetail.is_aircraft_override;
-                const revertValue = viewMode === 'caa'
-                  ? feeDetail.revert_to_caa_value
-                  : feeDetail.revert_to_value;
+                const displayValue = feeDetail.final_display_value;
+                const isOverride = feeDetail.is_aircraft_override;
+                const revertValue = feeDetail.revert_to_value;
 
                 return (
                   <div key={rule.id} className="p-3 border rounded-lg">
@@ -111,11 +103,6 @@ export const ViewAircraftDetailsDialog: React.FC<ViewAircraftDetailsDialogProps>
                           {isOverride && (
                             <Badge variant="outline" className="text-xs">
                               Aircraft Override
-                            </Badge>
-                          )}
-                          {viewMode === 'caa' && rule.has_caa_override && (
-                            <Badge variant="secondary" className="text-xs">
-                              CAA
                             </Badge>
                           )}
                         </div>

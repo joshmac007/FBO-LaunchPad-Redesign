@@ -33,6 +33,7 @@ export function FeeScheduleSettingsTab() {
     queryFn: () => getFeeScheduleVersions(),
   })
 
+
   // Form for creating new version
   const form = useForm<FeeScheduleVersionFormData>({
     resolver: zodResolver(feeScheduleVersionSchema),
@@ -94,6 +95,7 @@ export function FeeScheduleSettingsTab() {
       console.error('Failed to update highlight overrides preference:', error);
     }
   };
+
 
   const handleCreateVersion = (data: FeeScheduleVersionFormData) => {
     createVersionMutation.mutate(data)

@@ -6,10 +6,11 @@ import { Toaster } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Upload, Settings, Search, Plane } from "lucide-react"
+import { Upload, Settings, Search, Plane, Eye, EyeOff } from "lucide-react"
 import { FeeScheduleTable } from "./components/FeeScheduleTable"
 import { ScheduleRulesDialog } from "./components/ScheduleRulesDialog"
 import { getGlobalFeeSchedule } from "@/app/services/admin-fee-config-service"
+import { useUserPreferences } from "@/app/contexts/user-preferences-context"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,21 +26,33 @@ const queryClient = new QueryClient({
 
 function FeeManagementContent() {
   const [searchTerm, setSearchTerm] = useState("")
-  const [viewMode, setViewMode] = useState<'standard' | 'caa'>('standard')
   const [showScheduleRulesDialog, setShowScheduleRulesDialog] = useState(false)
+  const { preferences, updatePreferences } = useUserPreferences()
+  
   // Fetch global fee schedule data (no FBO ID needed)
   const { data: globalData } = useQuery({
     queryKey: ['global-fee-schedule'],
     queryFn: () => getGlobalFeeSchedule(),
   })
 
-  // All fee rules are now displayed as columns in the three-tier system
+  // Filter fee rules based on user preference
   const primaryFeeRules = useMemo(() => {
-    return globalData?.fee_rules || []
-  }, [globalData])
+    if (!globalData?.fee_rules) return []
+    
+    // If no preference set, show all rules (existing behavior)
+    if (!preferences.fee_schedule_column_codes || preferences.fee_schedule_column_codes.length === 0) {
+      return globalData.fee_rules
+    }
+    
+    // Filter based on user preference
+    return globalData.fee_rules.filter(rule => 
+      preferences.fee_schedule_column_codes.includes(rule.fee_code)
+    )
+  }, [globalData?.fee_rules, preferences.fee_schedule_column_codes])
 
-  const handleToggleCAA = () => {
-    setViewMode(prev => prev === 'standard' ? 'caa' : 'standard')
+
+  const handleToggleClassificationDefaults = () => {
+    updatePreferences({ show_classification_defaults: !preferences.show_classification_defaults })
   }
 
   return (
@@ -55,23 +68,24 @@ function FeeManagementContent() {
 
       {/* Action Toolbar */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            Pricing Tools
-          </CardTitle>
-          <CardDescription>
-            Configure fee rules, customize your pricing display, and manage imports/exports
-          </CardDescription>
-        </CardHeader>
         <CardContent>
           <div className="flex items-center gap-4 flex-wrap">
             <Button
-              variant={viewMode === 'caa' ? 'default' : 'outline'}
-              onClick={handleToggleCAA}
+              variant={preferences.show_classification_defaults ? 'outline' : 'default'}
+              onClick={handleToggleClassificationDefaults}
               className="flex items-center gap-2"
             >
-              {viewMode === 'caa' ? 'Switch to Standard View' : 'Switch to International View'}
+              {preferences.show_classification_defaults ? (
+                <>
+                  <EyeOff className="h-4 w-4" />
+                  Hide Classification Defaults
+                </>
+              ) : (
+                <>
+                  <Eye className="h-4 w-4" />
+                  Show Classification Defaults
+                </>
+              )}
             </Button>
 
             <Button
@@ -110,9 +124,9 @@ function FeeManagementContent() {
         <CardContent>
           <FeeScheduleTable
             searchTerm={searchTerm}
-            viewMode={viewMode}
             primaryFeeRules={primaryFeeRules}
             globalData={globalData}
+            showClassificationDefaults={preferences.show_classification_defaults}
           />
         </CardContent>
       </Card>

@@ -19,6 +19,7 @@ export const feeRuleSchema = z.object({
   caa_override_amount: z.number().min(0).optional().nullable(),
   caa_waiver_strategy_override: z.enum(['NONE', 'SIMPLE_MULTIPLIER', 'TIERED_MULTIPLIER']).optional().nullable(),
   caa_simple_waiver_multiplier_override: z.number().min(0).optional().nullable(),
+  display_as_column: z.boolean().optional().default(false),
 });
 
 export type FeeRuleFormData = z.infer<typeof feeRuleSchema>;
