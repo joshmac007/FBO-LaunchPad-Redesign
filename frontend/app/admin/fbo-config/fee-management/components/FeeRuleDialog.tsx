@@ -45,7 +45,7 @@ const feeRuleSchema = z.object({
       message: "Must be a valid number greater than or equal to 0"
     }),
   is_taxable: z.boolean(),
-  is_potentially_waivable_by_fuel_uplift: z.boolean(),
+  is_manually_waivable: z.boolean(),
   calculation_basis: z.enum(['FIXED_PRICE', 'PER_UNIT_SERVICE', 'NOT_APPLICABLE']),
   waiver_strategy: z.enum(['NONE', 'SIMPLE_MULTIPLIER', 'TIERED_MULTIPLIER']),
   simple_waiver_multiplier: z.string().optional(),
@@ -83,7 +83,7 @@ export function FeeRuleDialog({
       fee_code: initialData?.fee_code || "",
       amount: initialData?.amount?.toString() || defaultValues.amount?.toString() || "",
       is_taxable: initialData?.is_taxable ?? defaultValues.is_taxable ?? true,
-      is_potentially_waivable_by_fuel_uplift: initialData?.is_potentially_waivable_by_fuel_uplift ?? defaultValues.is_potentially_waivable_by_fuel_uplift ?? false,
+      is_manually_waivable: initialData?.is_manually_waivable ?? defaultValues.is_manually_waivable ?? false,
       calculation_basis: initialData?.calculation_basis || defaultValues.calculation_basis || 'FIXED_PRICE',
       waiver_strategy: initialData?.waiver_strategy || defaultValues.waiver_strategy || 'NONE',
       simple_waiver_multiplier: initialData?.simple_waiver_multiplier?.toString() || defaultValues.simple_waiver_multiplier?.toString() || "",
@@ -106,7 +106,7 @@ export function FeeRuleDialog({
           fee_code: "",
           amount: defaultValues.amount?.toString() || "",
           is_taxable: defaultValues.is_taxable ?? true,
-          is_potentially_waivable_by_fuel_uplift: defaultValues.is_potentially_waivable_by_fuel_uplift ?? false,
+          is_manually_waivable: defaultValues.is_manually_waivable ?? false,
           calculation_basis: defaultValues.calculation_basis || 'FIXED_PRICE',
           waiver_strategy: defaultValues.waiver_strategy || 'NONE',
           simple_waiver_multiplier: defaultValues.simple_waiver_multiplier?.toString() || "",
@@ -123,7 +123,7 @@ export function FeeRuleDialog({
           fee_code: initialData.fee_code,
           amount: initialData.amount?.toString() || "",
           is_taxable: initialData.is_taxable,
-          is_potentially_waivable_by_fuel_uplift: initialData.is_potentially_waivable_by_fuel_uplift,
+          is_manually_waivable: initialData.is_manually_waivable,
           calculation_basis: initialData.calculation_basis,
           waiver_strategy: initialData.waiver_strategy || 'NONE',
           simple_waiver_multiplier: initialData.simple_waiver_multiplier?.toString() || "",
@@ -300,7 +300,7 @@ export function FeeRuleDialog({
 
                 <FormField
                   control={form.control}
-                  name="is_potentially_waivable_by_fuel_uplift"
+                  name="is_manually_waivable"
                   render={({ field }) => (
                     <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                       <FormControl>
@@ -310,9 +310,9 @@ export function FeeRuleDialog({
                         />
                       </FormControl>
                       <div className="space-y-1 leading-none">
-                        <FormLabel>Waivable by Fuel Uplift</FormLabel>
+                        <FormLabel>Enable Manual Waiver</FormLabel>
                         <p className="text-sm text-muted-foreground">
-                          This fee can be waived based on fuel uplift amounts
+                          Allow CSRs to manually waive this fee on draft receipts
                         </p>
                       </div>
                     </FormItem>

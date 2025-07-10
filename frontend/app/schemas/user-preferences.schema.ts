@@ -7,7 +7,7 @@ export const userPreferencesSchema = z.object({
   highlight_overrides: z.boolean().default(true),
   show_classification_defaults: z.boolean().default(true),
   dismissed_tooltips: z.array(z.string()).default([]),
-  fee_schedule_column_codes: z.array(z.string()).default([]),
+  fee_schedule_column_codes: z.array(z.string()).optional(),
 });
 
 export type UserPreferences = z.infer<typeof userPreferencesSchema>;

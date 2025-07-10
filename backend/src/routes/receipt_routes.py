@@ -538,7 +538,7 @@ def get_available_services():
                 'fee_name': rule['fee_name'],
                 'is_taxable': rule['is_taxable'],
                 'currency': rule['currency'],
-                'is_potentially_waivable_by_fuel_uplift': rule['is_potentially_waivable_by_fuel_uplift']
+                'is_manually_waivable': rule['is_manually_waivable']
             }
             for rule in fee_rules
         ]

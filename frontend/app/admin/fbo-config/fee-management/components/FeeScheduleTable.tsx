@@ -230,59 +230,40 @@ export function FeeScheduleTable({
 
   // Create columns for react-table
   const columns = useMemo(() => [
-    // Expander column
-    columnHelper.display({
-      id: 'expander',
-      header: () => null,
-      cell: ({ row }) => {
-        const rowData = row.original;
-        
-        // Classification rows have their own collapse/expand logic
-        if (rowData.type === 'classification') {
-          return (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => toggleClassificationCollapse(rowData.classification_id)}
-              className="h-8 w-8"
-              aria-label="Toggle classification"
-            >
-              {collapsedClassifications[rowData.classification_id] ? 
-                <ChevronDown className="h-4 w-4" /> : 
-                <ChevronUp className="h-4 w-4" />
-              }
-            </Button>
-          );
-        }
-        
-        // Aircraft rows don't have expanders anymore
-        if (rowData.type === 'aircraft') {
-          return null;
-        }
-        
-        return null;
-      },
-    }),
     // Aircraft Type / Classification Name column
     columnHelper.display({
       id: 'name',
-      header: 'Aircraft Type',
+      header: 'AIRCRAFT TYPE',
       cell: ({ row }) => {
         const rowData = row.original;
         
         if (rowData.type === 'classification') {
           return (
-            <div className="font-semibold">
-              {rowData.classification_name}
-              <span className="text-sm text-muted-foreground font-normal ml-2">
-                ({rowData.aircraft_count} aircraft)
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => toggleClassificationCollapse(rowData.classification_id)}
+                className="h-6 w-6 p-0"
+                aria-label="Toggle classification"
+              >
+                {collapsedClassifications[rowData.classification_id] ? 
+                  <ChevronDown className="h-4 w-4" /> : 
+                  <ChevronUp className="h-4 w-4" />
+                }
+              </Button>
+              <span className="font-semibold">
+                {rowData.classification_name}
+                <span className="text-sm text-muted-foreground font-normal ml-2">
+                  ({rowData.aircraft_count})
+                </span>
               </span>
             </div>
           );
         }
         
         if (rowData.type === 'aircraft') {
-          return <span>{rowData.aircraft_type_name}</span>;
+          return <span className="ml-8">{rowData.aircraft_type_name}</span>;
         }
         
         return null;
@@ -291,15 +272,11 @@ export function FeeScheduleTable({
     // Min Fuel column
     columnHelper.display({
       id: 'min_fuel',
-      header: 'Min Fuel',
+      header: 'MIN FUEL',
       cell: ({ row }) => {
         const rowData = row.original;
         
         if (rowData.type === 'classification') {
-          // If showClassificationDefaults is false, render empty cell
-          if (!showClassificationDefaults) {
-            return null;
-          }
           return null;
         }
         
@@ -322,13 +299,12 @@ export function FeeScheduleTable({
     ...primaryFeeRules.map(rule => 
       columnHelper.display({
         id: `fee_${rule.id}`,
-        header: () => rule.fee_name,
+        header: () => rule.fee_name.toUpperCase(),
         cell: ({ row }) => {
           const rowData = row.original;
           
-          // Classification rows now have editable fee cells
+          // Classification rows - only show values if showClassificationDefaults is true
           if (rowData.type === 'classification') {
-            // If showClassificationDefaults is false, render empty cell
             if (!showClassificationDefaults) {
               return null;
             }
@@ -412,31 +388,26 @@ export function FeeScheduleTable({
     // Actions column
     columnHelper.display({
       id: 'actions',
-      header: 'Actions',
+      header: '',
       cell: ({ row }) => {
         const rowData = row.original;
         
-        // Classification rows have only add aircraft button
+        // Classification rows have add button
         if (rowData.type === 'classification') {
-          // If showClassificationDefaults is false, render empty cell
-          if (!showClassificationDefaults) {
-            return null;
-          }
-          
           return (
-            <div className="flex items-center gap-1 justify-end">
+            <div className="flex justify-end">
               <Button
                 size="sm"
-                variant="outline"
+                variant="ghost"
                 onClick={(e) => {
                   e.stopPropagation()
                   setAddingToCategory(rowData.classification_id)
                 }}
                 disabled={addingToCategory !== null}
-                className="h-7"
+                className="h-8 w-8 p-0"
                 title="Add Aircraft"
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="h-4 w-4" />
               </Button>
             </div>
           );
@@ -448,50 +419,50 @@ export function FeeScheduleTable({
             <div className="flex justify-end">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSelectedAircraftToView(rowData)
-                    setShowViewAircraftDialog(true)
-                  }}
-                >
-                  <Eye className="mr-2 h-4 w-4" />
-                  View Details
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSelectedAircraftToMove({
-                      aircraft_type_id: rowData.aircraft_type_id,
-                      aircraft_type_name: rowData.aircraft_type_name,
-                      classification_id: rowData.classification_id
-                    })
-                    setShowMoveAircraftDialog(true)
-                  }}
-                >
-                  <Move className="mr-2 h-4 w-4" />
-                  Move to Category
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSelectedAircraftToDelete({
-                      aircraft_type_id: rowData.aircraft_type_id,
-                      aircraft_type_name: rowData.aircraft_type_name
-                    })
-                    setDeleteDialogView('confirm')
-                    setDeleteError(null)
-                    setShowDeleteDialog(true)
-                  }}
-                  className="text-red-600"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedAircraftToView(rowData)
+                      setShowViewAircraftDialog(true)
+                    }}
+                  >
+                    <Eye className="mr-2 h-4 w-4" />
+                    View Details
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedAircraftToMove({
+                        aircraft_type_id: rowData.aircraft_type_id,
+                        aircraft_type_name: rowData.aircraft_type_name,
+                        classification_id: rowData.classification_id
+                      })
+                      setShowMoveAircraftDialog(true)
+                    }}
+                  >
+                    <Move className="mr-2 h-4 w-4" />
+                    Move to Category
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedAircraftToDelete({
+                        aircraft_type_id: rowData.aircraft_type_id,
+                        aircraft_type_name: rowData.aircraft_type_name
+                      })
+                      setDeleteDialogView('confirm')
+                      setDeleteError(null)
+                      setShowDeleteDialog(true)
+                    }}
+                    className="text-red-600"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           );
         }
@@ -576,7 +547,10 @@ export function FeeScheduleTable({
   // Context menu handler for column toggle
   const handleContextMenuColumnToggle = async (feeCode: string, isChecked: boolean) => {
     try {
-      const currentCodes = preferences.fee_schedule_column_codes || []
+      // If no existing preferences, start with all rule codes (since they're all shown by default)
+      const currentCodes = preferences.fee_schedule_column_codes || 
+        (globalData?.fee_rules?.map(rule => rule.fee_code) ?? [])
+      
       const newCodes = isChecked 
         ? [...currentCodes, feeCode]
         : currentCodes.filter(code => code !== feeCode)
@@ -643,41 +617,34 @@ export function FeeScheduleTable({
 
   return (
     <div className="border rounded-lg">
-      <Table 
-        className="fee-schedule-table w-full table-fixed"
-        data-view-mode={preferences.highlight_overrides ? 'highlight' : 'uniform'}
-        style={{
-          tableLayout: 'fixed',
-          width: '100%'
-        }}>
+      <Table className="w-full">
         <ContextMenu>
           <ContextMenuTrigger asChild>
             <TableHeader>
               {table.getHeaderGroups().map(headerGroup => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map(header => {
-                                     // Define column-specific classes with consistent width styles
-                     let headerClassName = ''
-                     let headerStyle = {}
-                     if (header.id.startsWith('fee_')) {
-                       headerClassName = 'hidden md:table-cell text-center px-2 py-2'
-                       headerStyle = { width: '12%' }
-                     } else if (header.id === 'expander') {
-                       headerClassName = 'px-2 py-2'
-                       headerStyle = { width: '8%' }
-                     } else if (header.id === 'name') {
-                       headerClassName = 'px-3 py-2'
-                       headerStyle = { width: '30%' }
-                     } else if (header.id === 'min_fuel') {
-                       headerClassName = 'text-center px-2 py-2'
-                       headerStyle = { width: '12%' }
-                     } else if (header.id === 'actions') {
-                       headerClassName = 'text-right pl-3 pr-1 py-2'
-                       headerStyle = { width: '14%' }
-                     }
+                    let headerClass = "font-medium text-muted-foreground uppercase text-sm"
+                    let paddingClass = ""
+                    
+                    // Adjust padding for different columns
+                    if (header.id === 'name') {
+                      paddingClass = "px-2 py-3"
+                    } else if (header.id === 'actions') {
+                      paddingClass = "px-2 py-3 text-right"
+                    } else {
+                      paddingClass = "px-2 py-3"
+                    }
+                    
+                    // All columns left aligned except actions
+                    if (header.id === 'actions') {
+                      headerClass += " text-right"
+                    } else {
+                      headerClass += " text-left"
+                    }
                     
                     return (
-                      <TableHead key={header.id} className={headerClassName} style={headerStyle}>
+                      <TableHead key={header.id} className={`${headerClass} ${paddingClass}`}>
                         {header.isPlaceholder
                           ? null
                           : flexRender(header.column.columnDef.header, header.getContext())
@@ -693,7 +660,7 @@ export function FeeScheduleTable({
             {globalData?.fee_rules?.map((rule) => (
               <ContextMenuCheckboxItem
                 key={rule.id}
-                checked={preferences.fee_schedule_column_codes?.includes(rule.fee_code) || false}
+                checked={preferences.fee_schedule_column_codes?.includes(rule.fee_code) ?? true}
                 onCheckedChange={(checked) => handleContextMenuColumnToggle(rule.fee_code, checked)}
               >
                 {rule.fee_name}
@@ -711,47 +678,27 @@ export function FeeScheduleTable({
                   : ''
               }>
                 {row.getVisibleCells().map(cell => {
-                  // Define column-specific classes with matching width styles
-                  let cellClassName = ''
-                  let cellStyle = {}
-                  if (cell.column.id.startsWith('fee_')) {
-                    cellClassName = 'hidden md:table-cell text-center px-2 py-2'
-                    cellStyle = { width: '12%' }
-                  } else if (cell.column.id === 'expander') {
-                    cellClassName = 'px-2 py-2'
-                    cellStyle = { width: '8%' }
-                  } else if (cell.column.id === 'name') {
-                    cellClassName = 'px-3 py-2'
-                    cellStyle = { width: '30%' }
-                  } else if (cell.column.id === 'min_fuel') {
-                    cellClassName = 'text-center px-2 py-2'
-                    cellStyle = { width: '12%' }
+                  let cellClass = ""
+                  let paddingClass = ""
+                  
+                  // Adjust padding for different columns to match headers
+                  if (cell.column.id === 'name') {
+                    paddingClass = "px-2 py-3"
                   } else if (cell.column.id === 'actions') {
-                    cellClassName = 'text-right pl-3 pr-1 py-2'
-                    cellStyle = { width: '14%' }
+                    paddingClass = "px-2 py-3 text-right"
+                  } else {
+                    paddingClass = "px-2 py-3"
                   }
                   
-                  // Check if this is a fee column and if it has override data
-                  const isFeeColumn = cell.column.id.startsWith('fee_')
-                  const isOverride = isFeeColumn && row.original.type === 'aircraft' 
-                    ? (() => {
-                        const rowData = row.original as AircraftRowData
-                        const feeRuleId = cell.column.id.replace('fee_', '')
-                        const feeDetail = rowData.fees?.[feeRuleId]
-                        return feeDetail?.is_aircraft_override
-                      })()
-                    : false
-
+                  // All columns left aligned except actions
+                  if (cell.column.id === 'actions') {
+                    cellClass = "text-right"
+                  } else {
+                    cellClass = "text-left"
+                  }
+                  
                   return (
-                    <TableCell 
-                      key={cell.id} 
-                      className={cn(
-                        cellClassName,
-                        preferences.fee_schedule_view_size === 'compact' && 'h-10 px-2 py-1 text-xs'
-                      )}
-                      style={cellStyle}
-                      data-is-override={isOverride}
-                    >
+                    <TableCell key={cell.id} className={`${cellClass} ${paddingClass}`}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   )
@@ -761,21 +708,17 @@ export function FeeScheduleTable({
               {/* Add Aircraft Row - show after classification rows when adding */}
               {row.original.type === 'classification' && 
                addingToCategory === row.original.classification_id && (
-                <TableRow className="animate-in fade-in duration-300">
-                  <TableCell colSpan={row.getVisibleCells().length}>
-                    <NewAircraftTableRow
-                      key={`new-aircraft-${row.original.classification_id}`}
-                      categoryId={row.original.classification_id}
-                      feeColumns={primaryFeeRules.map(rule => rule.fee_code)}
-                      primaryFeeRules={primaryFeeRules}
-                      onSuccess={() => {
-                        setAddingToCategory(null)
-                        queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
-                      }}
-                      onCancel={() => setAddingToCategory(null)}
-                    />
-                  </TableCell>
-                </TableRow>
+                <NewAircraftTableRow
+                  key={`new-aircraft-${row.original.classification_id}`}
+                  categoryId={row.original.classification_id}
+                  feeColumns={primaryFeeRules.map(rule => rule.fee_code)}
+                  primaryFeeRules={primaryFeeRules}
+                  onSuccess={() => {
+                    setAddingToCategory(null)
+                    queryClient.invalidateQueries({ queryKey: ['global-fee-schedule'] })
+                  }}
+                  onCancel={() => setAddingToCategory(null)}
+                />
               )}
 
             </React.Fragment>

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -24,150 +24,83 @@ import {
 } from "@/app/services/admin-fee-config-service"
 import { classificationSchema, type ClassificationFormData } from "@/app/schemas/classification.schema"
 
-interface EditableClassificationRowProps {
-  classification: AircraftClassification
-  onSave: (id: number, name: string) => void
-  onCancel: () => void
-  onDelete: (id: number) => void
-  isUpdating: boolean
+interface ClassificationRowProps {
+  classification: AircraftClassification;
+  isDeletable: boolean;
+  isEditing: boolean;
+  isUpdating: boolean;
+  onEdit: (id: number) => void;
+  onSave: (id: number, name: string) => void;
+  onCancel: () => void;
+  onDelete: (classification: AircraftClassification) => void;
 }
 
-function EditableClassificationRow({ 
-  classification, 
-  onSave, 
-  onCancel, 
-  onDelete, 
-  isUpdating 
-}: EditableClassificationRowProps) {
-  const [name, setName] = useState(classification.name)
+function UnifiedClassificationRow({
+  classification,
+  isDeletable,
+  isEditing,
+  isUpdating,
+  onEdit,
+  onSave,
+  onCancel,
+  onDelete,
+}: ClassificationRowProps) {
+  const [name, setName] = useState(classification.name);
 
   const handleSave = () => {
     if (name.trim() && name !== classification.name) {
-      onSave(classification.id, name.trim())
+      onSave(classification.id, name.trim());
     } else {
-      onCancel()
+      onCancel();
     }
-  }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      handleSave()
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      onCancel()
-    }
+    if (e.key === 'Enter') e.preventDefault(), handleSave();
+    if (e.key === 'Escape') e.preventDefault(), onCancel();
+  };
+
+  if (isEditing) {
+    return (
+      <TableRow>
+        <TableCell>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isUpdating}
+            autoFocus
+          />
+        </TableCell>
+        <TableCell>
+          <div className="flex space-x-2">
+            <Button variant="outline" size="sm" onClick={handleSave} disabled={isUpdating || !name.trim()}>
+              <CheckIcon className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={onCancel} disabled={isUpdating}>
+              <XIcon className="h-4 w-4" />
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+    );
   }
 
-  return (
-    <TableRow>
-      <TableCell>
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={isUpdating}
-          autoFocus
-        />
-      </TableCell>
-      <TableCell>
-        <div className="flex space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSave}
-            disabled={isUpdating || !name.trim()}
-          >
-            <CheckIcon className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onCancel}
-            disabled={isUpdating}
-          >
-            <XIcon className="h-4 w-4" />
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm" disabled={isUpdating}>
-                <TrashIcon className="h-4 w-4" />
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete Classification</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Are you sure you want to delete "{classification.name}"? This action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => onDelete(classification.id)}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </TableCell>
-    </TableRow>
-  )
-}
-
-interface ClassificationRowProps {
-  classification: AircraftClassification
-  onEdit: (id: number) => void
-  onDelete: (id: number) => void
-  isDeletable: boolean
-}
-
-function ClassificationRow({ classification, onEdit, onDelete, isDeletable }: ClassificationRowProps) {
   return (
     <TableRow>
       <TableCell className="font-medium">
         {classification.name}
-        {!isDeletable && (
-          <Badge variant="secondary" className="ml-2">System</Badge>
-        )}
+        {!isDeletable && <Badge variant="secondary" className="ml-2">System</Badge>}
       </TableCell>
       <TableCell>
         <div className="flex space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onEdit(classification.id)}
-          >
+          <Button variant="outline" size="sm" onClick={() => onEdit(classification.id)}>
             <PencilIcon className="h-4 w-4" />
           </Button>
           {isDeletable ? (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <TrashIcon className="h-4 w-4" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete Classification</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Are you sure you want to delete "{classification.name}"? This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => onDelete(classification.id)}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  >
-                    Delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <Button variant="outline" size="sm" onClick={() => onDelete(classification)}>
+              <TrashIcon className="h-4 w-4" />
+            </Button>
           ) : (
             <Button variant="outline" size="sm" disabled>
               <TrashIcon className="h-4 w-4" />
@@ -176,20 +109,24 @@ function ClassificationRow({ classification, onEdit, onDelete, isDeletable }: Cl
         </div>
       </TableCell>
     </TableRow>
-  )
+  );
 }
 
 export function ClassificationsTab() {
   const queryClient = useQueryClient()
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [deletingClassification, setDeletingClassification] = useState<AircraftClassification | null>(null);
 
-  // Fetch aircraft classifications
   const { data: classifications = [], isLoading } = useQuery<AircraftClassification[]>({
     queryKey: ['aircraft-classifications'],
-    queryFn: () => getAircraftClassifications(),
-  })
+    queryFn: getAircraftClassifications,
+  });
 
-  // Form for creating new classification
+  const deletableClassificationIds = useMemo(() => {
+    const systemClassifications = new Set(["General Service Fees", "General"]);
+    return new Set(classifications.filter(c => !systemClassifications.has(c.name)).map(c => c.id));
+  }, [classifications]);
+
   const form = useForm<ClassificationFormData>({
     resolver: zodResolver(classificationSchema),
     defaultValues: {
@@ -197,7 +134,6 @@ export function ClassificationsTab() {
     },
   })
 
-  // Mutations
   const createMutation = useMutation({
     mutationFn: createAircraftClassification,
     onSuccess: () => {
@@ -224,15 +160,30 @@ export function ClassificationsTab() {
     },
   })
 
+  // Simple delete mutation with strict guards
   const deleteMutation = useMutation({
     mutationFn: deleteAircraftClassification,
-    onSuccess: () => {
+    onMutate: async (deletedId: number) => {
+      console.log(`Deleting classification ${deletedId}: ${classifications.find(c => c.id === deletedId)?.name}`)
+      // Close dialog immediately to prevent double clicks
+      setDeletingClassification(null)
+      
+      // Cancel any outgoing refetches (so they don't overwrite our update)
+      await queryClient.cancelQueries({ queryKey: ['aircraft-classifications'] })
+    },
+    onError: (err, deletedId, context) => {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
+      toast.error(`Failed to delete classification: ${errorMessage}`)
+      
+      // Force refresh data to ensure UI is accurate after error
       queryClient.invalidateQueries({ queryKey: ['aircraft-classifications'] })
+    },
+    onSuccess: () => {
       toast.success("Aircraft classification deleted successfully")
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Failed to delete aircraft classification")
-    },
+      
+      // Always refresh data after successful deletion
+      queryClient.invalidateQueries({ queryKey: ['aircraft-classifications'] })
+    }
   })
 
   const handleCreateClassification = (data: ClassificationFormData) => {
@@ -251,15 +202,25 @@ export function ClassificationsTab() {
     updateMutation.mutate({ id, data: { name } })
   }
 
-  const handleDelete = (id: number) => {
-    deleteMutation.mutate(id)
+  const handleDeleteRequest = (classification: AircraftClassification) => {
+    // Only allow opening delete dialog if no deletion is in progress
+    if (!deleteMutation.isPending) {
+      setDeletingClassification(classification);
+    }
   }
 
-  // Determine which classifications can be deleted
-  // Typically, system classifications like "General Service Fees" cannot be deleted
-  const isDeletable = (classification: AircraftClassification) => {
-    const systemClassifications = ["General Service Fees", "General"]
-    return !systemClassifications.includes(classification.name)
+  const handleConfirmDelete = () => {
+    // Triple guard against double requests
+    if (deletingClassification && !deleteMutation.isPending) {
+      console.log(`Deleting classification ${deletingClassification.id}:`, deletingClassification.name)
+      deleteMutation.mutate(deletingClassification.id)
+    }
+  }
+
+  const handleCancelDelete = () => {
+    if (!deleteMutation.isPending) {
+      setDeletingClassification(null)
+    }
   }
 
   return (
@@ -320,30 +281,46 @@ export function ClassificationsTab() {
               </TableHeader>
               <TableBody>
                 {classifications.map((classification) => (
-                  editingId === classification.id ? (
-                    <EditableClassificationRow
-                      key={classification.id}
-                      classification={classification}
-                      onSave={handleEditSave}
-                      onCancel={handleEditCancel}
-                      onDelete={handleDelete}
-                      isUpdating={updateMutation.isPending}
-                    />
-                  ) : (
-                    <ClassificationRow
-                      key={classification.id}
-                      classification={classification}
-                      onEdit={handleEditStart}
-                      onDelete={handleDelete}
-                      isDeletable={isDeletable(classification)}
-                    />
-                  )
+                  <UnifiedClassificationRow
+                    key={classification.id}
+                    classification={classification}
+                    isDeletable={deletableClassificationIds.has(classification.id)}
+                    isEditing={editingId === classification.id}
+                    isUpdating={updateMutation.isPending}
+                    onEdit={handleEditStart}
+                    onSave={handleEditSave}
+                    onCancel={handleEditCancel}
+                    onDelete={handleDeleteRequest}
+                  />
                 ))}
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
+      
+      <AlertDialog open={!!deletingClassification} onOpenChange={(isOpen) => !isOpen && handleCancelDelete()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Classification</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deletingClassification?.name}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelDelete} disabled={deleteMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

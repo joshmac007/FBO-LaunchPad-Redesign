@@ -35,7 +35,7 @@ class TestFeeCalculationServiceHierarchy:
         self.global_fee_rule.fee_name = 'Ramp Fee'
         self.global_fee_rule.currency = 'USD'
         self.global_fee_rule.is_taxable = True
-        self.global_fee_rule.is_potentially_waivable_by_fuel_uplift = True
+        self.global_fee_rule.is_manually_waivable = True
         self.global_fee_rule.calculation_basis = CalculationBasis.FIXED_PRICE
         self.global_fee_rule.waiver_strategy = WaiverStrategy.SIMPLE_MULTIPLIER
         self.global_fee_rule.simple_waiver_multiplier = Decimal('1.0')
@@ -169,7 +169,7 @@ class TestFeeCalculationServiceHierarchy:
             gpu_fee_rule.fee_name = 'GPU Fee'
             gpu_fee_rule.currency = 'USD'
             gpu_fee_rule.is_taxable = True
-            gpu_fee_rule.is_potentially_waivable_by_fuel_uplift = False
+            gpu_fee_rule.is_manually_waivable = False
             gpu_fee_rule.calculation_basis = CalculationBasis.FIXED_PRICE
             gpu_fee_rule.waiver_strategy = WaiverStrategy.NONE
             gpu_fee_rule.simple_waiver_multiplier = None

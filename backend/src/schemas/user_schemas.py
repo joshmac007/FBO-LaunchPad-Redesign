@@ -72,8 +72,7 @@ class UserPreferencesSchema(Schema):
     )
     fee_schedule_column_codes = fields.List(
         fields.String(),
-        required=False,
-        missing=[]
+        required=False
     )
 
 class ErrorResponseSchema(Schema):

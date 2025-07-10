@@ -107,9 +107,9 @@ const ReceiptTableRow = memo(({
       <TableCell>
         {formatDate(receipt.generated_at || receipt.created_at)}
       </TableCell>
-      <TableCell>{receipt.fuel_order_id}</TableCell>
+      <TableCell>{receipt.fuel_order_tail_number || "—"}</TableCell>
       <TableCell>
-        {receipt.customer_id || `Customer: ${receipt.customer_id}`}
+        {receipt.customer_name || `Customer ${receipt.customer_id}`}
       </TableCell>
       <TableCell className="text-right font-medium">
         {formatCurrency(parseFloat(receipt.grand_total_amount))}

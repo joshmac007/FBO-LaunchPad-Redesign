@@ -7,11 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Loader2, ToggleLeft, ToggleRight } from "lucide-react"
 import { ReceiptLineItem } from "@/app/services/receipt-service"
 import { formatCurrency } from "@/app/services/utils"
-import { type AvailableService } from "@/app/services/fee-service"
-
 interface ReceiptLineItemsListProps {
   lineItems: ReceiptLineItem[] | undefined
-  availableServices?: AvailableService[]
   receiptStatus?: string
   onToggleWaiver?: (lineItemId: number) => Promise<void>
   isTogglingWaiver?: number | null // ID of line item currently being toggled
@@ -19,7 +16,6 @@ interface ReceiptLineItemsListProps {
 
 export default function ReceiptLineItemsList({ 
   lineItems, 
-  availableServices = [], 
   receiptStatus = 'DRAFT', 
   onToggleWaiver,
   isTogglingWaiver 
@@ -45,16 +41,6 @@ export default function ReceiptLineItemsList({
     return type === 'WAIVER' || type === 'DISCOUNT'
   }
 
-  const shouldShowWaiverToggle = (lineItem: ReceiptLineItem) => {
-    // Only show toggle for FEE line items in DRAFT status when toggle function is provided
-    if (lineItem.line_item_type !== 'FEE' || receiptStatus !== 'DRAFT' || !onToggleWaiver) {
-      return false
-    }
-
-    // Check if this fee is waivable by looking up in available services
-    const service = availableServices.find(s => s.code === lineItem.fee_code_applied)
-    return service?.is_potentially_waivable_by_fuel_uplift === true
-  }
 
   const isWaiverApplied = (lineItem: ReceiptLineItem) => {
     // A fee has a waiver applied if there's a corresponding waiver line item
@@ -103,16 +89,16 @@ export default function ReceiptLineItemsList({
             {lineItems.map((item) => (
               <TableRow 
                 key={item.id}
-                data-cy={`line-item-${item.lineItemType.toLowerCase()}`}
-                className={isNegativeLineItem(item.lineItemType) ? 'bg-green-50' : ''}
+                data-cy={`line-item-${item.line_item_type.toLowerCase()}`}
+                className={isNegativeLineItem(item.line_item_type) ? 'bg-green-50' : ''}
               >
                 <TableCell>
-                  <Badge className={getLineItemTypeColor(item.lineItemType)}>
-                    {item.lineItemType}
+                  <Badge className={getLineItemTypeColor(item.line_item_type)}>
+                    {item.line_item_type}
                   </Badge>
                 </TableCell>
                 <TableCell 
-                  className={isNegativeLineItem(item.lineItemType) ? 'text-green-700 font-medium pl-4' : ''}
+                  className={isNegativeLineItem(item.line_item_type) ? 'text-green-700 font-medium pl-4' : ''}
                 >
                   {item.description}
                 </TableCell>
@@ -120,18 +106,18 @@ export default function ReceiptLineItemsList({
                   {item.quantity}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatCurrency(item.unitPrice)}
+                  {formatCurrency(item.unit_price)}
                 </TableCell>
                 <TableCell 
                   className={`text-right font-medium ${
-                    isNegativeLineItem(item.lineItemType) ? 'text-green-600' : ''
+                    isNegativeLineItem(item.line_item_type) ? 'text-green-600' : ''
                   }`}
                 >
                   {formatCurrency(item.amount)}
                 </TableCell>
                 {receiptStatus === 'DRAFT' && onToggleWaiver && (
                   <TableCell className="text-center">
-                    {shouldShowWaiverToggle(item) ? (
+                    {item.line_item_type === 'FEE' && item.is_manually_waivable && receiptStatus === 'DRAFT' ? (
                       <Button
                         variant="ghost"
                         size="sm"

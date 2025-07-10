@@ -11,6 +11,11 @@ class LineItemType(enum.Enum):
     DISCOUNT = 'DISCOUNT'
 
 
+class WaiverSource(enum.Enum):
+    AUTOMATIC = 'AUTOMATIC'
+    MANUAL = 'MANUAL'
+
+
 class ReceiptLineItem(db.Model):
     """Model representing individual line items within a receipt.
     Supports different types of charges including fuel, fees, waivers, taxes, and discounts."""
@@ -25,6 +30,7 @@ class ReceiptLineItem(db.Model):
     quantity = db.Column(db.Numeric(10, 2), nullable=False, default=1.0)
     unit_price = db.Column(db.Numeric(10, 4), nullable=False)
     amount = db.Column(db.Numeric(10, 2), nullable=False)  # Can be negative for waivers/discounts
+    waiver_source = db.Column(db.Enum(WaiverSource), nullable=True)  # Source of waiver: AUTOMATIC or MANUAL
     
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -39,6 +45,7 @@ class ReceiptLineItem(db.Model):
             'quantity': str(self.quantity),
             'unit_price': str(self.unit_price),
             'amount': str(self.amount),
+            'waiver_source': self.waiver_source.value if self.waiver_source else None,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

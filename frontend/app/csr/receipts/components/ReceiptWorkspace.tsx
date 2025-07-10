@@ -11,6 +11,8 @@ import ReceiptHeader from "./ReceiptHeader"
 import ReceiptLineItemsList from "./ReceiptLineItemsList"
 import ReceiptTotals from "./ReceiptTotals"
 import AdditionalServicesForm, { type SelectedService } from "./AdditionalServicesForm"
+import ReceiptEditor from "./ReceiptEditor"
+import ReceiptPreview from "./ReceiptPreview"
 import { useDebounce } from "@/hooks/useDebounce"
 import { 
   ExtendedReceipt, 
@@ -37,6 +39,7 @@ interface ReceiptState {
   autoSaveStatus: 'idle' | 'saving' | 'saved' | 'error'
   pendingUpdates: Record<string, any>
   selectedServices: SelectedService[]
+  fuelQuantity: string
 }
 
 // Action types for useReducer
@@ -61,6 +64,7 @@ type ReceiptAction =
   | { type: 'AUTO_SAVE_ERROR' }
   | { type: 'ADD_SERVICE'; payload: SelectedService }
   | { type: 'REMOVE_SERVICE'; payload: string }
+  | { type: 'SET_FUEL_QUANTITY'; payload: string }
 
 // Reducer function
 function receiptReducer(state: ReceiptState, action: ReceiptAction): ReceiptState {
@@ -137,6 +141,12 @@ function receiptReducer(state: ReceiptState, action: ReceiptAction): ReceiptStat
         selectedServices: state.selectedServices.filter(s => s.fee_code !== action.payload) 
       }
     
+    case 'SET_FUEL_QUANTITY':
+      return { 
+        ...state, 
+        fuelQuantity: action.payload 
+      }
+    
     default:
       return state
   }
@@ -149,7 +159,8 @@ const initialState: ReceiptState = {
   error: null,
   autoSaveStatus: 'idle',
   pendingUpdates: {},
-  selectedServices: []
+  selectedServices: [],
+  fuelQuantity: ''
 }
 
 export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
@@ -161,6 +172,9 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
 
   // Debounce pending updates with 1 second delay
   const debouncedPendingUpdates = useDebounce(state.pendingUpdates, 1000)
+  
+  // Debounce fuel quantity changes for triggering API calls
+  const debouncedFuelQuantity = useDebounce(state.fuelQuantity, 1000)
 
   // Load initial receipt data
   useEffect(() => {
@@ -169,6 +183,8 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
       try {
         const receipt = await getReceiptById(receiptId)
         dispatch({ type: 'LOAD_SUCCESS', payload: receipt })
+        // Initialize fuel quantity from receipt data
+        dispatch({ type: 'SET_FUEL_QUANTITY', payload: receipt.fuel_quantity_gallons_at_receipt_time || '' })
       } catch (error) {
         dispatch({ type: 'LOAD_ERROR', payload: error instanceof Error ? error.message : 'Failed to load receipt' })
       }
@@ -221,6 +237,29 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
 
     performAutoSave()
   }, [debouncedPendingUpdates, receiptId, state.receipt])
+
+  // Handle debounced fuel quantity changes
+  useEffect(() => {
+    const triggerFeeCalculation = async () => {
+      // Only trigger if fuel quantity has changed and receipt is a draft
+      if (!debouncedFuelQuantity || 
+          !state.receipt || 
+          state.receipt.status !== 'DRAFT' ||
+          debouncedFuelQuantity === state.receipt.fuel_quantity_gallons_at_receipt_time) {
+        return
+      }
+
+      dispatch({ type: 'CALCULATING_FEES' })
+      try {
+        const calculatedReceipt = await calculateFeesForReceipt(receiptId, [])
+        dispatch({ type: 'CALCULATION_SUCCESS', payload: calculatedReceipt })
+      } catch (error) {
+        dispatch({ type: 'CALCULATION_ERROR', payload: error instanceof Error ? error.message : 'Fee calculation failed' })
+      }
+    }
+
+    triggerFeeCalculation()
+  }, [debouncedFuelQuantity, receiptId, state.receipt])
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -338,6 +377,16 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
     }
   }
 
+  const handleFuelQuantityChange = (quantity: string) => {
+    dispatch({ type: 'SET_FUEL_QUANTITY', payload: quantity })
+    // Also update the receipt state optimistically
+    dispatch({ type: 'UPDATE_RECEIPT', payload: { fuel_quantity_gallons_at_receipt_time: quantity } })
+  }
+
+  const handleAddServiceFromEditor = (serviceCode: string) => {
+    handleAddService(serviceCode, '')
+  }
+
   // Loading state
   if (state.status === 'loading_initial') {
     return (
@@ -368,6 +417,7 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
   const canCalculateFees = state.receipt.status === 'DRAFT'
   const canGenerateReceipt = state.receipt.grand_total_amount !== undefined && parseFloat(state.receipt.grand_total_amount) > 0
   const canMarkAsPaid = state.receipt.status === 'GENERATED'
+  const isRecalculating = state.status === 'calculating_fees'
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-6" data-testid="receipt-workspace">
@@ -408,14 +458,33 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
         isReadOnly={isReadOnly}
       />
 
-      {/* Additional Services */}
-      <AdditionalServicesForm
-        onAddService={handleAddService}
-        selectedServices={state.selectedServices}
-        onRemoveService={handleRemoveService}
-        isReadOnly={isReadOnly}
-        isLoading={state.status === 'calculating_fees'}
-      />
+      {/* Two-Column Layout for Draft Receipts */}
+      {state.receipt.status === 'DRAFT' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ReceiptEditor 
+            receipt={state.receipt}
+            onFuelQuantityChange={handleFuelQuantityChange}
+            onToggleWaiver={handleToggleWaiver}
+            onAddService={handleAddServiceFromEditor}
+          />
+          <ReceiptPreview 
+            receipt={state.receipt}
+            isRecalculating={isRecalculating}
+          />
+        </div>
+      ) : (
+        // Full-width layout for non-draft receipts
+        <>
+          {/* Additional Services */}
+          <AdditionalServicesForm
+            onAddService={handleAddService}
+            selectedServices={state.selectedServices}
+            onRemoveService={handleRemoveService}
+            isReadOnly={isReadOnly}
+            isLoading={state.status === 'calculating_fees'}
+          />
+        </>
+      )}
 
       {/* Action Buttons */}
       <Card>
@@ -485,17 +554,19 @@ export default function ReceiptWorkspace({ receiptId }: ReceiptWorkspaceProps) {
         </CardContent>
       </Card>
 
-      {/* Line Items and Totals */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ReceiptLineItemsList 
-          lineItems={state.receipt.lineItems || []} 
-          availableServices={availableServices}
-          receiptStatus={state.receipt.status}
-          onToggleWaiver={handleToggleWaiver}
-          isTogglingWaiver={isTogglingWaiver}
-        />
-        <ReceiptTotals receipt={state.receipt} />
-      </div>
+      {/* Line Items and Totals - Only show for non-draft receipts */}
+      {state.receipt.status !== 'DRAFT' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ReceiptLineItemsList 
+            lineItems={state.receipt.lineItems || []} 
+            availableServices={availableServices}
+            receiptStatus={state.receipt.status}
+            onToggleWaiver={handleToggleWaiver}
+            isTogglingWaiver={isTogglingWaiver}
+          />
+          <ReceiptTotals receipt={state.receipt} />
+        </div>
+      )}
 
       {/* Notes Section */}
       <Card>

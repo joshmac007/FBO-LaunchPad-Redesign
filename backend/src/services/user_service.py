@@ -782,8 +782,8 @@ class UserService:
                 'fee_schedule_sort_order': 'alphabetical',
                 'highlight_overrides': True,
                 'show_classification_defaults': True,
-                'dismissed_tooltips': [],
-                'fee_schedule_column_codes': []
+                'dismissed_tooltips': []
+                # fee_schedule_column_codes intentionally omitted - undefined means show all
             }
             
             # Merge validated data into existing preferences

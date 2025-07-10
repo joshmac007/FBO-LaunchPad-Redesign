@@ -682,7 +682,7 @@ class TestToggleLineItemWaiver:
         )
         fee_rule = FeeRule(
             fee_code="RAMP_FEE",
-            is_potentially_waivable_by_fuel_uplift=True
+            is_manually_waivable=True
         )
         
         with patch('src.models.receipt.Receipt.query') as mock_receipt_query:
@@ -729,7 +729,7 @@ class TestToggleLineItemWaiver:
         )
         fee_rule = FeeRule(
             fee_code="RAMP_FEE",
-            is_potentially_waivable_by_fuel_uplift=True
+            is_manually_waivable=True
         )
         
         with patch('src.models.receipt.Receipt.query') as mock_receipt_query:
@@ -810,7 +810,7 @@ class TestToggleLineItemWaiver:
         )
         fee_rule = FeeRule(
             fee_code="NON_WAIVABLE_FEE",
-            is_potentially_waivable_by_fuel_uplift=False
+            is_manually_waivable=False
         )
         
         with patch('src.models.receipt.Receipt.query') as mock_receipt_query:

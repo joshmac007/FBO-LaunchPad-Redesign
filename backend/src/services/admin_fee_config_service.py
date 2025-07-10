@@ -243,6 +243,11 @@ class AdminFeeConfigService:
             
             if not classification:
                 return False
+
+            # Check if classification is referenced by fee rule overrides
+            overrides_count = FeeRuleOverride.query.filter_by(classification_id=classification_id).count()
+            if overrides_count > 0:
+                raise ValueError("Cannot delete aircraft classification that is used by fee rule overrides")
             
             # Note: Fee rules are now global, no need to check for classification references
             
@@ -459,7 +464,7 @@ class AdminFeeConfigService:
             'amount': rule_data['amount'],
             'currency': rule_data.get('currency', 'USD'),
             'is_taxable': rule_data.get('is_taxable', False),
-            'is_potentially_waivable_by_fuel_uplift': rule_data.get('is_potentially_waivable_by_fuel_uplift', False),
+            'is_manually_waivable': rule_data.get('is_manually_waivable', False),
             'calculation_basis': CalculationBasis[rule_data.get('calculation_basis', 'NOT_APPLICABLE')],
             'waiver_strategy': WaiverStrategy[rule_data.get('waiver_strategy', 'NONE')],
             'simple_waiver_multiplier': rule_data.get('simple_waiver_multiplier'),
@@ -476,7 +481,7 @@ class AdminFeeConfigService:
         
         # Update fields
         for field in ['fee_name', 'fee_code', 'amount', 'currency', 'is_taxable', 
-                     'is_potentially_waivable_by_fuel_uplift', 'simple_waiver_multiplier',
+                     'is_manually_waivable', 'simple_waiver_multiplier',
                      'has_caa_override', 'caa_override_amount', 'caa_simple_waiver_multiplier_override']:
             if field in rule_data:
                 setattr(rule, field, rule_data[field])

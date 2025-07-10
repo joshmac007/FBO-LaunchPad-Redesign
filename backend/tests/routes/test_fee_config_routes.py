@@ -57,7 +57,7 @@ def sample_configuration_data():
                 'amount': 75.0,
                 'currency': 'USD',
                 'is_taxable': True,
-                'is_potentially_waivable_by_fuel_uplift': True,
+                'is_manually_waivable': True,
                 'calculation_basis': 'FIXED_PRICE',
                 'waiver_strategy': 'SIMPLE_MULTIPLIER',
                 'simple_waiver_multiplier': 1.0,
@@ -132,7 +132,7 @@ def setup_initial_db_state(db_session):
     fee_rule.amount = 150.0
     fee_rule.currency = 'USD'
     fee_rule.is_taxable = True
-    fee_rule.is_potentially_waivable_by_fuel_uplift = False
+    fee_rule.is_manually_waivable = False
     fee_rule.calculation_basis = CalculationBasis.FIXED_PRICE
     fee_rule.waiver_strategy = WaiverStrategy.NONE
     fee_rule.has_caa_override = False

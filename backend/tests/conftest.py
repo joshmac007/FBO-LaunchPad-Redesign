@@ -187,7 +187,7 @@ def sample_fee_rule(db_session):
     fee_rule.amount = 75.0
     fee_rule.currency = 'USD'
     fee_rule.is_taxable = True
-    fee_rule.is_potentially_waivable_by_fuel_uplift = True
+    fee_rule.is_manually_waivable = True
     fee_rule.calculation_basis = CalculationBasis.FIXED_PRICE
     fee_rule.waiver_strategy = WaiverStrategy.SIMPLE_MULTIPLIER
     fee_rule.simple_waiver_multiplier = 1.0

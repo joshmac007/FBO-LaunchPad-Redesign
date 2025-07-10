@@ -10,6 +10,8 @@ export interface ReceiptLineItem {
   quantity: string  // String to handle Decimal serialization from backend
   unit_price: string  // String to handle Decimal serialization from backend
   amount: string  // String to handle Decimal serialization from backend
+  is_manually_waivable?: boolean  // Whether this line item can be manually waived
+  waiver_source?: 'AUTOMATIC' | 'MANUAL' | null  // Source of waiver (only for WAIVER line items)
   created_at: string
   updated_at: string
 }
@@ -23,6 +25,9 @@ export interface Receipt {
   
   // Fuel order reference data
   fuel_order_tail_number?: string | null
+
+  // Customer reference data
+  customer_name?: string | null
   
   // Snapshot data
   aircraft_type_at_receipt_time?: string | null
@@ -307,8 +312,21 @@ export async function getReceipts(filters?: ReceiptListFilters): Promise<Receipt
     headers: getAuthHeaders(),
   })
 
-  const data = await handleApiResponse<ReceiptListResponse>(response)
-  return data
+  // Backend returns { receipts: [...], pagination: { ... } }
+  const raw = await handleApiResponse<any>(response)
+
+  // Normalize response to match ReceiptListResponse interface expected by frontend
+  const pagination = raw.pagination || {}
+
+  const normalized: ReceiptListResponse = {
+    receipts: raw.receipts || [],
+    total: pagination.total ?? raw.total ?? 0,
+    page: pagination.page ?? raw.page ?? 1,
+    per_page: pagination.per_page ?? raw.per_page ?? (filters?.per_page ?? 50),
+    total_pages: pagination.pages ?? pagination.total_pages ?? raw.total_pages ?? 1,
+  }
+
+  return normalized
 }
 
 // Get recent receipts for dashboard display (limited to most recent ones)

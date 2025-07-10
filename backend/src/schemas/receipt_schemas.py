@@ -58,8 +58,26 @@ class ReceiptLineItemSchema(Schema):
     quantity = fields.String(dump_only=True)  # String to handle Decimal serialization
     unit_price = fields.String(dump_only=True)  # String to handle Decimal serialization
     amount = fields.String(dump_only=True)  # String to handle Decimal serialization
+    waiver_source = fields.String(dump_only=True, allow_none=True)
+    is_manually_waivable = fields.Method('get_is_manually_waivable', dump_only=True)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
+    
+    def get_is_manually_waivable(self, obj):
+        """Get whether this line item can be manually waived by looking up the associated FeeRule."""
+        # Only fee line items can be waived
+        if not hasattr(obj, 'line_item_type') or obj.line_item_type.value != 'FEE':
+            return False
+        
+        # Must have a fee code to look up the rule
+        if not obj.fee_code_applied:
+            return False
+        
+        # Look up the fee rule
+        from ..models.fee_rule import FeeRule
+        fee_rule = FeeRule.query.filter_by(fee_code=obj.fee_code_applied).first()
+        
+        return fee_rule.is_manually_waivable if fee_rule else False
 
 
 class ReceiptSchema(Schema):

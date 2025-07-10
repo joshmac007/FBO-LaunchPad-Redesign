@@ -33,7 +33,7 @@ class FeeRule(db.Model):
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     currency = db.Column(db.String(3), nullable=False, default='USD')
     is_taxable = db.Column(db.Boolean, nullable=False, default=True)
-    is_potentially_waivable_by_fuel_uplift = db.Column(db.Boolean, nullable=False, default=False)
+    is_manually_waivable = db.Column(db.Boolean, nullable=False, default=False)
     calculation_basis = db.Column(db.Enum(CalculationBasis), nullable=False, default=CalculationBasis.NOT_APPLICABLE)
     
     # Waiver strategy
@@ -60,7 +60,7 @@ class FeeRule(db.Model):
             'amount': float(self.amount),
             'currency': self.currency,
             'is_taxable': self.is_taxable,
-            'is_potentially_waivable_by_fuel_uplift': self.is_potentially_waivable_by_fuel_uplift,
+            'is_manually_waivable': self.is_manually_waivable,
             'calculation_basis': self.calculation_basis.value if self.calculation_basis else None,
             'waiver_strategy': self.waiver_strategy.value if self.waiver_strategy else None,
             'simple_waiver_multiplier': float(self.simple_waiver_multiplier) if self.simple_waiver_multiplier else None,

@@ -8,7 +8,7 @@ export const feeRuleSchema = z.object({
   amount: z.number().min(0, "Amount must be 0 or greater"),
   currency: z.string().length(3, "Currency must be 3 characters").default("USD"),
   is_taxable: z.boolean().default(false),
-  is_potentially_waivable_by_fuel_uplift: z.boolean().default(false),
+  is_manually_waivable: z.boolean().default(false),
   calculation_basis: z.enum(['FIXED_PRICE', 'PER_UNIT_SERVICE', 'NOT_APPLICABLE'], {
     required_error: "Calculation basis is required",
   }),

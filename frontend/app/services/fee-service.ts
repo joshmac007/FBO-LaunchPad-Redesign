@@ -10,7 +10,7 @@ export interface AvailableService {
   fee_name: string
   is_taxable: boolean
   currency: string
-  is_potentially_waivable_by_fuel_uplift: boolean
+  is_manually_waivable: boolean
 }
 
 // Fee calculation request
@@ -73,14 +73,14 @@ export async function getAvailableServices(): Promise<AvailableService[]> {
 // Mock available services for offline mode
 function getMockAvailableServices(): AvailableService[] {
   return [
-    { id: 1, code: 'GPU_SERVICE', description: 'GPU Service', price: 50.00, fee_name: 'GPU Service', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: true },
-    { id: 2, code: 'LAVATORY_SERVICE', description: 'Lavatory Service', price: 75.00, fee_name: 'Lavatory Service', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: true },
-    { id: 3, code: 'WATER_SERVICE', description: 'Water Service', price: 25.00, fee_name: 'Water Service', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: false },
-    { id: 4, code: 'CATERING_COORDINATION', description: 'Catering Coordination', price: 100.00, fee_name: 'Catering Coordination', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: false },
-    { id: 5, code: 'HANGAR_OVERNIGHT', description: 'Hangar Overnight', price: 200.00, fee_name: 'Hangar Overnight', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: true },
-    { id: 6, code: 'TIE_DOWN', description: 'Tie Down', price: 50.00, fee_name: 'Tie Down', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: true },
-    { id: 7, code: 'CUSTOMS_HANDLING', description: 'Customs Handling', price: 150.00, fee_name: 'Customs Handling', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: false },
-    { id: 8, code: 'CREW_CAR', description: 'Crew Car', price: 75.00, fee_name: 'Crew Car', is_taxable: true, currency: 'USD', is_potentially_waivable_by_fuel_uplift: true },
+    { id: 1, code: 'GPU_SERVICE', description: 'GPU Service', price: 50.00, fee_name: 'GPU Service', is_taxable: true, currency: 'USD', is_manually_waivable: true },
+    { id: 2, code: 'LAVATORY_SERVICE', description: 'Lavatory Service', price: 75.00, fee_name: 'Lavatory Service', is_taxable: true, currency: 'USD', is_manually_waivable: true },
+    { id: 3, code: 'WATER_SERVICE', description: 'Water Service', price: 25.00, fee_name: 'Water Service', is_taxable: true, currency: 'USD', is_manually_waivable: false },
+    { id: 4, code: 'CATERING_COORDINATION', description: 'Catering Coordination', price: 100.00, fee_name: 'Catering Coordination', is_taxable: true, currency: 'USD', is_manually_waivable: false },
+    { id: 5, code: 'HANGAR_OVERNIGHT', description: 'Hangar Overnight', price: 200.00, fee_name: 'Hangar Overnight', is_taxable: true, currency: 'USD', is_manually_waivable: true },
+    { id: 6, code: 'TIE_DOWN', description: 'Tie Down', price: 50.00, fee_name: 'Tie Down', is_taxable: true, currency: 'USD', is_manually_waivable: true },
+    { id: 7, code: 'CUSTOMS_HANDLING', description: 'Customs Handling', price: 150.00, fee_name: 'Customs Handling', is_taxable: true, currency: 'USD', is_manually_waivable: false },
+    { id: 8, code: 'CREW_CAR', description: 'Crew Car', price: 75.00, fee_name: 'Crew Car', is_taxable: true, currency: 'USD', is_manually_waivable: true },
   ]
 }
 

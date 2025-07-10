@@ -15,13 +15,14 @@ from sqlalchemy import func
 
 from ..extensions import db
 from ..models.receipt import Receipt, ReceiptStatus
-from ..models.receipt_line_item import ReceiptLineItem, LineItemType
+from ..models.receipt_line_item import ReceiptLineItem, LineItemType, WaiverSource
 from ..models.fuel_order import FuelOrder, FuelOrderStatus
 from ..models.customer import Customer
 from ..models.aircraft import Aircraft
 from ..models.aircraft_type import AircraftType
 from ..models.audit_log import AuditLog
 from ..models.fuel_price import FuelPrice, FuelTypeEnum
+from ..models.fuel_type import FuelType
 from .fee_calculation_service import FeeCalculationService, FeeCalculationContext
 
 
@@ -130,7 +131,9 @@ class ReceiptService:
             fuel_unit_price = None
             if fuel_quantity_gallons:
                 # Get basic fuel price for preliminary calculation
-                fuel_unit_price = self._get_fuel_price(fuel_order.fuel_type)
+                if not fuel_order.fuel_type:
+                    raise ValueError(f"Fuel order {fuel_order_id} does not have a fuel type assigned")
+                fuel_unit_price = self._get_fuel_price(fuel_order.fuel_type.code)
                 fuel_subtotal = Decimal(str(fuel_quantity_gallons)) * fuel_unit_price
             
             # Create the receipt record with all fuel order data pre-populated
@@ -138,7 +141,7 @@ class ReceiptService:
                 fuel_order_id=fuel_order_id,
                 customer_id=customer_id,
                 aircraft_type_at_receipt_time=aircraft_type_name,
-                fuel_type_at_receipt_time=fuel_order.fuel_type,
+                fuel_type_at_receipt_time=fuel_order.fuel_type.code if fuel_order.fuel_type else None,
                 fuel_quantity_gallons_at_receipt_time=fuel_quantity_gallons,
                 fuel_unit_price_at_receipt_time=fuel_unit_price,
                 fuel_subtotal=fuel_subtotal,
@@ -156,7 +159,7 @@ class ReceiptService:
                 fuel_line_item = ReceiptLineItem(
                     receipt_id=receipt.id,
                     line_item_type=LineItemType.FUEL,
-                    description=f"{fuel_order.fuel_type} Fuel",
+                    description=f"{fuel_order.fuel_type.name if fuel_order.fuel_type else 'Unknown'} Fuel",
                     quantity=fuel_quantity_gallons,
                     unit_price=fuel_unit_price,
                     amount=fuel_subtotal
@@ -325,6 +328,11 @@ class ReceiptService:
             
             # Create new line items from calculation result
             for line_item_data in calculation_result.line_items:
+                # Convert waiver_source string to enum if present
+                waiver_source = None
+                if line_item_data.waiver_source:
+                    waiver_source = WaiverSource(line_item_data.waiver_source)
+                
                 line_item = ReceiptLineItem(
                     receipt_id=receipt_id,
                     line_item_type=LineItemType(line_item_data.line_item_type),
@@ -332,7 +340,8 @@ class ReceiptService:
                     fee_code_applied=line_item_data.fee_code_applied,
                     quantity=line_item_data.quantity,
                     unit_price=line_item_data.unit_price or Decimal('0.00'),
-                    amount=line_item_data.amount
+                    amount=line_item_data.amount,
+                    waiver_source=waiver_source
                 )
                 db.session.add(line_item)
             
@@ -365,73 +374,54 @@ class ReceiptService:
             current_app.logger.error(f"Error calculating fees: {str(e)}")
             raise
     
-    def _get_fuel_price(self, fuel_type: str) -> Decimal:
+    def _get_fuel_price(self, fuel_type_code: str) -> Decimal:
         """
         Get the current fuel price for a given fuel type from the database.
         
         Args:
-            fuel_type: Type of fuel (e.g., 'JET_A', 'AVGAS_100LL', 'SAF_JET_A')
+            fuel_type_code: Code of fuel type (e.g., 'JET_A', 'AVGAS_100LL', 'SAF_JET_A')
             
         Returns:
             Price per gallon as Decimal
+            
+        Raises:
+            ValueError: If no price can be found for the fuel type
             
         Note: This queries the fuel_prices table for the most recent price effective
               as of the current date for the specified fuel type.
         """
         try:
-            # Normalize fuel type string to match enum values
-            # Handle variations in fuel type naming
-            fuel_type_normalized = fuel_type.upper().replace(' ', '_').replace('-', '_')
+            # Find the fuel type record by code
+            fuel_type_record = FuelType.query.filter_by(code=fuel_type_code, is_active=True).first()
             
-            # Map common variations to the correct enum values
-            fuel_type_mapping = {
-                'JET_A': 'JET_A',
-                'JET_A_1': 'JET_A',  # Treat Jet A-1 as JET_A
-                'AVGAS_100LL': 'AVGAS_100LL',
-                'SAF_JET_A': 'SAF_JET_A',
-                'JET': 'JET_A',  # Common shorthand
-                'AVGAS': 'AVGAS_100LL'  # Common shorthand
-            }
+            if not fuel_type_record:
+                # If exact code not found, log and raise error - no hardcoded fallbacks
+                current_app.logger.error(f"Fuel type '{fuel_type_code}' not found in database")
+                raise ValueError(f"Fuel type '{fuel_type_code}' not found. Please ensure the fuel type exists and is active in the system.")
             
-            mapped_fuel_type = fuel_type_mapping.get(fuel_type_normalized, fuel_type_normalized)
-            
-            # Validate that the fuel type string is a valid enum member
-            try:
-                fuel_type_enum = FuelTypeEnum[mapped_fuel_type]
-            except KeyError:
-                current_app.logger.warning(f"Unknown fuel type '{fuel_type}' (normalized: '{fuel_type_normalized}'). Defaulting to JET_A.")
-                fuel_type_enum = FuelTypeEnum.JET_A
-
-            # Find the most recent price for this fuel type
-            # that is effective as of now
+            # Find the most recent price for this fuel type that is effective as of now
             latest_price_record = (FuelPrice.query
                                  .filter(
-                                     FuelPrice.fuel_type == fuel_type_enum,
+                                     FuelPrice.fuel_type_id == fuel_type_record.id,
                                      FuelPrice.effective_date <= func.now()
                                  )
                                  .order_by(FuelPrice.effective_date.desc())
                                  .first())
 
             if latest_price_record:
-                current_app.logger.info(f"Found fuel price {latest_price_record.price} for {fuel_type_enum.value}")
+                current_app.logger.info(f"Found fuel price {latest_price_record.price} for {fuel_type_record.name}")
                 return latest_price_record.price
             else:
-                # Fallback: log warning and return a default price
-                current_app.logger.warning(f"No fuel price found for fuel type {fuel_type_enum.value}. Using fallback price.")
+                # No price found - this is a configuration issue that should be addressed
+                current_app.logger.error(f"No price found for fuel type '{fuel_type_record.name}' (code: {fuel_type_code})")
+                raise ValueError(f"No price configured for fuel type '{fuel_type_record.name}'. Please add a fuel price record in the admin panel.")
                 
-                # Provide reasonable fallback prices based on fuel type
-                fallback_prices = {
-                    FuelTypeEnum.JET_A: Decimal('5.75'),
-                    FuelTypeEnum.AVGAS_100LL: Decimal('6.25'),
-                    FuelTypeEnum.SAF_JET_A: Decimal('7.50')
-                }
-                
-                return fallback_prices.get(fuel_type_enum, Decimal('5.75'))
-                
+        except ValueError:
+            # Re-raise ValueError with original message
+            raise
         except Exception as e:
-            current_app.logger.error(f"Error fetching fuel price for fuel type {fuel_type}: {str(e)}")
-            # Return a safe fallback price in case of any error
-            return Decimal('5.75')
+            current_app.logger.error(f"Database error fetching fuel price for fuel type {fuel_type_code}: {str(e)}")
+            raise ValueError(f"Unable to retrieve fuel price for '{fuel_type_code}' due to database error: {str(e)}")
     
     def generate_receipt(self, receipt_id: int) -> Receipt:
         """
@@ -548,7 +538,10 @@ class ReceiptService:
         try:
             # Build base query
             query = (Receipt.query
-                    .options(joinedload(Receipt.customer))
+                    .options(
+                        joinedload(Receipt.customer),
+                        joinedload(Receipt.fuel_order)  # Ensure tail number can be accessed without lazy loading
+                    )
                     .order_by(Receipt.created_at.desc()))
             
             # Apply filters if provided
@@ -752,7 +745,7 @@ class ReceiptService:
                        .filter_by(fee_code=fee_line_item.fee_code_applied)
                        .first())
             
-            if not fee_rule or not fee_rule.is_potentially_waivable_by_fuel_uplift:
+            if not fee_rule or not fee_rule.is_manually_waivable:
                 raise ValueError(f"Fee '{fee_line_item.fee_code_applied}' is not manually waivable")
             
             # Check if there's already a waiver line item for this fee
@@ -775,7 +768,8 @@ class ReceiptService:
                     fee_code_applied=fee_line_item.fee_code_applied,
                     quantity=Decimal('1.0'),
                     unit_price=-fee_line_item.amount,  # Negative of the fee amount
-                    amount=-fee_line_item.amount
+                    amount=-fee_line_item.amount,
+                    waiver_source=WaiverSource.MANUAL
                 )
                 db.session.add(waiver_line_item)
                 current_app.logger.info(f"Added manual waiver for fee {fee_line_item.fee_code_applied}")

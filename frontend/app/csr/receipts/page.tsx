@@ -342,11 +342,6 @@ function ReceiptsPageInternal() {
       {/* Action Bar */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex gap-2">
-          {/* Note: Receipts are created from fuel orders, no direct creation */}
-          <p className="text-sm text-muted-foreground">Receipts are created from completed fuel orders</p>
-        </div>
-
-        <div className="flex gap-2">
           <Button onClick={exportToCSV} variant="outline" className="gap-2" disabled={isExporting}>
             {isExporting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -360,12 +355,6 @@ function ReceiptsPageInternal() {
 
       {/* Advanced Filters - Following fuel-orders pattern */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Search & Filter
-          </CardTitle>
-        </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="lg:col-span-1">

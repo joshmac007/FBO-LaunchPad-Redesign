@@ -97,7 +97,7 @@ export function EditableMinFuelCell({
   return (
     <div 
       className={cn(
-        "flex items-center cursor-pointer hover:bg-muted/50 rounded px-1.5 py-0.5 min-h-7",
+        "flex items-center cursor-pointer hover:bg-blue-50 hover:border hover:border-blue-200 rounded px-1.5 py-0.5 min-h-7 transition-colors duration-150",
         disabled && "cursor-not-allowed opacity-50",
         className
       )}

@@ -18,7 +18,7 @@ export interface FeeRule {
   amount: number;
   currency: string;
   is_taxable: boolean;
-  is_potentially_waivable_by_fuel_uplift: boolean;
+  is_manually_waivable: boolean;
   calculation_basis: 'FIXED_PRICE' | 'PER_UNIT_SERVICE' | 'NOT_APPLICABLE';
   waiver_strategy: 'NONE' | 'SIMPLE_MULTIPLIER' | 'TIERED_MULTIPLIER';
   simple_waiver_multiplier?: number;
@@ -88,7 +88,7 @@ export interface GlobalFeeRule {
   amount: number;
   currency: string;
   is_taxable: boolean;
-  is_potentially_waivable_by_fuel_uplift: boolean;
+  is_manually_waivable: boolean;
   calculation_basis: 'FIXED_PRICE' | 'PER_UNIT_SERVICE' | 'NOT_APPLICABLE';
   waiver_strategy: 'NONE' | 'SIMPLE_MULTIPLIER' | 'TIERED_MULTIPLIER';
   simple_waiver_multiplier?: number;
@@ -231,7 +231,7 @@ export interface CreateFeeRuleRequest {
   amount: number;
   currency?: string;
   is_taxable?: boolean;
-  is_potentially_waivable_by_fuel_uplift?: boolean;
+  is_manually_waivable?: boolean;
   calculation_basis: 'FIXED_PRICE' | 'PER_UNIT_SERVICE' | 'NOT_APPLICABLE';
   waiver_strategy: 'NONE' | 'SIMPLE_MULTIPLIER' | 'TIERED_MULTIPLIER';
   simple_waiver_multiplier?: number;
@@ -247,7 +247,7 @@ export interface UpdateFeeRuleRequest {
   amount?: number;
   currency?: string;
   is_taxable?: boolean;
-  is_potentially_waivable_by_fuel_uplift?: boolean;
+  is_manually_waivable?: boolean;
   calculation_basis?: 'FIXED_PRICE' | 'PER_UNIT_SERVICE' | 'NOT_APPLICABLE';
   waiver_strategy?: 'NONE' | 'SIMPLE_MULTIPLIER' | 'TIERED_MULTIPLIER';
   simple_waiver_multiplier?: number;
@@ -324,14 +324,36 @@ export const updateAircraftClassification = async (classificationId: number, dat
   return handleApiResponse<AircraftClassification>(response);
 };
 
-export const deleteAircraftClassification = async (classificationId: number): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/admin/aircraft-classifications/${classificationId}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
-  });
+// Track ongoing delete requests to prevent duplicates
+const ongoingDeletes = new Set<number>();
 
-  await handleApiResponse<void>(response);
-};
+export const deleteAircraftClassification = async (id: number): Promise<void> => {
+  // Check if deletion is already in progress for this ID
+  if (ongoingDeletes.has(id)) {
+    console.log(`Delete already in progress for classification ${id}, skipping duplicate request`);
+    return; // Skip duplicate request
+  }
+
+  try {
+    // Mark deletion as in progress
+    ongoingDeletes.add(id);
+    console.log(`Starting delete for classification ${id}`);
+    
+    const response = await fetch(`${API_BASE_URL}/admin/aircraft-classifications/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+
+    // Use the standard API response handler that properly handles 204 responses
+    await handleApiResponse<void>(response);
+    
+    console.log(`Successfully deleted classification ${id}`);
+  } finally {
+    // Always remove from ongoing requests, whether success or failure
+    ongoingDeletes.delete(id);
+    console.log(`Removed classification ${id} from ongoing deletes`);
+  }
+}
 
 export const getGeneralAircraftClassification = async (): Promise<AircraftClassification> => {
   const response = await fetch(`${API_BASE_URL}/admin/aircraft-classifications/general`, {

@@ -86,7 +86,7 @@ class FeeRuleSchema(Schema):
         missing='USD'
     )
     is_taxable = fields.Boolean(missing=False)
-    is_potentially_waivable_by_fuel_uplift = fields.Boolean(missing=False)
+    is_manually_waivable = fields.Boolean(missing=False)
     calculation_basis = fields.String(
         validate=validate.OneOf(['FIXED_PRICE', 'PER_UNIT_SERVICE', 'NOT_APPLICABLE']),
         missing='NOT_APPLICABLE'
@@ -148,7 +148,7 @@ class CreateFeeRuleSchema(Schema):
         missing='USD'
     )
     is_taxable = fields.Boolean(missing=False)
-    is_potentially_waivable_by_fuel_uplift = fields.Boolean(missing=False)
+    is_manually_waivable = fields.Boolean(missing=False)
     calculation_basis = fields.String(
         validate=validate.OneOf(['FIXED_PRICE', 'PER_UNIT_SERVICE', 'NOT_APPLICABLE']),
         missing='NOT_APPLICABLE'
@@ -192,7 +192,7 @@ class UpdateFeeRuleSchema(Schema):
     )
     currency = fields.String(validate=validate.Length(equal=3))
     is_taxable = fields.Boolean()
-    is_potentially_waivable_by_fuel_uplift = fields.Boolean()
+    is_manually_waivable = fields.Boolean()
     calculation_basis = fields.String(
         validate=validate.OneOf(['FIXED_PRICE', 'PER_UNIT_SERVICE', 'NOT_APPLICABLE'])
     )

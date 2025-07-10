@@ -126,7 +126,7 @@ export function EditableFeeCell({
   return (
     <div 
       className={cn(
-        "flex items-center gap-1.5 cursor-pointer hover:bg-muted/50 rounded px-1.5 py-0.5 min-h-7",
+        "flex items-center gap-1.5 cursor-pointer hover:bg-blue-50 hover:border hover:border-blue-200 rounded px-1.5 py-0.5 min-h-7 transition-colors duration-150",
         disabled && "cursor-not-allowed opacity-50",
         className
       )}
@@ -139,7 +139,7 @@ export function EditableFeeCell({
             ? (highlightOverrides ? "font-semibold text-foreground" : "text-foreground")
             : isClassificationDefault
               ? "font-semibold text-foreground"
-              : "italic text-muted-foreground"
+              : "text-foreground"
         )}
       >
         {displayValue}

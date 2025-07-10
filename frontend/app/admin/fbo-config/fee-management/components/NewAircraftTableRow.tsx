@@ -180,7 +180,7 @@ export function NewAircraftTableRow({
     !aircraftTypes.some(type => type.name.toLowerCase() === aircraftTypeName.toLowerCase())
 
   return (
-    <TableRow className="bg-muted/50 border-dashed">
+    <TableRow className="bg-muted/50 border-dashed animate-in fade-in duration-300">
       <TableCell className="font-medium">
         <div className="flex items-center gap-1.5">
           <Popover open={open} onOpenChange={setOpen}>
@@ -255,12 +255,9 @@ export function NewAircraftTableRow({
         />
       </TableCell>
       
-      {/* Empty cell for expander column */}
-      <TableCell></TableCell>
-      
       {/* Empty cells for fee columns - will be populated after save */}
       {primaryFeeRules.map(rule => (
-        <TableCell key={rule.id} className="hidden md:table-cell">-</TableCell>
+        <TableCell key={rule.id}>-</TableCell>
       ))}
       
       <TableCell>

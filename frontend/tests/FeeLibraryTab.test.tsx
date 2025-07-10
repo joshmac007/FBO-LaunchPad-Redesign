@@ -22,14 +22,14 @@ const createMockFeeRule = (overrides?: Partial<FeeRule>): FeeRule => ({
   amount: 100,
   currency: 'USD',
   is_taxable: true,
-  is_potentially_waivable_by_fuel_uplift: true,
+  is_manually_waivable: true,
   calculation_basis: 'FIXED_PRICE',
   waiver_strategy: 'SIMPLE_MULTIPLIER',
   simple_waiver_multiplier: 1.5,
   has_caa_override: false,
-  caa_override_amount: null,
-  caa_waiver_strategy_override: null,
-  caa_simple_waiver_multiplier_override: null,
+  caa_override_amount: undefined,
+  caa_waiver_strategy_override: undefined,
+  caa_simple_waiver_multiplier_override: undefined,
   is_primary_fee: true,
   created_at: '2023-01-01',
   updated_at: '2023-01-01',
@@ -49,14 +49,10 @@ const createMockClassifications = (): AircraftClassification[] => [
   {
     id: 1,
     name: 'Light Aircraft',
-    created_at: '2023-01-01',
-    updated_at: '2023-01-01',
   },
   {
     id: 2,
     name: 'Heavy Aircraft',
-    created_at: '2023-01-01',
-    updated_at: '2023-01-01',
   },
 ];
 
@@ -234,7 +230,7 @@ describe('FeeLibraryTab', () => {
         amount: 100,
         currency: 'USD',
         is_taxable: true,
-        is_potentially_waivable_by_fuel_uplift: true,
+        is_manually_waivable: true,
         calculation_basis: 'FIXED_PRICE',
         waiver_strategy: 'SIMPLE_MULTIPLIER',
         simple_waiver_multiplier: 1.5,
@@ -314,6 +310,238 @@ describe('FeeLibraryTab', () => {
       // Should show "Create" button
       expect(screen.getByRole('button', { name: /create/i })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /update/i })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Inline Editing', () => {
+    it('should enable inline editing for fee name', async () => {
+      renderWithQueryClient(<FeeLibraryTab />);
+
+      // Wait for data to load
+      await waitFor(() => {
+        expect(screen.getByText('Ramp Fee')).toBeInTheDocument();
+      });
+
+      // Find the fee name cell and click it to edit
+      const feeNameCell = screen.getByText('Ramp Fee');
+      fireEvent.click(feeNameCell);
+
+      // Should show input field with current value
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('Ramp Fee')).toBeInTheDocument();
+      });
+
+      // Edit the value
+      const input = screen.getByDisplayValue('Ramp Fee');
+      fireEvent.change(input, { target: { value: 'Updated Ramp Fee' } });
+
+      // Submit by pressing Enter
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      // Should call update API with debouncing
+      await waitFor(() => {
+        expect(mockUpdateFeeRule).toHaveBeenCalled();
+      }, { timeout: 1000 });
+    });
+
+    it('should enable inline editing for fee code', async () => {
+      renderWithQueryClient(<FeeLibraryTab />);
+
+      await waitFor(() => {
+        expect(screen.getByText('RAMP')).toBeInTheDocument();
+      });
+
+      const feeCodeCell = screen.getByText('RAMP');
+      fireEvent.click(feeCodeCell);
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('RAMP')).toBeInTheDocument();
+      });
+
+      const input = screen.getByDisplayValue('RAMP');
+      fireEvent.change(input, { target: { value: 'RAMP_NEW' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(mockUpdateFeeRule).toHaveBeenCalled();
+      }, { timeout: 1000 });
+    });
+
+    it('should enable inline editing for amount with currency formatting', async () => {
+      renderWithQueryClient(<FeeLibraryTab />);
+
+      await waitFor(() => {
+        expect(screen.getByText('$100.00')).toBeInTheDocument();
+      });
+
+      const amountCell = screen.getByText('$100.00');
+      fireEvent.click(amountCell);
+
+      // Should show input with just the number
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('100')).toBeInTheDocument();
+      });
+
+      const input = screen.getByDisplayValue('100');
+      fireEvent.change(input, { target: { value: '150' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(mockUpdateFeeRule).toHaveBeenCalledWith(
+          1, 
+          expect.objectContaining({ amount: 150 })
+        );
+      }, { timeout: 1000 });
+    });
+
+    it('should enable toggle for waivable status', async () => {
+      renderWithQueryClient(<FeeLibraryTab />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Ramp Fee')).toBeInTheDocument();
+      });
+
+      // Find the waivable switch and toggle it
+      const switches = screen.getAllByRole('switch');
+      const waivableSwitch = switches.find(s => 
+        s.closest('tr')?.textContent?.includes('Ramp Fee')
+      );
+      
+      expect(waivableSwitch).toBeInTheDocument();
+      expect(waivableSwitch).toBeChecked(); // Initially true from mock data
+
+      fireEvent.click(waivableSwitch!);
+
+      await waitFor(() => {
+        expect(mockUpdateFeeRule).toHaveBeenCalledWith(
+          1,
+          expect.objectContaining({ 
+            is_manually_waivable: false 
+          })
+        );
+      }, { timeout: 1000 });
+    });
+
+    it('should show validation errors for invalid input', async () => {
+      renderWithQueryClient(<FeeLibraryTab />);
+
+      await waitFor(() => {
+        expect(screen.getByText('RAMP')).toBeInTheDocument();
+      });
+
+      const feeCodeCell = screen.getByText('RAMP');
+      fireEvent.click(feeCodeCell);
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('RAMP')).toBeInTheDocument();
+      });
+
+      const input = screen.getByDisplayValue('RAMP');
+      fireEvent.change(input, { target: { value: 'invalid-code-with-dashes' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      // Should show validation error
+      await waitFor(() => {
+        expect(screen.getByText(/must contain only uppercase letters/i)).toBeInTheDocument();
+      });
+
+      // Should not call API
+      expect(mockUpdateFeeRule).not.toHaveBeenCalled();
+    });
+
+    it('should cancel edit on Escape key', async () => {
+      renderWithQueryClient(<FeeLibraryTab />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Ramp Fee')).toBeInTheDocument();
+      });
+
+      const feeNameCell = screen.getByText('Ramp Fee');
+      fireEvent.click(feeNameCell);
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('Ramp Fee')).toBeInTheDocument();
+      });
+
+      const input = screen.getByDisplayValue('Ramp Fee');
+      fireEvent.change(input, { target: { value: 'Modified Name' } });
+      fireEvent.keyDown(input, { key: 'Escape' });
+
+      // Should revert to original value
+      await waitFor(() => {
+        expect(screen.getByText('Ramp Fee')).toBeInTheDocument();
+        expect(screen.queryByDisplayValue('Modified Name')).not.toBeInTheDocument();
+      });
+
+      // Should not call API
+      expect(mockUpdateFeeRule).not.toHaveBeenCalled();
+    });
+
+    it('should handle API errors gracefully', async () => {
+      mockUpdateFeeRule.mockRejectedValue(new Error('Network error'));
+      
+      renderWithQueryClient(<FeeLibraryTab />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Ramp Fee')).toBeInTheDocument();
+      });
+
+      const feeNameCell = screen.getByText('Ramp Fee');
+      fireEvent.click(feeNameCell);
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('Ramp Fee')).toBeInTheDocument();
+      });
+
+      const input = screen.getByDisplayValue('Ramp Fee');
+      fireEvent.change(input, { target: { value: 'Updated Name' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      // Should handle error and revert optimistic update
+      await waitFor(() => {
+        expect(mockUpdateFeeRule).toHaveBeenCalled();
+      }, { timeout: 1000 });
+      
+      // Should return to edit mode after error
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('Updated Name')).toBeInTheDocument();
+      });
+    });
+
+    it('should prevent editing when mutations are pending', async () => {
+      // Mock a slow API call
+      mockUpdateFeeRule.mockImplementation(() => 
+        new Promise(resolve => setTimeout(resolve, 1000))
+      );
+
+      renderWithQueryClient(<FeeLibraryTab />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Ramp Fee')).toBeInTheDocument();
+      });
+
+      const feeNameCell = screen.getByText('Ramp Fee');
+      fireEvent.click(feeNameCell);
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('Ramp Fee')).toBeInTheDocument();
+      });
+
+      const input = screen.getByDisplayValue('Ramp Fee');
+      fireEvent.change(input, { target: { value: 'Updated Name' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      // Should show pending state
+      await waitFor(() => {
+        expect(mockUpdateFeeRule).toHaveBeenCalled();
+      });
+
+      // Try to click another cell while pending
+      const anotherCell = screen.getByText('RAMP');
+      fireEvent.click(anotherCell);
+
+      // Should not enter edit mode due to pending state
+      expect(screen.queryByDisplayValue('RAMP')).not.toBeInTheDocument();
     });
   });
 });

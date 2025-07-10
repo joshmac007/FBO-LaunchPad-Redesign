@@ -45,6 +45,7 @@ class FeeCalculationResultLineItem:
     unit_price: Optional[Decimal] = None
     fee_code_applied: Optional[str] = None  # Fee code for fees and waivers
     is_taxable: bool = True
+    waiver_source: Optional[str] = None  # 'AUTOMATIC' or 'MANUAL' for waiver line items
 
 
 @dataclass
@@ -150,7 +151,7 @@ class FeeCalculationService:
                 # Check if fee should be waived
                 should_waive = False
                 
-                if rule.is_potentially_waivable_by_fuel_uplift and base_min_fuel_for_waiver:
+                if waiver_strategy != WaiverStrategy.NONE and base_min_fuel_for_waiver:
                     if waiver_strategy == WaiverStrategy.SIMPLE_MULTIPLIER:
                         # Simple multiplier waiver
                         threshold = base_min_fuel_for_waiver * simple_multiplier
@@ -168,7 +169,8 @@ class FeeCalculationService:
                         amount=-total_amount,
                         quantity=service_quantity,
                         fee_code_applied=rule.fee_code,
-                        is_taxable=False
+                        is_taxable=False,
+                        waiver_source='AUTOMATIC'
                     )
                     line_items.append(waiver_line_item)
             
@@ -239,7 +241,7 @@ class FeeCalculationService:
             aircraft_aircraft_classification_id = aircraft_type.classification_id
         
         # Fetch all fee rules
-        fee_rules = FeeRule.query.options(joinedload(FeeRule.aircraft_classification)).all()  # type: ignore
+        fee_rules = FeeRule.query.all()  # FeeRule is now global without aircraft_classification relationship
         
         # Fetch all waiver tiers
         waiver_tiers = WaiverTier.query.all()
@@ -363,7 +365,7 @@ class FeeCalculationService:
             amount=override.override_amount if override.override_amount is not None else base_rule.amount,
             currency=base_rule.currency,
             is_taxable=base_rule.is_taxable,
-            is_potentially_waivable_by_fuel_uplift=base_rule.is_potentially_waivable_by_fuel_uplift,
+            is_manually_waivable=base_rule.is_manually_waivable,
             calculation_basis=base_rule.calculation_basis,
             waiver_strategy=base_rule.waiver_strategy,
             simple_waiver_multiplier=base_rule.simple_waiver_multiplier,
