@@ -2,10 +2,6 @@
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, CheckCircle, AlertCircle } from "lucide-react";
-import ReceiptHeader from "./ReceiptHeader";
-import ReceiptLineItemsList from "./ReceiptLineItemsList";
-import ReceiptTotals from "./ReceiptTotals";
-import AdditionalServicesForm from "./AdditionalServicesForm";
 import ReceiptEditor from "./ReceiptEditor";
 import ReceiptPreview from "./ReceiptPreview";
 import { useReceipt } from "../hooks/useReceipt";
@@ -15,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Calculator, FileText } from "lucide-react";
+import { FileText } from "lucide-react";
 
 
 interface ReceiptWorkspaceProps {
@@ -79,101 +75,99 @@ function ReceiptWorkspaceInternal({ receiptId }: ReceiptWorkspaceProps) {
           </Alert>
         )}
 
-        <ReceiptHeader />
-
         {/* Two-Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left Column: Editor */}
           <div className="space-y-6">
             <ReceiptEditor />
+            
+            {/* Notes Section */}
+            <Card>
+              <CardContent className="pt-6">
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Internal Notes</Label>
+                  <Textarea
+                    id="notes"
+                    data-cy="receipt-notes"
+                    value={receiptData.receipt.notes || ''}
+                    onChange={(e) => receiptData.handleNotesChange(e.target.value)}
+                    disabled={receiptData.isReadOnly}
+                    placeholder="Add any internal notes for this receipt..."
+                    rows={3}
+                  />
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Right Column: Preview */}
           <div className="space-y-6">
             <ReceiptPreview />
-          </div>
-        </div>
+            
+            {/* Action Buttons */}
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex flex-col gap-3">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          onClick={receiptData.handleGenerateReceipt}
+                          disabled={!receiptData.canGenerateReceipt || receiptData.status === 'generating'}
+                          data-cy="generate-receipt-btn"
+                          variant="default"
+                          className="w-full"
+                        >
+                          {receiptData.status === 'generating' ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Generating...
+                            </>
+                          ) : (
+                            <>
+                              <FileText className="mr-2 h-4 w-4" />
+                              Generate & Send
+                            </>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                    </Tooltip>
+                  </TooltipProvider>
 
-        {/* Action Buttons */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-wrap gap-4">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    disabled={!receiptData.receipt}
+                  >
+                    Download PDF
+                  </Button>
+
+                  {receiptData.canMarkAsPaid && (
                     <Button
-                      onClick={receiptData.handleGenerateReceipt}
-                      disabled={!receiptData.canGenerateReceipt || receiptData.status === 'generating'}
-                      data-cy="generate-receipt-btn"
-                      variant="default"
-                      className="flex-1 min-w-[200px]"
+                      onClick={receiptData.handleMarkAsPaid}
+                      disabled={receiptData.status === 'marking_paid'}
+                      data-cy="mark-as-paid-btn"
+                      variant="outline"
+                      className="w-full"
                     >
-                      {receiptData.status === 'generating' ? (
+                      {receiptData.status === 'marking_paid' ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Generating...
+                          Marking as Paid...
                         </>
                       ) : (
                         <>
-                          <FileText className="mr-2 h-4 w-4" />
-                          Generate & Send
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                          Mark as Paid
                         </>
                       )}
                     </Button>
-                  </TooltipTrigger>
-                </Tooltip>
-              </TooltipProvider>
-
-              <Button
-                variant="outline"
-                className="flex-1 min-w-[200px]"
-                disabled={!receiptData.receipt}
-              >
-                Download PDF
-              </Button>
-
-              {receiptData.canMarkAsPaid && (
-                <Button
-                  onClick={receiptData.handleMarkAsPaid}
-                  disabled={receiptData.status === 'marking_paid'}
-                  data-cy="mark-as-paid-btn"
-                  variant="outline"
-                  className="flex-1 min-w-[200px]"
-                >
-                  {receiptData.status === 'marking_paid' ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Marking as Paid...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="mr-2 h-4 w-4" />
-                      Mark as Paid
-                    </>
                   )}
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Notes Section */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="space-y-2">
-              <Label htmlFor="notes">Internal Notes</Label>
-              <Textarea
-                id="notes"
-                data-cy="receipt-notes"
-                value={receiptData.receipt.notes || ''}
-                onChange={(e) => receiptData.handleNotesChange(e.target.value)}
-                disabled={receiptData.isReadOnly}
-                placeholder="Add any internal notes for this receipt..."
-                rows={3}
-              />
-            </div>
-          </CardContent>
-        </Card>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
       </div>
     </ReceiptContext.Provider>
