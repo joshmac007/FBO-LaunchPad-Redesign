@@ -1,7 +1,7 @@
 "use client";
 
 import { useReceiptContext } from '../contexts/ReceiptContext';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
@@ -14,157 +14,124 @@ export default function ReceiptPreview() {
   if (!receipt) {
     return (
       <Card className="h-fit">
-        <CardHeader>
-          <CardTitle>Receipt Preview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">No receipt data available.</p>
+        <CardContent className="p-8">
+          <p className="text-muted-foreground text-center">No receipt data available.</p>
         </CardContent>
       </Card>
     );
   }
 
-  const getLineItemTypeColor = (type: string) => {
-    switch (type) {
-      case 'FUEL':
-        return 'bg-blue-100 text-blue-800'
-      case 'FEE':
-        return 'bg-orange-100 text-orange-800'
-      case 'WAIVER':
-        return 'bg-green-100 text-green-800'
-      case 'TAX':
-        return 'bg-purple-100 text-purple-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
-    }
-  }
+  // Helper function to get waiver for a fee item
+  const getWaiverForFeeItem = (feeItem: any) => {
+    return receipt.line_items?.find(item => 
+      item.line_item_type === 'WAIVER' && 
+      (item.description === feeItem.description || item.fee_code_applied === feeItem.fee_code_applied)
+    );
+  };
 
-  const renderWaiverBadge = (item: any) => {
-    if (item.line_item_type !== 'WAIVER') return null
-    
-    if (item.waiver_source === 'AUTOMATIC') {
-      return <span className="text-xs text-green-600 ml-2">[⛽ Auto-waived]</span>
-    } else if (item.waiver_source === 'MANUAL') {
-      return <span className="text-xs text-blue-600 ml-2">[👤 Manually Waived]</span>
-    }
-    return null
-  }
-
-  const formatTotal = (amount: string | undefined | null) => {
-    if (isRecalculating) {
-      return (
-        <span className="flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          {formatCurrency(parseFloat(amount || '0'))}
-        </span>
-      )
-    }
-    return formatCurrency(parseFloat(amount || '0'))
-  }
+  // Get the line items to display (excluding standalone WAIVER items)
+  const displayLineItems = receipt.line_items?.filter(item => 
+    item.line_item_type === 'FUEL' || item.line_item_type === 'FEE'
+  ) || [];
 
   return (
     <Card className="h-fit">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          Receipt Preview
-          {isRecalculating && (
-            <Badge variant="secondary" className="gap-2">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Recalculating...
-            </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Receipt Header */}
-        <div className="text-center space-y-2">
-          <h3 className="text-lg font-semibold">FBO LaunchPad</h3>
-          <p className="text-sm text-muted-foreground">Aviation Services Receipt</p>
-          {receipt.receipt_number && (
-            <p className="text-sm font-mono">#{receipt.receipt_number}</p>
-          )}
-        </div>
-
-        <Separator />
-
-        {/* Aircraft & Customer Info */}
-        <div className="space-y-3">
-          <div className="flex justify-between">
-            <span className="text-sm text-muted-foreground">Tail Number:</span>
-            <span className="text-sm font-medium">{receipt.fuel_order_tail_number || 'N/A'}</span>
+      <CardContent className="p-8 space-y-6">
+        {/* Header */}
+        <div className="text-center space-y-3">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold">FBO LaunchPad</h1>
+            <p className="text-sm text-muted-foreground">123 Aviation Way, Airport City, AC 12345</p>
+            <p className="text-sm text-muted-foreground">Phone: (555) 123-FUEL | Email: service@fbolaunchpad.com</p>
           </div>
-          <div className="flex justify-between">
-            <span className="text-sm text-muted-foreground">Aircraft Type:</span>
-            <span className="text-sm">{receipt.aircraft_type_at_receipt_time || 'N/A'}</span>
+          <div className="bg-primary/10 p-3 rounded">
+            <h2 className="text-xl font-semibold">RECEIPT</h2>
+            {isRecalculating && (
+              <div className="flex items-center justify-center gap-2 mt-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Recalculating...</span>
+              </div>
+            )}
           </div>
-          <div className="flex justify-between">
-            <span className="text-sm text-muted-foreground">Fuel Type:</span>
-            <span className="text-sm">{receipt.fuel_type_at_receipt_time || 'N/A'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-sm text-muted-foreground">Fuel Quantity:</span>
-            <span className="text-sm">{receipt.fuel_quantity_gallons_at_receipt_time || '0'} gal</span>
+          <div className="flex justify-between text-sm">
+            <div>Receipt #: <span className="font-mono">{receipt.receipt_number || 'DRAFT'}</span></div>
+            <div>Date: {receipt.generated_at ? new Date(receipt.generated_at).toLocaleDateString() : new Date().toLocaleDateString()}</div>
           </div>
         </div>
 
         <Separator />
 
-        {/* Line Items */}
+        {/* Bill To Section */}
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold">Bill To:</h3>
+          <div className="pl-4 space-y-1">
+            <div><span className="font-medium">{receipt.customer_name || 'Walk-in Customer'}</span></div>
+            <div>Aircraft: {receipt.fuel_order_tail_number || receipt.aircraft_type_at_receipt_time || 'N/A'}</div>
+            {receipt.fuel_order_tail_number && receipt.aircraft_type_at_receipt_time && (
+              <div>Type: {receipt.aircraft_type_at_receipt_time}</div>
+            )}
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Line Items Table */}
         <div className="space-y-3">
-          <h4 className="text-sm font-medium">Line Items</h4>
-          {receipt.line_items && receipt.line_items.length > 0 ? (
+          <div className="grid grid-cols-12 gap-2 text-sm font-semibold border-b pb-2">
+            <div className="col-span-6">DESCRIPTION</div>
+            <div className="col-span-2 text-center">QTY</div>
+            <div className="col-span-2 text-right">UNIT PRICE</div>
+            <div className="col-span-2 text-right">TOTAL</div>
+          </div>
+          
+          {displayLineItems.length > 0 ? (
             <div className="space-y-2">
-              {receipt.line_items.map((item) => (
-                <div key={item.id} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <Badge className={getLineItemTypeColor(item.line_item_type)}>
-                      {item.line_item_type}
-                    </Badge>
-                    <span className="flex-1">{item.description}</span>
-                    {renderWaiverBadge(item)}
+              {displayLineItems.map((item) => {
+                const waiver = getWaiverForFeeItem(item);
+                const isWaived = !!waiver;
+                
+                return (
+                  <div key={item.id} className="grid grid-cols-12 gap-2 text-sm">
+                    <div className="col-span-6">{item.description}</div>
+                    <div className="col-span-2 text-center">{item.quantity}</div>
+                    <div className="col-span-2 text-right">{formatCurrency(parseFloat(item.unit_price))}</div>
+                    <div className="col-span-2 text-right flex items-center justify-end gap-2">
+                      {isWaived ? (
+                        <>
+                          <span className="text-red-600">-{formatCurrency(parseFloat(waiver.amount))}</span>
+                          <Badge variant="secondary" className="text-xs">Waived</Badge>
+                        </>
+                      ) : (
+                        <span>{formatCurrency(parseFloat(item.amount))}</span>
+                      )}
+                    </div>
                   </div>
-                  <span className={`font-medium ${
-                    item.line_item_type === 'WAIVER' ? 'text-green-600' : ''
-                  }`}>
-                    {formatCurrency(parseFloat(item.amount))}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No line items calculated yet
-            </p>
+            <div className="text-center py-8 text-muted-foreground">
+              No line items available
+            </div>
           )}
         </div>
 
         <Separator />
 
-        {/* Totals */}
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium">Totals</h4>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Fuel Subtotal:</span>
-              <span>{formatTotal(receipt.fuel_subtotal)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Total Fees:</span>
-              <span>{formatTotal(receipt.total_fees_amount)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Total Waivers:</span>
-              <span className="text-green-600">{formatTotal(receipt.total_waivers_amount)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Tax:</span>
-              <span>{formatTotal(receipt.tax_amount)}</span>
-            </div>
-            <Separator />
-            <div className="flex justify-between font-semibold">
-              <span>Grand Total:</span>
-              <span className="text-lg">{formatTotal(receipt.grand_total_amount)}</span>
-            </div>
+        {/* Totals Section */}
+        <div className="space-y-2">
+          <div className="flex justify-between">
+            <span>Subtotal:</span>
+            <span>{formatCurrency(parseFloat(receipt.fuel_subtotal || '0') + parseFloat(receipt.total_fees_amount || '0'))}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Taxes (7.5%):</span>
+            <span>{formatCurrency(parseFloat(receipt.tax_amount || '0'))}</span>
+          </div>
+          <Separator />
+          <div className="flex justify-between text-lg font-semibold">
+            <span>Total:</span>
+            <span>{formatCurrency(parseFloat(receipt.grand_total_amount || '0'))}</span>
           </div>
         </div>
 
@@ -175,6 +142,11 @@ export default function ReceiptPreview() {
             </Badge>
           </div>
         )}
+
+        {/* Footer */}
+        <div className="text-center text-xs text-muted-foreground border-t pt-4">
+          Thank you for choosing FBO LaunchPad for your aviation services.
+        </div>
       </CardContent>
     </Card>
   )

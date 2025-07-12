@@ -81,14 +81,15 @@ function ReceiptWorkspaceInternal({ receiptId }: ReceiptWorkspaceProps) {
 
         <ReceiptHeader />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Two-Column Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left Column: Editor */}
-          <div className="md:col-span-1 space-y-6">
+          <div className="space-y-6">
             <ReceiptEditor />
           </div>
 
-          {/* Right Column: Details & Actions */}
-          <div className="md:col-span-2 space-y-6">
+          {/* Right Column: Preview */}
+          <div className="space-y-6">
             <ReceiptPreview />
           </div>
         </div>
@@ -97,36 +98,6 @@ function ReceiptWorkspaceInternal({ receiptId }: ReceiptWorkspaceProps) {
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-wrap gap-4">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      onClick={receiptData.handleCalculateFees}
-                      disabled={!receiptData.canCalculateFees || receiptData.status === 'calculating_fees'}
-                      data-cy="calculate-fees-btn"
-                      className="flex-1 min-w-[200px]"
-                    >
-                      {receiptData.status === 'calculating_fees' ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Calculating Fees...
-                        </>
-                      ) : (
-                        <>
-                          <Calculator className="mr-2 h-4 w-4" />
-                          Calculate Fees
-                        </>
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  {(receiptData.isManualReceipt && receiptData.missingFields.length > 0) && (
-                    <TooltipContent>
-                      <p>Please complete the following fields: {receiptData.missingFields.join(', ')}</p>
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
-
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -145,13 +116,21 @@ function ReceiptWorkspaceInternal({ receiptId }: ReceiptWorkspaceProps) {
                       ) : (
                         <>
                           <FileText className="mr-2 h-4 w-4" />
-                          Generate Receipt
+                          Generate & Send
                         </>
                       )}
                     </Button>
                   </TooltipTrigger>
                 </Tooltip>
               </TooltipProvider>
+
+              <Button
+                variant="outline"
+                className="flex-1 min-w-[200px]"
+                disabled={!receiptData.receipt}
+              >
+                Download PDF
+              </Button>
 
               {receiptData.canMarkAsPaid && (
                 <Button

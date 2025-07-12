@@ -31,11 +31,12 @@ export interface ReceiptContextType {
   handleFuelPriceChange: (price: string) => void;
   handleNotesChange: (notes: string) => void;
   handleToggleWaiver: (lineItemId: number) => Promise<void>;
-  handleCalculateFees: () => Promise<void>;
+  addLineItem: (serviceCode: string, quantity: number) => Promise<void>;
+  removeLineItem: (lineItemId: number) => Promise<void>;
+  updateLineItemQuantity: (lineItemId: number, newQuantity: number) => Promise<void>;
+  updateLineItemUnitPrice: (lineItemId: number, newUnitPrice: number) => Promise<void>;
   handleGenerateReceipt: () => Promise<void>;
   handleMarkAsPaid: () => Promise<void>;
-  handleAddService: (serviceCode: string) => Promise<void>;
-  handleRemoveService: (lineItemId: number) => Promise<void>; // Assuming we remove by line item ID now
 }
 
 export const ReceiptContext = createContext<ReceiptContextType | undefined>(undefined);

@@ -162,6 +162,20 @@ export function useReceipt(receiptId: number) {
     if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
   }, []);
 
+  // --- PRIVATE INTERNAL FUNCTIONS ---
+
+  const recalculateWithUpdates = useCallback(async (services?: DraftUpdatePayload['additional_services']) => {
+    if (!state.receipt) return;
+    
+    dispatch({ type: 'ACTION_START', payload: 'calculating_fees' });
+    try {
+      const calculatedReceipt = await calculateFeesForReceipt(receiptId, services || []);
+      dispatch({ type: 'ACTION_SUCCESS', payload: calculatedReceipt });
+    } catch (error) {
+      dispatch({ type: 'ACTION_ERROR', payload: error instanceof Error ? error.message : 'Fee calculation failed' });
+    }
+  }, [receiptId, state.receipt]);
+
   // --- HANDLERS ---
 
   const queueAutoSave = useCallback((updates: Partial<DraftUpdatePayload>) => {
@@ -214,18 +228,73 @@ export function useReceipt(receiptId: number) {
     }
   }, [receiptId]);
 
-  const handleCalculateFees = useCallback(async () => {
+  const addLineItem = useCallback(async (serviceCode: string, quantity: number) => {
     if (!state.receipt) return;
-    dispatch({ type: 'ACTION_START', payload: 'calculating_fees' });
-    try {
-        // Here we assume additional services are managed via another mechanism
-        // and sent directly if needed. For now, we pass an empty array.
-      const calculatedReceipt = await calculateFeesForReceipt(receiptId, []);
-      dispatch({ type: 'ACTION_SUCCESS', payload: calculatedReceipt });
-    } catch (error) {
-      dispatch({ type: 'ACTION_ERROR', payload: error instanceof Error ? error.message : 'Fee calculation failed' });
+    
+    // Read current line items and construct service list
+    const currentFeeItems = state.receipt.line_items
+      .filter(item => item.line_item_type === 'FEE')
+      .map(item => ({ 
+        fee_code: item.fee_code_applied || '', 
+        quantity: parseFloat(item.quantity) 
+      }));
+    
+    // Append the new service
+    const newServicesList = [...currentFeeItems, { fee_code: serviceCode, quantity }];
+    
+    // Trigger recalculation
+    await recalculateWithUpdates(newServicesList);
+  }, [state.receipt, recalculateWithUpdates]);
+
+  const removeLineItem = useCallback(async (lineItemId: number) => {
+    if (!state.receipt) return;
+    
+    // Read current line items and construct service list excluding the item to remove
+    const filteredFeeItems = state.receipt.line_items
+      .filter(item => item.line_item_type === 'FEE' && item.id !== lineItemId)
+      .map(item => ({ 
+        fee_code: item.fee_code_applied || '', 
+        quantity: parseFloat(item.quantity) 
+      }));
+    
+    // Trigger recalculation
+    await recalculateWithUpdates(filteredFeeItems);
+  }, [state.receipt, recalculateWithUpdates]);
+
+  const updateLineItemQuantity = useCallback(async (lineItemId: number, newQuantity: number) => {
+    if (!state.receipt) return;
+    
+    const targetItem = state.receipt.line_items.find(item => item.id === lineItemId);
+    if (!targetItem) return;
+    
+    if (targetItem.line_item_type === 'FEE') {
+      // For FEE items, update the service list and recalculate
+      const updatedFeeItems = state.receipt.line_items
+        .filter(item => item.line_item_type === 'FEE')
+        .map(item => ({ 
+          fee_code: item.fee_code_applied || '', 
+          quantity: item.id === lineItemId ? newQuantity : parseFloat(item.quantity) 
+        }));
+      
+      await recalculateWithUpdates(updatedFeeItems);
+    } else if (targetItem.line_item_type === 'FUEL') {
+      // For FUEL items, update via the fuel quantity handler
+      handleFuelQuantityChange(newQuantity.toString());
     }
-  }, [receiptId, state.receipt]);
+  }, [state.receipt, recalculateWithUpdates, handleFuelQuantityChange]);
+
+  const updateLineItemUnitPrice = useCallback(async (lineItemId: number, newUnitPrice: number) => {
+    if (!state.receipt) return;
+    
+    const targetItem = state.receipt.line_items.find(item => item.id === lineItemId);
+    if (!targetItem) return;
+    
+    if (targetItem.line_item_type === 'FUEL') {
+      // Only fuel items can have their unit price updated
+      handleFuelPriceChange(newUnitPrice.toString());
+    }
+    // FEE items get their prices from the service definitions, not user input
+  }, [state.receipt, handleFuelPriceChange]);
 
   const handleGenerateReceipt = useCallback(async () => {
     if (!state.receipt) return;
@@ -248,19 +317,6 @@ export function useReceipt(receiptId: number) {
       dispatch({ type: 'ACTION_ERROR', payload: error instanceof Error ? error.message : 'Failed to mark as paid' });
     }
   }, [receiptId, state.receipt]);
-  
-  // Placeholder for service adding/removing logic.
-  // This needs more robust implementation based on backend capabilities.
-  const handleAddService = async (serviceCode: string) => {
-    console.log("Adding service:", serviceCode);
-    // This should likely trigger a recalculation
-    await handleCalculateFees();
-  };
-  const handleRemoveService = async (lineItemId: number) => {
-    console.log("Removing service for line item:", lineItemId);
-     // This should likely trigger a recalculation
-    await handleCalculateFees();
-  };
 
   // --- DERIVED STATE ---
 
@@ -306,10 +362,11 @@ export function useReceipt(receiptId: number) {
     handleFuelPriceChange,
     handleNotesChange,
     handleToggleWaiver,
-    handleCalculateFees,
+    addLineItem,
+    removeLineItem,
+    updateLineItemQuantity,
+    updateLineItemUnitPrice,
     handleGenerateReceipt,
     handleMarkAsPaid,
-    handleAddService,
-    handleRemoveService,
   };
 } 
