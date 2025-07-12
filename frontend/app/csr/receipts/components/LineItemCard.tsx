@@ -16,19 +16,16 @@ interface LineItemCardProps {
 }
 
 export default function LineItemCard({ item }: LineItemCardProps) {
-  const { receipt, removeLineItem, handleToggleWaiver, updateLineItemQuantity, updateLineItemUnitPrice } = useReceiptContext()
+  const { receipt, removeLineItem, handleToggleWaiver, updateLineItemQuantity, fuelTypes } = useReceiptContext()
   const [quantity, setQuantity] = useState(item.quantity)
-  const [unitPrice, setUnitPrice] = useState(item.unit_price)
   
-  // Debounce the values to prevent excessive API calls
+  // Debounce the quantity value to prevent excessive API calls
   const debouncedQuantity = useDebounce(quantity, 1000)
-  const debouncedUnitPrice = useDebounce(unitPrice, 1000)
 
   // Sync local state with prop changes (when the item updates from backend)
   useEffect(() => {
     setQuantity(item.quantity)
-    setUnitPrice(item.unit_price)
-  }, [item.quantity, item.unit_price])
+  }, [item.quantity])
 
   // Handle debounced quantity updates
   useEffect(() => {
@@ -39,16 +36,6 @@ export default function LineItemCard({ item }: LineItemCardProps) {
       updateLineItemQuantity(item.id, numericQuantity)
     }
   }, [debouncedQuantity, item.id, item.quantity, updateLineItemQuantity])
-
-  // Handle debounced unit price updates (fuel items only)
-  useEffect(() => {
-    const numericUnitPrice = parseFloat(debouncedUnitPrice)
-    const originalUnitPrice = parseFloat(item.unit_price)
-    
-    if (item.line_item_type === 'FUEL' && !isNaN(numericUnitPrice) && numericUnitPrice !== originalUnitPrice && numericUnitPrice >= 0) {
-      updateLineItemUnitPrice(item.id, numericUnitPrice)
-    }
-  }, [debouncedUnitPrice, item.id, item.unit_price, item.line_item_type, updateLineItemUnitPrice])
 
   // Determine if this fee item is waived by checking for a corresponding WAIVER item
   const isWaived = receipt?.line_items.some(
@@ -64,6 +51,14 @@ export default function LineItemCard({ item }: LineItemCardProps) {
     handleToggleWaiver(item.id)
   }
 
+  // Helper function to get fuel type name from code
+  const getFuelTypeName = (fuelTypeCode: string | null | undefined): string => {
+    if (!fuelTypeCode) return 'Fuel';
+    
+    const fuelType = fuelTypes.find(ft => ft.code === fuelTypeCode);
+    return fuelType ? fuelType.name : fuelTypeCode;
+  };
+
   const renderWaiverButton = () => {
     if (!item.is_manually_waivable) return null
 
@@ -73,7 +68,7 @@ export default function LineItemCard({ item }: LineItemCardProps) {
           variant="outline"
           size="sm"
           onClick={handleToggleWaiverClick}
-          className="h-8 px-3 text-green-700 border-green-200 bg-green-50 hover:bg-green-100"
+          className="h-7 px-2 text-xs text-green-700 border-green-200 bg-green-50 hover:bg-green-100"
         >
           ✅ Waived
         </Button>
@@ -85,7 +80,7 @@ export default function LineItemCard({ item }: LineItemCardProps) {
         variant="outline"
         size="sm"
         onClick={handleToggleWaiverClick}
-        className="h-8 px-3 text-blue-700 border-blue-200 hover:bg-blue-50"
+        className="h-7 px-2 text-xs text-blue-700 border-blue-200 hover:bg-blue-50"
       >
         Waive
       </Button>
@@ -93,56 +88,54 @@ export default function LineItemCard({ item }: LineItemCardProps) {
   }
 
   return (
-    <Card className="border">
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between gap-4">
+    <Card className="border-0 bg-gray-50">
+      <CardContent className="p-3">
+        <div className="flex items-center gap-3">
+          {/* Description with integrated fee code */}
           <div className="flex-1">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="font-medium text-sm">{item.description}</div>
+            <div className="font-medium text-sm">
+              {item.line_item_type === 'FUEL' && receipt?.fuel_type_at_receipt_time ? 
+                item.description.replace(/^Fuel/, getFuelTypeName(receipt.fuel_type_at_receipt_time)) : 
+                item.description
+              }
               {item.fee_code_applied && (
-                <Badge variant="outline" className="text-xs">{item.fee_code_applied}</Badge>
+                <span className="text-xs text-muted-foreground ml-2">({item.fee_code_applied})</span>
               )}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Quantity:</span>
-                <Input
-                  type="number"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                  className="w-20 h-8"
-                  min="0"
-                  step={item.line_item_type === 'FUEL' ? "0.1" : "1"}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Unit Price:</span>
-                {item.line_item_type === 'FUEL' ? (
-                  <Input
-                    type="number"
-                    value={unitPrice}
-                    onChange={(e) => setUnitPrice(e.target.value)}
-                    className="w-24 h-8"
-                    min="0"
-                    step="0.01"
-                  />
-                ) : (
-                  <span className="text-sm font-medium">{formatCurrency(item.unit_price)}</span>
-                )}
-              </div>
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          {/* Quantity */}
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">Quantity:</span>
+            <Input
+              type="number"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className="w-16 h-7 text-sm"
+              min="0"
+              step="1"
+            />
+          </div>
+          
+          {/* Unit Price */}
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">Unit Price:</span>
+            <span className="text-sm font-medium min-w-[4rem] text-right">{formatCurrency(item.unit_price)}</span>
+          </div>
+          
+          {/* Actions */}
+          <div className="flex items-center gap-1">
             {renderWaiverButton()}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRemove}
-              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {item.line_item_type === 'FEE' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRemove}
+                className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            )}
           </div>
         </div>
       </CardContent>

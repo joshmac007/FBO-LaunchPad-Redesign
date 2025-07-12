@@ -13,6 +13,7 @@ import {
   type DraftUpdatePayload,
 } from '@/app/services/receipt-service';
 import { getAvailableServices, type AvailableService } from '@/app/services/fee-service';
+import { getFuelTypes, type FuelType } from '@/app/services/admin-fee-config-service';
 import type { Customer } from '@/app/services/customer-service';
 
 // --- STATE AND REDUCER ---
@@ -24,6 +25,7 @@ interface ReceiptState {
   autoSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
   pendingUpdates: Partial<DraftUpdatePayload>;
   availableServices: AvailableService[];
+  fuelTypes: FuelType[];
   isTogglingWaiver: number | null;
 }
 
@@ -40,6 +42,7 @@ type ReceiptAction =
   | { type: 'AUTO_SAVE_SUCCESS'; payload: ExtendedReceipt }
   | { type: 'AUTO_SAVE_ERROR' }
   | { type: 'SET_AVAILABLE_SERVICES'; payload: AvailableService[] }
+  | { type: 'SET_FUEL_TYPES'; payload: FuelType[] }
   | { type: 'SET_TOGGLING_WAIVER'; payload: number | null };
 
 const initialState: ReceiptState = {
@@ -49,6 +52,7 @@ const initialState: ReceiptState = {
   autoSaveStatus: 'idle',
   pendingUpdates: {},
   availableServices: [],
+  fuelTypes: [],
   isTogglingWaiver: null,
 };
 
@@ -89,6 +93,8 @@ function receiptReducer(state: ReceiptState, action: ReceiptAction): ReceiptStat
       return { ...state, autoSaveStatus: 'error' };
     case 'SET_AVAILABLE_SERVICES':
       return { ...state, availableServices: action.payload };
+    case 'SET_FUEL_TYPES':
+      return { ...state, fuelTypes: action.payload };
     case 'SET_TOGGLING_WAIVER':
       return { ...state, isTogglingWaiver: action.payload };
     default:
@@ -129,6 +135,18 @@ export function useReceipt(receiptId: number) {
       }
     };
     loadServices();
+  }, []);
+
+  useEffect(() => {
+    const loadFuelTypes = async () => {
+      try {
+        const fuelTypesResponse = await getFuelTypes();
+        dispatch({ type: 'SET_FUEL_TYPES', payload: fuelTypesResponse.fuel_types });
+      } catch (error) {
+        console.error('Error loading fuel types:', error);
+      }
+    };
+    loadFuelTypes();
   }, []);
 
   // --- AUTO-SAVE EFFECT ---
@@ -233,9 +251,9 @@ export function useReceipt(receiptId: number) {
     
     // Read current line items and construct service list
     const currentFeeItems = state.receipt.line_items
-      .filter(item => item.line_item_type === 'FEE')
+      .filter(item => item.line_item_type === 'FEE' && item.fee_code_applied)
       .map(item => ({ 
-        fee_code: item.fee_code_applied || '', 
+        fee_code: item.fee_code_applied!, 
         quantity: parseFloat(item.quantity) 
       }));
     
@@ -251,9 +269,9 @@ export function useReceipt(receiptId: number) {
     
     // Read current line items and construct service list excluding the item to remove
     const filteredFeeItems = state.receipt.line_items
-      .filter(item => item.line_item_type === 'FEE' && item.id !== lineItemId)
+      .filter(item => item.line_item_type === 'FEE' && item.id !== lineItemId && item.fee_code_applied)
       .map(item => ({ 
-        fee_code: item.fee_code_applied || '', 
+        fee_code: item.fee_code_applied!, 
         quantity: parseFloat(item.quantity) 
       }));
     
@@ -270,9 +288,9 @@ export function useReceipt(receiptId: number) {
     if (targetItem.line_item_type === 'FEE') {
       // For FEE items, update the service list and recalculate
       const updatedFeeItems = state.receipt.line_items
-        .filter(item => item.line_item_type === 'FEE')
+        .filter(item => item.line_item_type === 'FEE' && item.fee_code_applied)
         .map(item => ({ 
-          fee_code: item.fee_code_applied || '', 
+          fee_code: item.fee_code_applied!, 
           quantity: item.id === lineItemId ? newQuantity : parseFloat(item.quantity) 
         }));
       
@@ -283,18 +301,6 @@ export function useReceipt(receiptId: number) {
     }
   }, [state.receipt, recalculateWithUpdates, handleFuelQuantityChange]);
 
-  const updateLineItemUnitPrice = useCallback(async (lineItemId: number, newUnitPrice: number) => {
-    if (!state.receipt) return;
-    
-    const targetItem = state.receipt.line_items.find(item => item.id === lineItemId);
-    if (!targetItem) return;
-    
-    if (targetItem.line_item_type === 'FUEL') {
-      // Only fuel items can have their unit price updated
-      handleFuelPriceChange(newUnitPrice.toString());
-    }
-    // FEE items get their prices from the service definitions, not user input
-  }, [state.receipt, handleFuelPriceChange]);
 
   const handleGenerateReceipt = useCallback(async () => {
     if (!state.receipt) return;
@@ -344,6 +350,7 @@ export function useReceipt(receiptId: number) {
     error: state.error,
     autoSaveStatus: state.autoSaveStatus,
     availableServices: state.availableServices,
+    fuelTypes: state.fuelTypes,
     isTogglingWaiver: state.isTogglingWaiver,
     
     // Derived State
@@ -365,7 +372,6 @@ export function useReceipt(receiptId: number) {
     addLineItem,
     removeLineItem,
     updateLineItemQuantity,
-    updateLineItemUnitPrice,
     handleGenerateReceipt,
     handleMarkAsPaid,
   };

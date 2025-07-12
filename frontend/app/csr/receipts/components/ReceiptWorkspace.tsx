@@ -78,30 +78,34 @@ function ReceiptWorkspaceInternal({ receiptId }: ReceiptWorkspaceProps) {
         {/* Two-Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left Column: Editor */}
-          <div className="space-y-6">
-            <ReceiptEditor />
-            
-            {/* Notes Section */}
-            <Card>
-              <CardContent className="pt-6">
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Internal Notes</Label>
-                  <Textarea
-                    id="notes"
-                    data-cy="receipt-notes"
-                    value={receiptData.receipt.notes || ''}
-                    onChange={(e) => receiptData.handleNotesChange(e.target.value)}
-                    disabled={receiptData.isReadOnly}
-                    placeholder="Add any internal notes for this receipt..."
-                    rows={3}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <Card className="bg-gray-50 border-gray-200">
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <ReceiptEditor />
+                
+                {/* Notes Section */}
+                <Card className="bg-white">
+                  <CardContent className="pt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="notes">Internal Notes</Label>
+                      <Textarea
+                        id="notes"
+                        data-cy="receipt-notes"
+                        value={receiptData.receipt.notes || ''}
+                        onChange={(e) => receiptData.handleNotesChange(e.target.value)}
+                        disabled={receiptData.isReadOnly}
+                        placeholder="Add any internal notes for this receipt..."
+                        rows={3}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Right Column: Preview */}
-          <div className="space-y-6">
+          <div className="space-y-4">
             <ReceiptPreview />
             
             {/* Action Buttons */}
@@ -116,7 +120,7 @@ function ReceiptWorkspaceInternal({ receiptId }: ReceiptWorkspaceProps) {
                           disabled={!receiptData.canGenerateReceipt || receiptData.status === 'generating'}
                           data-cy="generate-receipt-btn"
                           variant="default"
-                          className="w-full"
+                          className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                         >
                           {receiptData.status === 'generating' ? (
                             <>

@@ -89,13 +89,17 @@ def create_draft_receipt():
             raise ValidationError({'_schema': ['Invalid input type. Expected a JSON object.']})
         data = create_draft_receipt_schema.load(json_data)
         user_id = getattr(g.current_user, 'id', None)
+        if user_id is None:
+            current_app.logger.warning("create_draft_receipt: user_id is None after authentication check.")
+            return jsonify({"error": "User identity could not be determined from the request."}), 401
+            
         fuel_order_id = data['fuel_order_id'] if isinstance(data, dict) and 'fuel_order_id' in data else None
         if fuel_order_id is None:
             raise ValidationError({'fuel_order_id': ['Missing data for required field.']})
 
         receipt = receipt_service.create_draft_from_fuel_order(
             fuel_order_id=fuel_order_id,
-            user_id=user_id if user_id is not None else 0  # Ensure user_id is int, fallback to 0 if None
+            user_id=user_id
         )
         response_data = {
             "message": "Draft receipt created successfully.",

@@ -307,13 +307,19 @@ class FeeCalculationService:
                     key = (fee_code, 'classification')
                     overrides[key] = override
         
-        # Next, process all FeeRule records (all rules are now global)
+        # Only process rules that are explicitly requested in additional_services
+        # This ensures CSRs have full control over which fees are applied
         global_rules = all_rules
+        additional_fee_codes = {service['fee_code'] for service in additional_services}
         
         for rule in global_rules:
             fee_code = rule.fee_code
             
-            # For each fee_code, determine the final rule using the three-tier hierarchy:
+            # Only process this rule if it's explicitly requested in additional_services
+            if fee_code not in additional_fee_codes:
+                continue
+            
+            # For each requested fee_code, determine the final rule using the three-tier hierarchy:
             # 1. Check for aircraft-specific override
             aircraft_override_key = (fee_code, 'aircraft')
             if aircraft_type_id and aircraft_override_key in overrides:
@@ -334,15 +340,6 @@ class FeeCalculationService:
             
             # 3. Use global base fee (if no overrides exist)
             resolved_rules[fee_code] = rule
-        
-        # Additional services override - explicit request always wins
-        additional_fee_codes = {service['fee_code'] for service in additional_services}
-        for fee_code in additional_fee_codes:
-            # Find the corresponding global rule from master list and unconditionally place it
-            for rule in global_rules:
-                if rule.fee_code == fee_code:
-                    resolved_rules[fee_code] = rule
-                    break
         
         return list(resolved_rules.values())
     

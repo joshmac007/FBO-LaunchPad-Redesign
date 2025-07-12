@@ -3,6 +3,7 @@
 import { createContext, useContext } from 'react';
 import type { ExtendedReceipt, ReceiptLineItem } from '@/app/services/receipt-service';
 import type { AvailableService } from '@/app/services/fee-service';
+import type { FuelType } from '@/app/services/admin-fee-config-service';
 import type { Customer } from '@/app/services/customer-service';
 
 // This will be the return type of the useReceipt hook
@@ -13,6 +14,7 @@ export interface ReceiptContextType {
   error: string | null;
   autoSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
   availableServices: AvailableService[];
+  fuelTypes: FuelType[];
   isTogglingWaiver: number | null;
   isReadOnly: boolean;
   isManualReceipt: boolean;
@@ -34,7 +36,6 @@ export interface ReceiptContextType {
   addLineItem: (serviceCode: string, quantity: number) => Promise<void>;
   removeLineItem: (lineItemId: number) => Promise<void>;
   updateLineItemQuantity: (lineItemId: number, newQuantity: number) => Promise<void>;
-  updateLineItemUnitPrice: (lineItemId: number, newUnitPrice: number) => Promise<void>;
   handleGenerateReceipt: () => Promise<void>;
   handleMarkAsPaid: () => Promise<void>;
 }

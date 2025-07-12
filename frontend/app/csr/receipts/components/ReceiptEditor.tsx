@@ -33,7 +33,7 @@ export default function ReceiptEditor() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Customer Information */}
       <Card>
         <CardHeader>
@@ -93,7 +93,7 @@ export default function ReceiptEditor() {
               No line items yet. Use the "Add Line Item" button to add services or fuel charges.
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {editableLineItems.map((item) => (
                 <LineItemCard
                   key={item.id}

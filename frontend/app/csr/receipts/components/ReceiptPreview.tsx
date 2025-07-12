@@ -8,8 +8,16 @@ import { Loader2 } from "lucide-react";
 import { formatCurrency } from "@/app/services/utils";
 
 export default function ReceiptPreview() {
-  const { receipt, status } = useReceiptContext();
+  const { receipt, status, fuelTypes } = useReceiptContext();
   const isRecalculating = status === 'calculating_fees';
+
+  // Helper function to get fuel type name from code
+  const getFuelTypeName = (fuelTypeCode: string | null | undefined): string => {
+    if (!fuelTypeCode) return 'Fuel';
+    
+    const fuelType = fuelTypes.find(ft => ft.code === fuelTypeCode);
+    return fuelType ? fuelType.name : fuelTypeCode;
+  };
 
   if (!receipt) {
     return (
@@ -92,7 +100,12 @@ export default function ReceiptPreview() {
                 
                 return (
                   <div key={item.id} className="grid grid-cols-12 gap-2 text-sm">
-                    <div className="col-span-6">{item.description}</div>
+                    <div className="col-span-6">
+                      {item.line_item_type === 'FUEL' && receipt?.fuel_type_at_receipt_time ? 
+                        item.description.replace(/^Fuel/, getFuelTypeName(receipt.fuel_type_at_receipt_time)) : 
+                        item.description
+                      }
+                    </div>
                     <div className="col-span-2 text-center">{item.quantity}</div>
                     <div className="col-span-2 text-right">{formatCurrency(parseFloat(item.unit_price))}</div>
                     <div className="col-span-2 text-right flex items-center justify-end gap-2">
