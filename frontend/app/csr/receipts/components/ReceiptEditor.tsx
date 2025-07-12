@@ -1,51 +1,48 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Plus } from "lucide-react"
-import ServiceItemCard from "./ServiceItemCard"
-import { ExtendedReceipt } from "@/app/services/receipt-service"
+import { useState } from "react";
+import { useReceiptContext } from '../contexts/ReceiptContext';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Plus } from "lucide-react";
+import ServiceItemCard from "./ServiceItemCard";
 
-interface ReceiptEditorProps {
-  receipt: ExtendedReceipt
-  onFuelQuantityChange: (quantity: string) => void
-  onToggleWaiver: (lineItemId: number) => void
-  onAddService: (serviceCode: string) => void
-}
+export default function ReceiptEditor() {
+  const {
+    receipt,
+    handleFuelQuantityChange,
+    handleToggleWaiver,
+    handleAddService,
+    isManualReceipt,
+    handleFuelTypeChange,
+    handleFuelPriceChange,
+    availableServices,
+  } = useReceiptContext();
 
-export default function ReceiptEditor({ 
-  receipt, 
-  onFuelQuantityChange, 
-  onToggleWaiver,
-  onAddService 
-}: ReceiptEditorProps) {
-  const [isAddServiceOpen, setIsAddServiceOpen] = useState(false)
-  const [availableServices] = useState([
-    { code: 'GPU', name: 'Ground Power Unit' },
-    { code: 'AIR_START', name: 'Air Start Service' },
-    { code: 'LAVATORY', name: 'Lavatory Service' },
-    { code: 'WATER', name: 'Potable Water' },
-  ])
+  const [isAddServiceOpen, setIsAddServiceOpen] = useState(false);
 
+  if (!receipt) {
+    return null;
+  }
+  
   // Get fee line items and their corresponding waivers
-  const feeLineItems = receipt.line_items?.filter(item => item.line_item_type === 'FEE') || []
-  const waiverLineItems = receipt.line_items?.filter(item => item.line_item_type === 'WAIVER') || []
+  const feeLineItems = receipt.line_items?.filter(item => item.line_item_type === 'FEE') || [];
+  const waiverLineItems = receipt.line_items?.filter(item => item.line_item_type === 'WAIVER') || [];
 
   const getRelatedWaiver = (feeItem: any) => {
     return waiverLineItems.find(waiver => 
       waiver.fee_code_applied === feeItem.fee_code_applied
-    ) || null
-  }
+    ) || null;
+  };
 
-  const handleAddService = (serviceCode: string) => {
-    onAddService(serviceCode)
-    setIsAddServiceOpen(false)
-  }
+  const onAddService = (serviceCode: string) => {
+    handleAddService(serviceCode);
+    setIsAddServiceOpen(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -55,28 +52,74 @@ export default function ReceiptEditor({
           <CardTitle>Fuel Details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="fuel-quantity">Fuel Quantity (Gallons)</Label>
-              <Input
-                id="fuel-quantity"
-                data-testid="fuel-quantity-input"
-                type="number"
-                value={receipt.fuel_quantity_gallons_at_receipt_time || ''}
-                onChange={(e) => onFuelQuantityChange(e.target.value)}
-                placeholder="Enter gallons"
-              />
+          {isManualReceipt ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="fuel-quantity-manual">Fuel Quantity (Gallons)</Label>
+                <Input
+                  id="fuel-quantity-manual"
+                  data-testid="fuel-quantity-manual-input"
+                  type="number"
+                  value={receipt.fuel_quantity_gallons_at_receipt_time || ''}
+                  onChange={(e) => handleFuelQuantityChange(e.target.value)}
+                  placeholder="Enter gallons"
+                />
+              </div>
+              <div>
+                <Label htmlFor="fuel-type-manual">Fuel Type</Label>
+                <Input
+                  id="fuel-type-manual"
+                  value={receipt.fuel_type_at_receipt_time || ''}
+                  onChange={(e) => handleFuelTypeChange(e.target.value)}
+                  placeholder="Enter fuel type (e.g., Jet A, Avgas 100LL)"
+                />
+              </div>
+              <div>
+                <Label htmlFor="fuel-price">Price per Gallon</Label>
+                <Input
+                  id="fuel-price"
+                  data-testid="fuel-price-input"
+                  type="number"
+                  step="0.01"
+                  value={receipt.fuel_unit_price_at_receipt_time || ''}
+                  onChange={(e) => handleFuelPriceChange(e.target.value)}
+                  placeholder="Enter price per gallon"
+                />
+              </div>
+              <div>
+                <Label htmlFor="fuel-subtotal">Fuel Subtotal</Label>
+                <Input
+                  id="fuel-subtotal"
+                  value={receipt.fuel_subtotal || '0.00'}
+                  disabled
+                  className="bg-muted"
+                />
+              </div>
             </div>
-            <div>
-              <Label htmlFor="fuel-type">Fuel Type</Label>
-              <Input
-                id="fuel-type"
-                value={receipt.fuel_type_at_receipt_time || ''}
-                disabled
-                placeholder="Fuel type"
-              />
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="fuel-quantity">Fuel Quantity (Gallons)</Label>
+                <Input
+                  id="fuel-quantity"
+                  data-testid="fuel-quantity-input"
+                  type="number"
+                  value={receipt.fuel_quantity_gallons_at_receipt_time || ''}
+                  onChange={(e) => handleFuelQuantityChange(e.target.value)}
+                  placeholder="Enter gallons"
+                />
+              </div>
+              <div>
+                <Label htmlFor="fuel-type">Fuel Type</Label>
+                <Input
+                  id="fuel-type"
+                  value={receipt.fuel_type_at_receipt_time || ''}
+                  disabled
+                  placeholder="Fuel type"
+                />
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
@@ -100,10 +143,10 @@ export default function ReceiptEditor({
                     {availableServices.map((service) => (
                       <CommandItem
                         key={service.code}
-                        onSelect={() => handleAddService(service.code)}
+                        onSelect={() => onAddService(service.code)}
                       >
                         <div>
-                          <div className="font-medium">{service.name}</div>
+                          <div className="font-medium">{service.fee_name}</div>
                           <div className="text-sm text-muted-foreground">{service.code}</div>
                         </div>
                       </CommandItem>
@@ -126,7 +169,7 @@ export default function ReceiptEditor({
                   key={feeItem.id}
                   lineItem={feeItem}
                   relatedWaiver={getRelatedWaiver(feeItem)}
-                  onToggleWaiver={onToggleWaiver}
+                  onToggleWaiver={handleToggleWaiver}
                 />
               ))}
             </div>
@@ -134,5 +177,5 @@ export default function ReceiptEditor({
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

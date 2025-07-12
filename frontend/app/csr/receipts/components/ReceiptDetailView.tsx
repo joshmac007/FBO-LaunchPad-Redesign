@@ -44,6 +44,20 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
   const [voidReason, setVoidReason] = useState("")
   const { toast } = useToast()
 
+  /*
+   * Field aliasing – map backend snake_case fields to camelCase variables expected
+   * in the original UI implementation. This avoids a wide refactor while keeping
+   * type-safety and eliminating linter errors.
+   */
+  const receiptNumber = receipt.receipt_number
+  const tailNumber = receipt.fuel_order_tail_number
+  const aircraftTypeAtReceiptTime = receipt.aircraft_type_at_receipt_time
+  const isCaaApplied = receipt.is_caa_applied
+  const customerDisplay = receipt.customer_name || `Customer ${receipt.customer_id}`
+  // Non-standard optional fields (safe access)
+  const locationDisplay: string = (receipt as any).location ?? "N/A"
+  const notes: string | undefined = (receipt as any).notes
+
   const handleMarkAsPaid = async () => {
     try {
       setIsMarkingPaid(true)
@@ -113,13 +127,13 @@ export default function ReceiptDetailView({ receipt, onReceiptUpdate }: ReceiptD
       setIsEmailing(true)
       
       // Create email content for the receipt
-      const subject = `Receipt ${receipt.receipt_number || receipt.id} - FBO LaunchPad`
+      const subject = `Receipt ${receiptNumber || receipt.id} - FBO LaunchPad`
       const body = `Dear Customer,
 
 Please find your receipt details below:
 
-Receipt Number: ${receipt.receipt_number || receipt.id}
-Aircraft: ${receipt.tailNumber}
+Receipt Number: ${receiptNumber || receipt.id}
+Aircraft: ${tailNumber}
 Total Amount: ${formatCurrency(parseFloat(receipt.grand_total_amount))}
 Status: ${receipt.status}
 
@@ -362,11 +376,12 @@ FBO LaunchPad Team`
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-lg shadow-sm border print:shadow-none print:border-none"
+          className="relative bg-white rounded-lg shadow-sm border print:shadow-none print:border-none"
         >
+          {/* Void watermark overlay */}
           {receipt.status === 'VOID' && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 z-10">
-              <span className="text-9xl font-bold text-red-500 opacity-50 transform -rotate-12 select-none">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-10">
+              <span className="text-9xl font-bold text-red-500 opacity-20 -rotate-12 select-none">
                 VOID
               </span>
             </div>
@@ -391,7 +406,7 @@ FBO LaunchPad Team`
                   <FileCheck className="h-5 w-5 text-primary" />
                   <h2 className="text-xl font-bold">RECEIPT</h2>
                 </div>
-                <p className="font-mono text-lg font-semibold" data-testid="receipt-number">{receipt.receiptNumber}</p>
+                <p className="font-mono text-lg font-semibold" data-testid="receipt-number">{receiptNumber}</p>
                 <div className="mt-2">
                   {getStatusBadge(receipt.status)}
                 </div>
@@ -443,9 +458,9 @@ FBO LaunchPad Team`
                 <CardContent className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">Account:</span>
-                    <span>{receipt.customer || receipt.tailNumber}</span>
+                    <span>{customerDisplay}</span>
                   </div>
-                  {receipt.isCaaApplied && (
+                  {isCaaApplied && (
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">CAA Member:</span>
                       <Badge variant="secondary" className="text-xs">Yes</Badge>
@@ -467,17 +482,17 @@ FBO LaunchPad Team`
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <span className="text-sm text-muted-foreground">Tail Number:</span>
-                    <p className="font-semibold">{receipt.tailNumber}</p>
+                    <p className="font-semibold">{tailNumber}</p>
                   </div>
-                  {receipt.aircraftTypeAtReceiptTime && (
+                  {aircraftTypeAtReceiptTime && (
                     <div>
                       <span className="text-sm text-muted-foreground">Aircraft Type:</span>
-                      <p className="font-semibold">{receipt.aircraftTypeAtReceiptTime}</p>
+                      <p className="font-semibold">{aircraftTypeAtReceiptTime}</p>
                     </div>
                   )}
                   <div>
                     <span className="text-sm text-muted-foreground">Location:</span>
-                    <p className="font-semibold">{receipt.location || "N/A"}</p>
+                    <p className="font-semibold">{locationDisplay}</p>
                   </div>
                 </div>
               </CardContent>
@@ -601,13 +616,13 @@ FBO LaunchPad Team`
             </Card>
 
             {/* Notes */}
-            {receipt.notes && (
+            {notes && (
               <Card className="mt-6">
                 <CardHeader>
                   <CardTitle className="text-sm">Notes</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm">{receipt.notes}</p>
+                  <p className="text-sm">{notes}</p>
                 </CardContent>
               </Card>
             )}

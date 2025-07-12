@@ -6,12 +6,13 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { useSearchDebounce } from "@/hooks/useDebounce"
 import { ReceiptTableRow } from "@/app/components/ReceiptTableRow"
 import { 
-  Search, Download, Filter, RefreshCw, AlertTriangle, Loader2,
+  Search, Download, Filter, AlertTriangle, Loader2,
   CheckSquare, Square, Receipt as ReceiptIcon, CheckCircle, 
-  FileText, Edit
+  FileText, Edit, Plus
 } from "lucide-react"
 import { 
   getReceipts,
+  createUnassignedDraftReceipt,
   type Receipt,
   type ReceiptListFilters
 } from "@/app/services/receipt-service"
@@ -56,6 +57,7 @@ function ReceiptsPageInternal() {
   
   // UI states
   const [isExporting, setIsExporting] = useState(false)
+  const [isCreatingReceipt, setIsCreatingReceipt] = useState(false)
 
   // Debounce search input to prevent excessive re-renders
   const { debouncedSearchTerm, isSearching } = useSearchDebounce(searchTerm, 300)
@@ -123,7 +125,7 @@ function ReceiptsPageInternal() {
       }
     },
     staleTime: 15 * 60 * 1000, // 15 minutes
-    refetchInterval: 60000, // 1 minute
+    // Auto-refresh disabled as requested
     placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
   })
@@ -159,6 +161,20 @@ function ReceiptsPageInternal() {
     console.log("Void receipt:", receipt.id)
     toast.info("Void functionality coming soon")
   }, [])
+
+  const handleAddReceipt = useCallback(async () => {
+    setIsCreatingReceipt(true)
+    try {
+      const newReceipt = await createUnassignedDraftReceipt()
+      router.push(`/csr/receipts/${newReceipt.id}`)
+      toast.success("New receipt created successfully")
+    } catch (error) {
+      toast.error("Failed to create new receipt")
+      console.error("Error creating receipt:", error)
+    } finally {
+      setIsCreatingReceipt(false)
+    }
+  }, [router])
 
   const toggleReceiptSelection = useCallback((receiptId: string) => {
     setSelectedReceipts(prev => 
@@ -227,10 +243,7 @@ function ReceiptsPageInternal() {
     }
   }
 
-  const handleRefresh = useCallback(() => {
-    refetch()
-    toast.info("Refreshing receipts...")
-  }, [refetch])
+  // Manual refresh removed; rely on user navigation or filter changes
 
   // Handle loading state
   if (queryIsLoading) {
@@ -276,20 +289,7 @@ function ReceiptsPageInternal() {
             <h1 className="text-3xl font-bold tracking-tight">Receipts Management</h1>
             <p className="text-muted-foreground">Search, filter, and manage all customer receipts</p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm bg-blue-50 border border-blue-200 text-blue-700">
-              <div className="w-2 h-2 rounded-full bg-blue-500" />
-              Auto-refresh (1min)
-            </div>
-            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isFetching}>
-              {isFetching ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Refresh
-            </Button>
-          </div>
+          {/* Auto-refresh and manual Refresh controls have been removed */}
         </div>
 
         {/* Stats Cards - Following fuel-orders pattern */}
@@ -342,6 +342,14 @@ function ReceiptsPageInternal() {
       {/* Action Bar */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex gap-2">
+          <Button onClick={handleAddReceipt} className="gap-2" disabled={isCreatingReceipt}>
+            {isCreatingReceipt ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            Add Receipt
+          </Button>
           <Button onClick={exportToCSV} variant="outline" className="gap-2" disabled={isExporting}>
             {isExporting ? (
               <Loader2 className="h-4 w-4 animate-spin" />

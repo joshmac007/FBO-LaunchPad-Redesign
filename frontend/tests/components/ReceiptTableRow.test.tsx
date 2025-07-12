@@ -5,7 +5,7 @@
  * user interactions, and accessibility features from the user's perspective.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from '@jest/globals'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Receipt } from '../../app/services/receipt-service'
 import ReceiptTableRow from '../../app/components/ReceiptTableRow'

@@ -192,7 +192,7 @@ export default function CSRDashboard() {
       opacity: 1,
       y: 0,
       transition: {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 400,
         damping: 25,
       },
@@ -200,7 +200,7 @@ export default function CSRDashboard() {
     hover: {
       y: -5,
       transition: {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 300,
         damping: 20,
       },
@@ -208,7 +208,7 @@ export default function CSRDashboard() {
     tap: {
       scale: 0.98,
       transition: {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 500,
         damping: 20,
       },
@@ -220,7 +220,7 @@ export default function CSRDashboard() {
     hover: {
       scale: 1.05,
       transition: {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 400,
         damping: 10,
       },
@@ -228,7 +228,7 @@ export default function CSRDashboard() {
     tap: {
       scale: 0.95,
       transition: {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 400,
         damping: 15,
       },
@@ -242,7 +242,7 @@ export default function CSRDashboard() {
       x: 0,
       transition: {
         delay: i * 0.1,
-        type: "spring",
+        type: "spring" as const,
         stiffness: 300,
         damping: 30,
       },
@@ -251,7 +251,7 @@ export default function CSRDashboard() {
       x: 2,
       backgroundColor: "rgba(240, 242, 245, 0.5)",
       transition: {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 300,
         damping: 20,
       },
@@ -264,7 +264,7 @@ export default function CSRDashboard() {
       opacity: 1,
       scale: 1,
       transition: {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 300,
         damping: 20,
       },
@@ -273,7 +273,7 @@ export default function CSRDashboard() {
       y: -5,
       boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
       transition: {
-        type: "spring",
+        type: "spring" as const,
         stiffness: 300,
         damping: 20,
       },
@@ -402,6 +402,12 @@ export default function CSRDashboard() {
                       Customer
                     </th>
                     <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Fuel Type
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Quantity (gal)
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Status
                     </th>
                     <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -428,6 +434,8 @@ export default function CSRDashboard() {
                           {order.aircraft_tail_number}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{order.customer_name}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{order.fuel_type}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{order.quantity}</td>
                         <td className="px-4 py-3 whitespace-nowrap">{getStatusBadge(order.status)}</td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
                           <Button
@@ -518,15 +526,11 @@ export default function CSRDashboard() {
                       className="cursor-pointer border-b"
                       onClick={() => handleViewReceiptDetails(receipt.id)}
                     >
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-foreground">{receipt.receiptNumber || receipt.id}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{receipt.tailNumber}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{receipt.customer}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">
-                        {formatCurrency(receipt.amount)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">
-                        {formatTimestamp(receipt.createdAt)}
-                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">{receipt.receipt_number || `DRAFT-${receipt.id}`}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{receipt.fuel_order_tail_number}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{receipt.customer_name}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">{formatCurrency(parseFloat(receipt.grand_total_amount))}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">{formatTimestamp(receipt.created_at)}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
                         <Button
                           variant="ghost"

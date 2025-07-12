@@ -70,7 +70,7 @@ describe('OptimisticEditableCell', () => {
         />
       )
       
-      const cell = screen.getByRole('button')
+      const cell = screen.getByRole('button', { name: /editable/i })
       expect(cell).toBeInTheDocument()
       expect(cell).toHaveAttribute('tabIndex', '0')
       expect(cell).toHaveAttribute('aria-label', 'Editable text field with value Test Value. Click to edit.')
@@ -118,7 +118,7 @@ describe('OptimisticEditableCell', () => {
         />
       )
       
-      await user.click(screen.getByRole('button'))
+      await user.click(screen.getByRole('button', { name: /editable text field/i }))
       
       // Should show input field with current value
       expect(screen.getByDisplayValue('Test Value')).toBeInTheDocument()
@@ -137,7 +137,7 @@ describe('OptimisticEditableCell', () => {
         />
       )
       
-      const cell = screen.getByRole('button')
+      const cell = screen.getByRole('button', { name: /editable text field/i })
       cell.focus()
       await user.keyboard('{Enter}')
       
@@ -154,7 +154,7 @@ describe('OptimisticEditableCell', () => {
         />
       )
       
-      const cell = screen.getByRole('button')
+      const cell = screen.getByRole('button', { name: /editable text field/i })
       cell.focus()
       await user.keyboard(' ')
       
@@ -172,7 +172,7 @@ describe('OptimisticEditableCell', () => {
         />
       )
       
-      await user.click(screen.getByRole('button'))
+      await user.click(screen.getByRole('button', { name: /editable text field with value Test Value/i }))
       
       // Should not show input field
       expect(screen.queryByDisplayValue('Test Value')).not.toBeInTheDocument()
@@ -190,7 +190,7 @@ describe('OptimisticEditableCell', () => {
         />
       )
       
-      await user.click(screen.getByRole('button'))
+      await user.click(screen.getByRole('button', { name: /editable text field with value Test Value/i }))
       
       // Should not show input field
       expect(screen.queryByDisplayValue('Test Value')).not.toBeInTheDocument()
@@ -230,9 +230,305 @@ describe('OptimisticEditableCell', () => {
         />
       )
       
+      await user.click(screen.getByRole('button', { name: /editable currency field with value \$100\.00/i }))
+      
+      expect(screen.getByText('
+
+    it('should apply proper styling for different types', async () => {
+      const user = userEvent.setup()
+      
+      // Test currency type
+      render(
+        <OptimisticEditableCell
+          value={100}
+          type="currency"
+          onSave={mockOnSave}
+        />
+      )
+      
       await user.click(screen.getByRole('button'))
       
-      expect(screen.getByText('$')).toBeInTheDocument()
+      const input = screen.getByDisplayValue('100')
+      expect(input).toHaveClass('w-20') // Currency should be narrower
+    })
+  })
+
+  describe('Save Functionality', () => {
+    it('should save changes when form is submitted', async () => {
+      const user = userEvent.setup()
+      
+      render(
+        <OptimisticEditableCell
+          value="Original Value"
+          onSave={mockOnSave}
+        />
+      )
+      
+      await user.click(screen.getByRole('button'))
+      
+      const input = screen.getByDisplayValue('Original Value')
+      await user.clear(input)
+      await user.type(input, 'New Value')
+      
+      const saveButton = screen.getByRole('button', { name: /save changes/i })
+      await user.click(saveButton)
+      
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith('New Value')
+      })
+    })
+
+    it('should save changes when input loses focus', async () => {
+      const user = userEvent.setup()
+      
+      render(
+        <OptimisticEditableCell
+          value="Original Value"
+          onSave={mockOnSave}
+        />
+      )
+      
+      await user.click(screen.getByRole('button'))
+      
+      const input = screen.getByDisplayValue('Original Value')
+      await user.clear(input)
+      await user.type(input, 'New Value')
+      await user.tab() // Move focus away to trigger blur
+      
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith('New Value')
+      })
+    })
+
+    it('should save changes when Enter key is pressed', async () => {
+      const user = userEvent.setup()
+      
+      render(
+        <OptimisticEditableCell
+          value="Original Value"
+          onSave={mockOnSave}
+        />
+      )
+      
+      await user.click(screen.getByRole('button'))
+      
+      const input = screen.getByDisplayValue('Original Value')
+      await user.clear(input)
+      await user.type(input, 'New Value{Enter}')
+      
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith('New Value')
+      })
+    })
+
+    it('should convert to number for number and currency types', async () => {
+      const user = userEvent.setup()
+      
+      render(
+        <OptimisticEditableCell
+          value={100}
+          type="number"
+          onSave={mockOnSave}
+        />
+      )
+      
+      await user.click(screen.getByRole('button'))
+      
+      const input = screen.getByDisplayValue('100')
+      await user.clear(input)
+      await user.type(input, '250{Enter}')
+      
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith(250)
+      })
+    })
+
+    it('should not save if value is unchanged', async () => {
+      const user = userEvent.setup()
+      
+      render(
+        <OptimisticEditableCell
+          value="Same Value"
+          onSave={mockOnSave}
+        />
+      )
+      
+      await user.click(screen.getByRole('button'))
+      
+      const saveButton = screen.getByRole('button', { name: /save changes/i })
+      await user.click(saveButton)
+      
+      expect(mockOnSave).not.toHaveBeenCalled()
+      // Should exit edit mode
+      expect(screen.getByText('Same Value')).toBeInTheDocument()
+    })
+
+    it('should handle save errors gracefully', async () => {
+      const user = userEvent.setup()
+      mockOnSave.mockRejectedValue(new Error('Save failed'))
+      
+      render(
+        <OptimisticEditableCell
+          value="Original Value"
+          onSave={mockOnSave}
+        />
+      )
+      
+      await user.click(screen.getByRole('button'))
+      
+      const input = screen.getByDisplayValue('Original Value')
+      await user.clear(input)
+      await user.type(input, 'New Value')
+      
+      const saveButton = screen.getByRole('button', { name: /save changes/i })
+      await user.click(saveButton)
+      
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith('New Value')
+      })
+      
+      // Should remain in edit mode after error
+      expect(screen.getByDisplayValue('New Value')).toBeInTheDocument()
+    })
+  })
+
+  describe('Cancel Functionality', () => {
+    it('should cancel changes and exit edit mode when cancel button is clicked', async () => {
+      const user = userEvent.setup()
+      
+      render(
+        <OptimisticEditableCell
+          value="Original Value"
+          onSave={mockOnSave}
+        />
+      )
+      
+      await user.click(screen.getByRole('button'))
+      
+      const input = screen.getByDisplayValue('Original Value')
+      await user.clear(input)
+      await user.type(input, 'Modified Value')
+      
+      const cancelButton = screen.getByRole('button', { name: /cancel changes/i })
+      await user.click(cancelButton)
+      
+      // Should not save
+      expect(mockOnSave).not.toHaveBeenCalled()
+      // Should show original value
+      expect(screen.getByText('Original Value')).toBeInTheDocument()
+    })
+
+    it('should cancel changes when Escape key is pressed', async () => {
+      const user = userEvent.setup()
+      
+      render(
+        <OptimisticEditableCell
+          value="Original Value"
+          onSave={mockOnSave}
+        />
+      )
+      
+      await user.click(screen.getByRole('button'))
+      
+      const input = screen.getByDisplayValue('Original Value')
+      await user.clear(input)
+      await user.type(input, 'Modified Value')
+      await user.keyboard('{Escape}')
+      
+      // Should not save
+      expect(mockOnSave).not.toHaveBeenCalled()
+      // Should show original value
+      expect(screen.getByText('Original Value')).toBeInTheDocument()
+    })
+  })
+
+  describe('Validation', () => {
+    it('should show validation errors', async () => {
+      const user = userEvent.setup()
+      
+      render(
+        <OptimisticEditableCell
+          value="Valid"
+          onSave={mockOnSave}
+          validation={testValidationSchema}
+        />
+      )
+      
+      await user.click(screen.getByRole('button'))
+      
+      const input = screen.getByDisplayValue('Valid')
+      await user.clear(input)
+      await user.type(input, 'This is too long')
+      
+      const saveButton = screen.getByRole('button', { name: /save changes/i })
+      await user.click(saveButton)
+      
+      // Should show validation error
+      await waitFor(() => {
+        expect(screen.getByText('Value must be 10 characters or less')).toBeInTheDocument()
+      })
+      
+      // Should not call onSave
+      expect(mockOnSave).not.toHaveBeenCalled()
+    })
+
+    it('should show error for invalid numbers', async () => {
+      const user = userEvent.setup()
+      
+      render(
+        <OptimisticEditableCell
+          value={100}
+          type="number"
+          onSave={mockOnSave}
+        />
+      )
+      
+      await user.click(screen.getByRole('button'))
+      
+      const input = screen.getByDisplayValue('100')
+      await user.clear(input)
+      await user.type(input, 'not-a-number')
+      
+      const saveButton = screen.getByRole('button', { name: /save changes/i })
+      await user.click(saveButton)
+      
+      // Should show validation error
+      await waitFor(() => {
+        expect(screen.getByText('Must be a valid number')).toBeInTheDocument()
+      })
+      
+      expect(mockOnSave).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('External Value Changes', () => {
+    it('should exit edit mode when external value changes', async () => {
+      const user = userEvent.setup()
+      
+      const { rerender } = render(
+        <OptimisticEditableCell
+          value="Original Value"
+          onSave={mockOnSave}
+        />
+      )
+      
+      await user.click(screen.getByRole('button'))
+      expect(screen.getByDisplayValue('Original Value')).toBeInTheDocument()
+      
+      // External value change
+      rerender(
+        <OptimisticEditableCell
+          value="Updated Externally"
+          onSave={mockOnSave}
+        />
+      )
+      
+      // Should exit edit mode and show new value
+      expect(screen.queryByDisplayValue('Original Value')).not.toBeInTheDocument()
+      expect(screen.getByText('Updated Externally')).toBeInTheDocument()
+    })
+  })
+}))).toBeInTheDocument()
       expect(screen.getByText('USD')).toBeInTheDocument()
     })
 

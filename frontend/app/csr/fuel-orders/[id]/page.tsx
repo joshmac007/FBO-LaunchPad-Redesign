@@ -316,10 +316,34 @@ export default function FuelOrderDetailPage() {
                       <span className="text-muted-foreground">Fuel Type:</span>
                       <span className="font-medium">{fuelOrder.fuel_type}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Quantity:</span>
-                      <span className="font-medium">{fuelOrder.quantity} gallons</span>
-                    </div>
+                    {(() => {
+                      const isCompletedOrReviewed = ['Completed', 'Reviewed'].includes(fuelOrder.status);
+                      const requestedQty = parseFloat(fuelOrder.quantity);
+                      const dispensedQty = fuelOrder.gallons_dispensed;
+
+                      // Show dispensed only if it's a valid number and different from requested
+                      const showDispensed = isCompletedOrReviewed &&
+                        typeof dispensedQty === 'number' &&
+                        !isNaN(dispensedQty) &&
+                        dispensedQty.toFixed(2) !== requestedQty.toFixed(2);
+
+                      return (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">
+                              {showDispensed ? "Quantity Requested" : "Quantity"}
+                            </span>
+                            <span className="font-medium">{requestedQty.toFixed(2)} gallons</span>
+                          </div>
+                          {showDispensed && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">Quantity Dispensed</span>
+                              <span className="font-medium text-green-600">{dispensedQty.toFixed(2)} gallons</span>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Status:</span>
                       <span>{getStatusBadge(fuelOrder.status)}</span>

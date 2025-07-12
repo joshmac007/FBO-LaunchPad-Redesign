@@ -184,6 +184,66 @@ class ReceiptService:
             current_app.logger.error(f"Error creating draft receipt: {str(e)}")
             raise
     
+    def create_unassigned_draft(self, user_id: int) -> Receipt:
+        """
+        Create a new unassigned draft receipt for manual entry.
+        
+        This method creates a receipt without a fuel order, assigned to the Walk-in Customer
+        placeholder. Used for manual receipt creation workflow.
+        
+        Args:
+            user_id: ID of the user creating the receipt
+            
+        Returns:
+            The newly created draft receipt
+            
+        Raises:
+            ValueError: If Walk-in Customer placeholder is not found
+        """
+        try:
+            # Find the Walk-in Customer placeholder
+            walk_in_customer = Customer.query.filter_by(
+                email='walk-in@fbolaunchpad.com',
+                is_placeholder=True
+            ).first()
+            
+            if not walk_in_customer:
+                raise ValueError("Walk-in Customer placeholder not found. Please run database seeding.")
+            
+            # Create the receipt record with minimal initial data
+            receipt = Receipt(
+                fuel_order_id=None,  # No associated fuel order
+                customer_id=walk_in_customer.id,
+                aircraft_type_at_receipt_time=None,
+                fuel_type_at_receipt_time=None,
+                fuel_quantity_gallons_at_receipt_time=None,
+                fuel_unit_price_at_receipt_time=None,
+                fuel_subtotal=Decimal('0.00'),
+                grand_total_amount=Decimal('0.00'),
+                status=ReceiptStatus.DRAFT,
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id
+            )
+            
+            db.session.add(receipt)
+            db.session.commit()  # Explicit commit for proper transaction handling
+            
+            current_app.logger.info(f"Created unassigned draft receipt {receipt.id} for manual entry by user {user_id}")
+            return receipt
+            
+        except IntegrityError as e:
+            db.session.rollback()  # Explicit rollback on integrity error
+            current_app.logger.error(f"Integrity error creating unassigned draft receipt: {str(e)}")
+            raise ValueError("Failed to create receipt due to data integrity constraints")
+        except SQLAlchemyError as e:
+            db.session.rollback()  # Explicit rollback on database error
+            current_app.logger.error(f"Database error creating unassigned draft receipt: {str(e)}")
+            raise
+        except Exception as e:
+            db.session.rollback()  # Explicit rollback on any other exception
+            current_app.logger.error(f"Error creating unassigned draft receipt: {str(e)}")
+            raise
+    
     def update_draft(self, receipt_id: int, update_data: Dict[str, Any], user_id: int) -> Receipt:
         """
         Update a draft receipt with new information.
@@ -212,6 +272,27 @@ class ReceiptService:
             if receipt.status != ReceiptStatus.DRAFT:
                 raise ValueError(f"Cannot update receipt with status {receipt.status.value}")
             
+            # Data integrity check: determine if fee-impacting fields are being changed
+            fee_impacting_fields = {'customer_id', 'fuel_quantity_gallons_at_receipt_time'}
+            fee_impacting_update = any(field in update_data for field in fee_impacting_fields)
+            
+            # If fee-impacting fields are being updated and receipt has existing non-fuel line items, 
+            # delete them to force recalculation
+            if fee_impacting_update:
+                existing_non_fuel_items = (ReceiptLineItem.query
+                                         .filter_by(receipt_id=receipt_id)
+                                         .filter(ReceiptLineItem.line_item_type.in_([
+                                             LineItemType.FEE, 
+                                             LineItemType.WAIVER, 
+                                             LineItemType.TAX
+                                         ]))
+                                         .all())
+                
+                if existing_non_fuel_items:
+                    for item in existing_non_fuel_items:
+                        db.session.delete(item)
+                    current_app.logger.info(f"Deleted {len(existing_non_fuel_items)} non-fuel line items from receipt {receipt_id} due to fee-impacting field update")
+            
             # Update allowed fields
             if 'customer_id' in update_data:
                 new_customer_id = update_data['customer_id']
@@ -222,11 +303,69 @@ class ReceiptService:
                         raise ValueError(f"Customer {new_customer_id} not found")
                     receipt.customer_id = new_customer_id
             
-            # Update aircraft type if provided
+            # Update aircraft type if provided (legacy field for compatibility)
             if 'aircraft_type' in update_data:
                 aircraft_type = update_data['aircraft_type']
                 if aircraft_type is not None:
                     receipt.aircraft_type_at_receipt_time = aircraft_type
+            
+            # Update manual entry fields for unassigned receipts
+            if 'aircraft_type_at_receipt_time' in update_data:
+                aircraft_type = update_data['aircraft_type_at_receipt_time']
+                if aircraft_type is not None:
+                    receipt.aircraft_type_at_receipt_time = aircraft_type
+            
+            if 'fuel_type_at_receipt_time' in update_data:
+                fuel_type = update_data['fuel_type_at_receipt_time']
+                if fuel_type is not None:
+                    receipt.fuel_type_at_receipt_time = fuel_type
+            
+            if 'fuel_quantity_gallons_at_receipt_time' in update_data:
+                fuel_quantity = update_data['fuel_quantity_gallons_at_receipt_time']
+                if fuel_quantity is not None:
+                    receipt.fuel_quantity_gallons_at_receipt_time = fuel_quantity
+                    # Recalculate fuel subtotal if we have quantity and price
+                    if receipt.fuel_unit_price_at_receipt_time:
+                        new_fuel_subtotal = fuel_quantity * receipt.fuel_unit_price_at_receipt_time
+                        receipt.fuel_subtotal = new_fuel_subtotal
+                        receipt.grand_total_amount = new_fuel_subtotal  # Will be updated during fee calc
+                        
+                        # Update existing fuel line item if it exists
+                        fuel_line_item = (ReceiptLineItem.query
+                                        .filter_by(receipt_id=receipt_id, line_item_type=LineItemType.FUEL)
+                                        .first())
+                        if fuel_line_item:
+                            fuel_line_item.quantity = fuel_quantity
+                            fuel_line_item.amount = new_fuel_subtotal
+            
+            if 'fuel_unit_price_at_receipt_time' in update_data:
+                fuel_price = update_data['fuel_unit_price_at_receipt_time']
+                if fuel_price is not None:
+                    receipt.fuel_unit_price_at_receipt_time = fuel_price
+                    # Recalculate fuel subtotal if we have quantity and price
+                    if receipt.fuel_quantity_gallons_at_receipt_time:
+                        new_fuel_subtotal = receipt.fuel_quantity_gallons_at_receipt_time * fuel_price
+                        receipt.fuel_subtotal = new_fuel_subtotal
+                        receipt.grand_total_amount = new_fuel_subtotal  # Will be updated during fee calc
+                        
+                        # Update existing fuel line item if it exists
+                        fuel_line_item = (ReceiptLineItem.query
+                                        .filter_by(receipt_id=receipt_id, line_item_type=LineItemType.FUEL)
+                                        .first())
+                        if fuel_line_item:
+                            fuel_line_item.unit_price = fuel_price
+                            fuel_line_item.amount = new_fuel_subtotal
+                        # Create fuel line item if it doesn't exist and we have all required data
+                        elif receipt.fuel_quantity_gallons_at_receipt_time and receipt.fuel_type_at_receipt_time:
+                            fuel_line_item = ReceiptLineItem(
+                                receipt_id=receipt_id,
+                                line_item_type=LineItemType.FUEL,
+                                description=f"{receipt.fuel_type_at_receipt_time} Fuel",
+                                quantity=receipt.fuel_quantity_gallons_at_receipt_time,
+                                unit_price=fuel_price,
+                                amount=new_fuel_subtotal
+                            )
+                            db.session.add(fuel_line_item)
             
             # Update notes if provided
             if 'notes' in update_data:

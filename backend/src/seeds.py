@@ -1,5 +1,6 @@
 from src.extensions import db
 from src.models import Permission, Role, User
+from src.models.customer import Customer
 from src.models.fuel_truck import FuelTruck
 from src.models.fuel_type import FuelType
 from src.models.aircraft_type import AircraftType
@@ -166,6 +167,16 @@ default_fuel_types = [
         "is_active": True
     }
 ]
+
+# Default system-level customer for manual receipts
+default_walk_in_customer = {
+    'name': 'Walk-in Customer',
+    'email': 'walk-in@fbolaunchpad.com',
+    'phone': None,
+    'is_placeholder': True,
+    'is_caa_member': False,
+    'caa_member_id': None
+}
 
 def seed_data():
     """Seeds the database with initial permissions, roles, and default users.
@@ -395,6 +406,23 @@ def seed_data():
         if users_created > 0:
             db.session.commit()
             click.echo(f"Successfully assigned roles to {users_created} default users.")
+
+        # Create Default Walk-in Customer
+        click.echo("Creating default Walk-in Customer...")
+        if not Customer.query.filter_by(email=default_walk_in_customer['email']).first():
+            walk_in_customer = Customer(
+                name=default_walk_in_customer['name'],
+                email=default_walk_in_customer['email'],
+                phone=default_walk_in_customer['phone'],
+                is_placeholder=default_walk_in_customer['is_placeholder'],
+                is_caa_member=default_walk_in_customer['is_caa_member'],
+                caa_member_id=default_walk_in_customer['caa_member_id']
+            )
+            db.session.add(walk_in_customer)
+            db.session.commit()
+            click.echo(f"Default Walk-in Customer '{default_walk_in_customer['email']}' created.")
+        else:
+            click.echo(f"Walk-in Customer '{default_walk_in_customer['email']}' already exists.")
 
         # Create Default Fuel Trucks
         click.echo("Creating default fuel trucks...")

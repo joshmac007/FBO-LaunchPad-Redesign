@@ -55,6 +55,9 @@ export interface Receipt {
   // User tracking
   created_by_user_id: number
   updated_by_user_id: number
+
+  // Notes
+  notes?: string | null
   
   // Optional nested line items
   line_items?: ReceiptLineItem[]
@@ -62,18 +65,21 @@ export interface Receipt {
 
 // Create Receipt Request
 export interface CreateReceiptRequest {
-  fuel_order_id: number
+  fuel_order_id: number;
 }
 
-// Draft Update Payload
+// Draft Update Payload - Aligned with backend UpdateDraftReceiptSchema
 export interface DraftUpdatePayload {
-  customer_id?: number
-  aircraft_type?: string
-  notes?: string
+  customer_id?: number;
+  aircraft_type_at_receipt_time?: string;
+  notes?: string;
+  fuel_type_at_receipt_time?: string;
+  fuel_quantity_gallons_at_receipt_time?: number;
+  fuel_unit_price_at_receipt_time?: number;
   additional_services?: Array<{
-    fee_code: string
-    quantity: number
-  }>
+    fee_code: string;
+    quantity: number;
+  }>;
 }
 
 // Extended Receipt interface with guaranteed line items
@@ -280,53 +286,53 @@ export interface ReceiptListResponse {
   total_pages: number
 }
 
-// Get receipts with server-side filtering and pagination
 export async function getReceipts(filters?: ReceiptListFilters): Promise<ReceiptListResponse> {
-  // Build query string from filters
-  const queryParams = new URLSearchParams()
-  if (filters?.status && filters.status !== 'all') {
-    queryParams.append('status', filters.status)
+  const queryParams: Record<string, string> = {}
+
+  if (filters) {
+    if (filters.status) queryParams.status = filters.status
+    if (filters.customer_id) queryParams.customer_id = String(filters.customer_id)
+    if (filters.date_from) queryParams.date_from = filters.date_from
+    if (filters.date_to) queryParams.date_to = filters.date_to
+    if (filters.search) queryParams.search = filters.search
+    if (filters.page) queryParams.page = String(filters.page)
+    if (filters.per_page) queryParams.per_page = String(filters.per_page)
   }
-  if (filters?.customer_id) {
-    queryParams.append('customer_id', filters.customer_id.toString())
-  }
-  if (filters?.date_from) {
-    queryParams.append('date_from', filters.date_from)
-  }
-  if (filters?.date_to) {
-    queryParams.append('date_to', filters.date_to)
-  }
-  if (filters?.search) {
-    queryParams.append('search', filters.search)
-  }
-  if (filters?.page) {
-    queryParams.append('page', filters.page.toString())
-  }
-  if (filters?.per_page) {
-    queryParams.append('per_page', filters.per_page.toString())
-  }
+
+  const queryString = new URLSearchParams(queryParams).toString()
   
-  const url = `${API_BASE_URL}/receipts${queryParams.toString() ? '?' + queryParams.toString() : ''}`
-  const response = await fetch(url, {
-    method: "GET",
-    headers: getAuthHeaders(),
-  })
+  try {
+    const response = await fetch(`${API_BASE_URL}/receipts?${queryString}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    })
+    
+    const data = await handleApiResponse<ReceiptListResponse>(response);
 
-  // Backend returns { receipts: [...], pagination: { ... } }
-  const raw = await handleApiResponse<any>(response)
+    // Ensure we return the expected structure even if the API returns just an array
+    if (Array.isArray(data)) {
+        return {
+            receipts: data,
+            total: data.length,
+            page: 1,
+            per_page: data.length,
+            total_pages: 1
+        };
+    }
 
-  // Normalize response to match ReceiptListResponse interface expected by frontend
-  const pagination = raw.pagination || {}
+    return data;
 
-  const normalized: ReceiptListResponse = {
-    receipts: raw.receipts || [],
-    total: pagination.total ?? raw.total ?? 0,
-    page: pagination.page ?? raw.page ?? 1,
-    per_page: pagination.per_page ?? raw.per_page ?? (filters?.per_page ?? 50),
-    total_pages: pagination.pages ?? pagination.total_pages ?? raw.total_pages ?? 1,
+  } catch (error) {
+    console.error('Error fetching receipts:', error)
+    // In case of a network or other fetch error, return a default response
+    return {
+      receipts: [],
+      total: 0,
+      page: 1,
+      per_page: filters?.per_page || 10,
+      total_pages: 0,
+    }
   }
-
-  return normalized
 }
 
 // Get recent receipts for dashboard display (limited to most recent ones)
@@ -634,6 +640,17 @@ export async function createDraftReceipt(fuel_order_id: number): Promise<Extende
   })
 
   const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response)
+  return data.receipt
+}
+
+// Create unassigned draft receipt for manual entry
+export async function createUnassignedDraftReceipt(): Promise<Receipt> {
+  const response = await fetch(`${API_BASE_URL}/receipts/manual-draft-unassigned`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+  })
+
+  const data = await handleApiResponse<{ receipt: Receipt }>(response)
   return data.receipt
 }
 

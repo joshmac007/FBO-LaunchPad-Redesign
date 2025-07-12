@@ -1,6 +1,6 @@
 // frontend/app/csr/receipts/components/ServiceItemCard.test.tsx
 import { render, screen, fireEvent } from '@testing-library/react';
-import ServiceItemCard from '@/app/csr/receipts/components/ServiceItemCard'; // This import will fail.
+import ServiceItemCard from '@/app/csr/receipts/components/ServiceItemCard';
 
 // Mock test data helpers
 const mockFeeLineItem = {
@@ -87,7 +87,7 @@ describe('ServiceItemCard Waiver Controls', () => {
     );
     
     // Should show static auto-waived badge (not clickable)
-    const autoWaivedElement = screen.getByText('[⛽ Auto-waived]');
+    const autoWaivedElement = screen.getByText('Auto-waived');
     expect(autoWaivedElement).toBeInTheDocument();
     expect(autoWaivedElement).not.toBeInstanceOf(HTMLButtonElement);
   });
@@ -102,7 +102,7 @@ describe('ServiceItemCard Waiver Controls', () => {
     );
     
     // Should show clickable manually waived badge
-    const manualWaivedElement = screen.getByText('[👤 Manually Waived]');
+    const manualWaivedElement = screen.getByText('Manually Waived');
     expect(manualWaivedElement).toBeInTheDocument();
     expect(manualWaivedElement).toBeInstanceOf(HTMLButtonElement);
     

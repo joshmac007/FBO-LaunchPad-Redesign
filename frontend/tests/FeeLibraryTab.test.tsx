@@ -1,8 +1,8 @@
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FeeLibraryTab } from '@/app/admin/fbo-config/fee-management/components/FeeLibraryTab';
 import { FeeRule, AircraftClassification } from '@/app/services/admin-fee-config-service';
+import { UserPreferencesProvider } from '@/app/contexts/user-preferences-context';
 
 // Mock the API services
 jest.mock('@/app/services/admin-fee-config-service', () => ({
@@ -11,6 +11,15 @@ jest.mock('@/app/services/admin-fee-config-service', () => ({
   createFeeRule: jest.fn(),
   updateFeeRule: jest.fn(),
   deleteFeeRule: jest.fn(),
+}));
+
+// Mock the useUserPreferences hook
+jest.mock('@/app/contexts/user-preferences-context', () => ({
+  ...jest.requireActual('@/app/contexts/user-preferences-context'),
+  useUserPreferences: () => ({
+    preferences: { highlight_overrides: true, fee_schedule_column_codes: [] },
+    updatePreferences: jest.fn(),
+  }),
 }));
 
 // Mock data factories
@@ -66,7 +75,9 @@ const renderWithQueryClient = (component: React.ReactElement) => {
   
   return render(
     <QueryClientProvider client={queryClient}>
-      {component}
+      <UserPreferencesProvider>
+        {component}
+      </UserPreferencesProvider>
     </QueryClientProvider>
   );
 };

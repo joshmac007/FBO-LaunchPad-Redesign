@@ -1,8 +1,17 @@
-import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FeeScheduleTable } from '@/app/admin/fbo-config/fee-management/components/FeeScheduleTable';
 import { GlobalFeeSchedule, GlobalFeeRule } from '@/app/services/admin-fee-config-service';
+import { UserPreferencesProvider } from '@/app/contexts/user-preferences-context';
+
+// Mock the useUserPreferences hook
+jest.mock('@/app/contexts/user-preferences-context', () => ({
+  ...jest.requireActual('@/app/contexts/user-preferences-context'),
+  useUserPreferences: () => ({
+    preferences: { highlight_overrides: true, fee_schedule_column_codes: [] },
+    updatePreferences: jest.fn(),
+  }),
+}));
 
 // Mock data factory for testing
 const createMockFeeSchedule = (): GlobalFeeSchedule => ({
@@ -136,7 +145,9 @@ const renderWithQueryClient = (component: React.ReactElement) => {
   
   return render(
     <QueryClientProvider client={queryClient}>
-      {component}
+      <UserPreferencesProvider>
+        {component}
+      </UserPreferencesProvider>
     </QueryClientProvider>
   );
 };

@@ -359,7 +359,8 @@ class FuelOrderService:
                 joinedload(FuelOrder.assigned_lst),  # type: ignore
                 joinedload(FuelOrder.assigned_truck),  # type: ignore
                 joinedload(FuelOrder.customer),  # type: ignore
-                joinedload(FuelOrder.aircraft)  # type: ignore
+                joinedload(FuelOrder.aircraft),  # type: ignore
+                joinedload(FuelOrder.fuel_type)  # type: ignore
             )
 
             # PBAC: Only show all orders if user has permission

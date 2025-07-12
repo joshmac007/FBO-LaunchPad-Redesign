@@ -31,6 +31,7 @@ export interface FuelOrderDisplay {
   completed_at?: string
   reviewed_at?: string
   review_notes?: string // Notes from CSR review
+  gallons_dispensed?: number
   fees?: FeeCalculationResult
   // Receipt linking and order locking fields
   receipt_id?: number | null
@@ -58,6 +59,7 @@ export interface FuelOrderBackend {
   fuel_type?: string // Added missing fuel_type field
   requested_amount: number | string // Can be number or string depending on endpoint
   gallons_requested?: number // From Marshmallow schema transformation
+  gallons_dispensed?: string
   customer_id: number
   customer_name?: string // Customer name from backend relationship
   status: string
@@ -243,6 +245,7 @@ export async function transformToDisplay(
     aircraft_tail_number: backend.tail_number,
     aircraft_registration: backend.tail_number,
     quantity: String(backend.gallons_requested || backend.requested_amount || 0),
+    gallons_dispensed: backend.gallons_dispensed ? parseFloat(backend.gallons_dispensed) : undefined,
     fuel_type: backend.fuel_type || 'Unknown',
     customer_name: backend.customer_name || 'N/A', // Directly use the name from the backend
     customer_id: backend.customer_id,

@@ -24,6 +24,12 @@ class UpdateDraftReceiptSchema(Schema):
         missing=[]
     )
     
+    # Manual entry fields for unassigned receipts
+    aircraft_type_at_receipt_time = fields.String(allow_none=True, validate=validate.Length(max=50))
+    fuel_type_at_receipt_time = fields.String(allow_none=True, validate=validate.Length(max=20))
+    fuel_quantity_gallons_at_receipt_time = fields.Decimal(allow_none=True, validate=validate.Range(min=0))
+    fuel_unit_price_at_receipt_time = fields.Decimal(allow_none=True, validate=validate.Range(min=0))
+    
     @validates('additional_services')
     def validate_additional_services(self, value):
         """Validate additional services structure."""
@@ -106,6 +112,7 @@ class ReceiptSchema(Schema):
     # Status and metadata
     status = fields.String(dump_only=True)
     is_caa_applied = fields.Boolean(dump_only=True)
+    notes = fields.String(dump_only=True, allow_none=True)
     
     # Timestamps
     generated_at = fields.DateTime(dump_only=True, allow_none=True)

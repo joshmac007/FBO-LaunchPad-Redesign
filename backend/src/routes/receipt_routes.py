@@ -122,6 +122,49 @@ def create_draft_receipt():
             "timestamp": datetime.utcnow().isoformat()
         }), 500
 
+
+@receipt_bp.route('/api/receipts/manual-draft-unassigned', methods=['POST'])
+@require_permission_v2('create_receipt')
+def create_unassigned_draft_receipt():
+    """
+    Create a new unassigned draft receipt for manual entry.
+    
+    Creates a receipt without a fuel order, assigned to the Walk-in Customer
+    placeholder. Used for manual receipt creation workflow.
+    
+    Body:
+        None required
+        
+    Returns:
+        201: Draft receipt created successfully
+        400: Validation error
+        500: Internal server error
+    """
+    try:
+        user_id = getattr(g.current_user, 'id', None)
+        if user_id is None:
+            return jsonify({'error': 'User authentication required'}), 401
+
+        receipt = receipt_service.create_unassigned_draft(user_id=user_id)
+        
+        response_data = {
+            "message": "Unassigned draft receipt created successfully.",
+            "receipt": receipt.to_dict()
+        }
+        return jsonify(response_data), 201
+
+    except ValueError as e:
+        error_msg = str(e)
+        current_app.logger.error(f"Value error creating unassigned draft receipt: {error_msg}")
+        return jsonify({'error': error_msg}), 400
+    except Exception as e:
+        current_app.logger.error(f"Unexpected error creating unassigned draft receipt: {str(e)}")
+        return jsonify({
+            "error": "An unexpected server error occurred during draft creation.",
+            "timestamp": datetime.utcnow().isoformat()
+        }), 500
+
+
 @receipt_bp.route('/api/receipts/<int:receipt_id>/draft', methods=['PUT'])
 @require_permission_v2('update_receipt')
 def update_draft_receipt(receipt_id):

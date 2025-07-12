@@ -5,7 +5,7 @@
  * data transformations, and business logic in the frontend service layer.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from '@jest/globals'
 import { 
   getReceipts,
   getRecentReceipts,

@@ -1,18 +1,29 @@
-"use client"
+"use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Loader2 } from "lucide-react"
-import { ExtendedReceipt } from "@/app/services/receipt-service"
-import { formatCurrency } from "@/app/services/utils"
+import { useReceiptContext } from '../contexts/ReceiptContext';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Loader2 } from "lucide-react";
+import { formatCurrency } from "@/app/services/utils";
 
-interface ReceiptPreviewProps {
-  receipt: ExtendedReceipt
-  isRecalculating?: boolean
-}
+export default function ReceiptPreview() {
+  const { receipt, status } = useReceiptContext();
+  const isRecalculating = status === 'calculating_fees';
 
-export default function ReceiptPreview({ receipt, isRecalculating = false }: ReceiptPreviewProps) {
+  if (!receipt) {
+    return (
+      <Card className="h-fit">
+        <CardHeader>
+          <CardTitle>Receipt Preview</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">No receipt data available.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const getLineItemTypeColor = (type: string) => {
     switch (type) {
       case 'FUEL':
@@ -39,16 +50,16 @@ export default function ReceiptPreview({ receipt, isRecalculating = false }: Rec
     return null
   }
 
-  const formatTotal = (amount: string | undefined) => {
+  const formatTotal = (amount: string | undefined | null) => {
     if (isRecalculating) {
       return (
         <span className="flex items-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin" />
-          {formatCurrency(amount || '0')}
+          {formatCurrency(parseFloat(amount || '0'))}
         </span>
       )
     }
-    return formatCurrency(amount || '0')
+    return formatCurrency(parseFloat(amount || '0'))
   }
 
   return (
@@ -106,7 +117,7 @@ export default function ReceiptPreview({ receipt, isRecalculating = false }: Rec
               {receipt.line_items.map((item) => (
                 <div key={item.id} className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
-                    <Badge size="sm" className={getLineItemTypeColor(item.line_item_type)}>
+                    <Badge className={getLineItemTypeColor(item.line_item_type)}>
                       {item.line_item_type}
                     </Badge>
                     <span className="flex-1">{item.description}</span>
@@ -115,7 +126,7 @@ export default function ReceiptPreview({ receipt, isRecalculating = false }: Rec
                   <span className={`font-medium ${
                     item.line_item_type === 'WAIVER' ? 'text-green-600' : ''
                   }`}>
-                    {formatCurrency(item.amount)}
+                    {formatCurrency(parseFloat(item.amount))}
                   </span>
                 </div>
               ))}

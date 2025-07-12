@@ -40,6 +40,7 @@ class Receipt(db.Model):
     # Receipt status and metadata
     status = db.Column(db.Enum(ReceiptStatus), nullable=False, default=ReceiptStatus.DRAFT)
     is_caa_applied = db.Column(db.Boolean, nullable=False, default=False)
+    notes = db.Column(db.Text, nullable=True)
     
     # Timestamps
     generated_at = db.Column(db.DateTime, nullable=True)  # Set when status changes to GENERATED
@@ -77,6 +78,7 @@ class Receipt(db.Model):
             'grand_total_amount': str(self.grand_total_amount),
             'status': self.status.value if self.status else None,
             'is_caa_applied': self.is_caa_applied,
+            'notes': self.notes,
             'generated_at': self.generated_at.isoformat() if self.generated_at else None,
             'paid_at': self.paid_at.isoformat() if self.paid_at else None,
             'created_at': self.created_at.isoformat(),
