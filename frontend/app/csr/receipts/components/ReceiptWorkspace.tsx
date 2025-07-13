@@ -15,7 +15,7 @@ import { FileText } from "lucide-react";
 
 
 interface ReceiptWorkspaceProps {
-  receiptId: number;
+  receiptId: number | null;
 }
 
 function ReceiptWorkspaceInternal({ receiptId }: ReceiptWorkspaceProps) {

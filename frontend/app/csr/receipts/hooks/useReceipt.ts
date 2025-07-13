@@ -104,7 +104,7 @@ function receiptReducer(state: ReceiptState, action: ReceiptAction): ReceiptStat
 
 // --- THE HOOK ---
 
-export function useReceipt(receiptId: number) {
+export function useReceipt(receiptId: number | null) {
   const [state, dispatch] = useReducer(receiptReducer, initialState);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -116,8 +116,39 @@ export function useReceipt(receiptId: number) {
     const loadReceipt = async () => {
       dispatch({ type: 'LOADING_INITIAL' });
       try {
-        const receipt = await getReceiptById(receiptId);
-        dispatch({ type: 'LOAD_SUCCESS', payload: receipt });
+        if (receiptId === null) {
+          // Create a default client-side receipt for new receipt creation
+          const defaultReceipt: ExtendedReceipt = {
+            id: null, // null indicates this is not yet saved
+            receipt_number: null,
+            fuel_order_id: null,
+            customer_id: 100, // Default to Walk-in Customer (assuming ID 100)
+            customer_name: 'Walk-in Customer',
+            fuel_order_tail_number: null,
+            aircraft_type_at_receipt_time: null,
+            fuel_type_at_receipt_time: null,
+            fuel_quantity_gallons_at_receipt_time: null,
+            fuel_unit_price_at_receipt_time: null,
+            fuel_subtotal: '0.00',
+            total_fees_amount: '0.00',
+            total_waivers_amount: '0.00',
+            tax_amount: '0.00',
+            grand_total_amount: '0.00',
+            status: 'DRAFT',
+            notes: null,
+            generated_at: null,
+            paid_at: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            created_by_user_id: null,
+            updated_by_user_id: null,
+            line_items: []
+          };
+          dispatch({ type: 'LOAD_SUCCESS', payload: defaultReceipt });
+        } else {
+          const receipt = await getReceiptById(receiptId);
+          dispatch({ type: 'LOAD_SUCCESS', payload: receipt });
+        }
       } catch (error) {
         dispatch({ type: 'LOAD_ERROR', payload: error instanceof Error ? error.message : 'Failed to load receipt' });
       }
@@ -149,7 +180,7 @@ export function useReceipt(receiptId: number) {
     loadFuelTypes();
   }, []);
 
-  // --- AUTO-SAVE EFFECT ---
+  // --- AUTO-SAVE EFFECT (Three-stage logic) ---
 
   useEffect(() => {
     const performAutoSave = async () => {
@@ -159,8 +190,43 @@ export function useReceipt(receiptId: number) {
 
       dispatch({ type: 'AUTO_SAVE_START' });
       try {
-        const updatedReceipt = await updateDraftReceipt(receiptId, debouncedPendingUpdates);
-        dispatch({ type: 'AUTO_SAVE_SUCCESS', payload: updatedReceipt });
+        if (state.receipt.id === null) {
+          // FIRST SAVE: Create new receipt with initial data
+          const { createReceiptWithInitialData } = await import('@/app/services/receipt-service');
+          
+          // Build line items from current state if any
+          const lineItems = state.receipt.line_items.map(item => ({
+            line_item_type: item.line_item_type,
+            description: item.description,
+            fee_code_applied: item.fee_code_applied,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            amount: item.amount
+          }));
+          
+          const initialData = {
+            customer_id: state.receipt.customer_id || 100, // Default to Walk-in Customer
+            notes: state.receipt.notes,
+            aircraft_type_at_receipt_time: state.receipt.aircraft_type_at_receipt_time,
+            fuel_type_at_receipt_time: state.receipt.fuel_type_at_receipt_time,
+            fuel_quantity_gallons_at_receipt_time: state.receipt.fuel_quantity_gallons_at_receipt_time,
+            fuel_unit_price_at_receipt_time: state.receipt.fuel_unit_price_at_receipt_time,
+            line_items: lineItems,
+            ...debouncedPendingUpdates
+          };
+          
+          const createdReceipt = await createReceiptWithInitialData(initialData);
+          dispatch({ type: 'AUTO_SAVE_SUCCESS', payload: createdReceipt });
+          
+          // Update the browser URL to reflect the new receipt ID
+          if (typeof window !== 'undefined' && window.history) {
+            window.history.replaceState({}, '', `/csr/receipts/${createdReceipt.id}`);
+          }
+        } else {
+          // SUBSEQUENT SAVES: Update existing receipt
+          const updatedReceipt = await updateDraftReceipt(state.receipt.id, debouncedPendingUpdates);
+          dispatch({ type: 'AUTO_SAVE_SUCCESS', payload: updatedReceipt });
+        }
 
         if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
         autoSaveTimeoutRef.current = setTimeout(() => {
@@ -173,7 +239,7 @@ export function useReceipt(receiptId: number) {
       }
     };
     performAutoSave();
-  }, [debouncedPendingUpdates, receiptId]);
+  }, [debouncedPendingUpdates, state.receipt]);
 
   // Cleanup timeout
   useEffect(() => () => {
@@ -183,7 +249,7 @@ export function useReceipt(receiptId: number) {
   // --- PRIVATE INTERNAL FUNCTIONS ---
 
   const recalculateWithUpdates = useCallback(async (services?: DraftUpdatePayload['additional_services']) => {
-    if (!state.receipt) return;
+    if (!state.receipt || receiptId === null) return;
     
     dispatch({ type: 'ACTION_START', payload: 'calculating_fees' });
     try {
@@ -235,6 +301,8 @@ export function useReceipt(receiptId: number) {
   }, [queueAutoSave]);
 
   const handleToggleWaiver = useCallback(async (lineItemId: number) => {
+    if (receiptId === null) return;
+    
     dispatch({ type: 'SET_TOGGLING_WAIVER', payload: lineItemId });
     try {
       const updatedReceipt = await toggleLineItemWaiver(receiptId, lineItemId);
@@ -303,7 +371,7 @@ export function useReceipt(receiptId: number) {
 
 
   const handleGenerateReceipt = useCallback(async () => {
-    if (!state.receipt) return;
+    if (!state.receipt || receiptId === null) return;
     dispatch({ type: 'ACTION_START', payload: 'generating' });
     try {
       const generatedReceipt = await generateFinalReceipt(receiptId);
@@ -314,7 +382,7 @@ export function useReceipt(receiptId: number) {
   }, [receiptId, state.receipt]);
 
   const handleMarkAsPaid = useCallback(async () => {
-    if (!state.receipt) return;
+    if (!state.receipt || receiptId === null) return;
     dispatch({ type: 'ACTION_START', payload: 'marking_paid' });
     try {
       const paidReceipt = await markReceiptAsPaid(receiptId);

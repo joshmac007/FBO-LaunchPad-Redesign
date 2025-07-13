@@ -268,8 +268,8 @@ class ReceiptService:
             if not receipt:
                 raise ValueError(f"Receipt {receipt_id} not found")
             
-            # Validate receipt is in DRAFT status
-            if receipt.status != ReceiptStatus.DRAFT:
+            # Validate receipt is in DRAFT or GENERATED status
+            if receipt.status not in [ReceiptStatus.DRAFT, ReceiptStatus.GENERATED]:
                 raise ValueError(f"Cannot update receipt with status {receipt.status.value}")
             
             # Data integrity check: determine if fee-impacting fields are being changed
@@ -787,6 +787,117 @@ class ReceiptService:
             next_seq = 1
         
         return f"{today_prefix}-{next_seq:04d}"
+    
+    def create_receipt_with_initial_data(self, initial_data: Dict[str, Any], user_id: int) -> Receipt:
+        """
+        Create a receipt with initial data and immediately assign a receipt number.
+        
+        This method creates a receipt and saves its initial content simultaneously,
+        ensuring that no empty, orphaned records are ever created. The creation is atomic,
+        guaranteeing that a receipt is only saved if it has content.
+        
+        Args:
+            initial_data: Dictionary containing initial receipt data including:
+                - customer_id: ID of the customer (required)
+                - notes: Optional notes for the receipt
+                - line_items: List of initial line items (required, min 1)
+            user_id: ID of the user creating the receipt
+            
+        Returns:
+            The newly created receipt with assigned number and GENERATED status
+            
+        Raises:
+            ValueError: If customer not found, no line items provided, or other validation errors
+        """
+        try:
+            # Validate required fields
+            customer_id = initial_data.get('customer_id')
+            if not customer_id:
+                raise ValueError("customer_id is required")
+            
+            line_items_data = initial_data.get('line_items', [])
+            notes = initial_data.get('notes')
+            aircraft_type = initial_data.get('aircraft_type_at_receipt_time')
+            fuel_type = initial_data.get('fuel_type_at_receipt_time')
+            fuel_quantity = initial_data.get('fuel_quantity_gallons_at_receipt_time')
+            fuel_price = initial_data.get('fuel_unit_price_at_receipt_time')
+            
+            # Check if any meaningful data is provided
+            has_meaningful_data = (
+                line_items_data or  # Has line items
+                (notes and notes.strip()) or  # Has non-empty notes
+                aircraft_type or  # Has aircraft type
+                fuel_type or  # Has fuel type
+                fuel_quantity or  # Has fuel quantity
+                fuel_price  # Has fuel price
+            )
+            
+            if not has_meaningful_data:
+                raise ValueError("At least one meaningful field must be provided (notes, aircraft type, fuel data, or line items)")
+            
+            # Validate customer exists
+            customer = Customer.query.get(customer_id)
+            if not customer:
+                raise ValueError(f"Customer {customer_id} not found")
+            
+            # Create the receipt record
+            receipt = Receipt(
+                fuel_order_id=None,  # No associated fuel order for manual receipts
+                customer_id=customer_id,
+                aircraft_type_at_receipt_time=initial_data.get('aircraft_type_at_receipt_time'),
+                fuel_type_at_receipt_time=initial_data.get('fuel_type_at_receipt_time'),
+                fuel_quantity_gallons_at_receipt_time=initial_data.get('fuel_quantity_gallons_at_receipt_time'),
+                fuel_unit_price_at_receipt_time=initial_data.get('fuel_unit_price_at_receipt_time'),
+                fuel_subtotal=Decimal('0.00'),  # Will be calculated from line items
+                grand_total_amount=Decimal('0.00'),  # Will be calculated from line items
+                status=ReceiptStatus.GENERATED,  # Immediately set to GENERATED
+                notes=initial_data.get('notes'),
+                created_by_user_id=user_id,
+                updated_by_user_id=user_id
+            )
+            
+            # Assign receipt number immediately
+            receipt.receipt_number = self._generate_receipt_number()
+            receipt.generated_at = datetime.utcnow()
+            
+            db.session.add(receipt)
+            db.session.flush()  # Get the receipt ID before creating line items
+            
+            # Create line items and calculate totals
+            total_amount = Decimal('0.00')
+            for item_data in line_items_data:
+                line_item = ReceiptLineItem(
+                    receipt_id=receipt.id,
+                    line_item_type=getattr(LineItemType, item_data.get('line_item_type', 'FEE')),
+                    description=item_data.get('description', ''),
+                    fee_code_applied=item_data.get('fee_code_applied'),
+                    quantity=item_data.get('quantity', Decimal('1')),
+                    unit_price=item_data.get('unit_price', Decimal('0')),
+                    amount=item_data.get('amount', Decimal('0'))
+                )
+                db.session.add(line_item)
+                total_amount += line_item.amount
+            
+            # Update receipt total
+            receipt.grand_total_amount = total_amount
+            
+            db.session.commit()  # Atomic commit of entire operation
+            
+            current_app.logger.info(f"Created receipt {receipt.receipt_number} with initial data for user {user_id}")
+            return receipt
+            
+        except IntegrityError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Integrity error creating receipt with initial data: {str(e)}")
+            raise ValueError("Failed to create receipt due to data integrity constraints")
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error creating receipt with initial data: {str(e)}")
+            raise
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error creating receipt with initial data: {str(e)}")
+            raise
     
     def void_receipt(self, receipt_id: int, user_id: int, reason: str = None) -> Receipt:
         """

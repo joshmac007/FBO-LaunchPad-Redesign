@@ -13,6 +13,9 @@ interface BackendAircraftType {
 export interface AircraftType {
   id: number
   name: string
+  base_min_fuel_gallons_for_waiver: number
+  classification_id: number
+  classification_name: string
 }
 
 // Request payload interfaces for Aircraft Types
@@ -255,10 +258,13 @@ export async function getAircraftTypes(): Promise<AircraftType[]> {
     headers: getAuthHeaders(),
   })
   const data = await handleApiResponse<BackendAircraftType[]>(response)
-  // Simplify the returned data to only what the selector needs
+  // Return full aircraft type data for admin table
   return data.map((backendType) => ({
     id: backendType.id,
     name: backendType.name,
+    base_min_fuel_gallons_for_waiver: Number(backendType.base_min_fuel_gallons_for_waiver),
+    classification_id: backendType.classification_id,
+    classification_name: backendType.classification_name || "Unclassified",
   }))
 }
 

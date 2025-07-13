@@ -1,8 +1,6 @@
 "use client"
 
 import * as React from "react"
-import * as LabelPrimitive from "@radix-ui/react-label"
-import { Slot } from "@radix-ui/react-slot"
 import {
   Controller,
   ControllerProps,
@@ -11,6 +9,8 @@ import {
   FormProvider,
   useFormContext,
 } from "react-hook-form"
+import { motion, AnimatePresence } from "framer-motion"
+import { Slot } from "@radix-ui/react-slot"
 
 import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
@@ -87,8 +87,8 @@ const FormItem = React.forwardRef<
 FormItem.displayName = "FormItem"
 
 const FormLabel = React.forwardRef<
-  React.ElementRef<typeof LabelPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>
+  React.ElementRef<typeof Label>,
+  React.ComponentPropsWithoutRef<typeof Label>
 >(({ className, ...props }, ref) => {
   const { error, formItemId } = useFormField()
 
@@ -144,24 +144,28 @@ FormDescription.displayName = "FormDescription"
 
 const FormMessage = React.forwardRef<
   HTMLParagraphElement,
-  React.HTMLAttributes<HTMLParagraphElement>
+  React.ComponentPropsWithoutRef<typeof motion.p>
 >(({ className, children, ...props }, ref) => {
   const { error, formMessageId } = useFormField()
   const body = error ? String(error?.message) : children
 
-  if (!body) {
-    return null
-  }
-
   return (
-    <p
-      ref={ref}
-      id={formMessageId}
-      className={cn("text-sm font-medium text-destructive", className)}
-      {...props}
-    >
-      {body}
-    </p>
+    <AnimatePresence>
+      {body ? (
+        <motion.p
+          ref={ref}
+          id={formMessageId}
+          className={cn("text-sm font-medium text-destructive", className)}
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.2 }}
+          {...props as any}
+        >
+          {body}
+        </motion.p>
+      ) : null}
+    </AnimatePresence>
   )
 })
 FormMessage.displayName = "FormMessage"

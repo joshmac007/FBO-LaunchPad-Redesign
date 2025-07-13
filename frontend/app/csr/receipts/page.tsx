@@ -58,7 +58,6 @@ function ReceiptsPageInternal() {
   
   // UI states
   const [isExporting, setIsExporting] = useState(false)
-  const [isCreatingReceipt, setIsCreatingReceipt] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
   // Debounce search input to prevent excessive re-renders
@@ -164,18 +163,8 @@ function ReceiptsPageInternal() {
     toast.info("Void functionality coming soon")
   }, [])
 
-  const handleAddReceipt = useCallback(async () => {
-    setIsCreatingReceipt(true)
-    try {
-      const newReceipt = await createUnassignedDraftReceipt()
-      router.push(`/csr/receipts/${newReceipt.id}`)
-      toast.success("New receipt created successfully")
-    } catch (error) {
-      toast.error("Failed to create new receipt")
-      console.error("Error creating receipt:", error)
-    } finally {
-      setIsCreatingReceipt(false)
-    }
+  const handleAddReceipt = useCallback(() => {
+    router.push(`/csr/receipts/new`)
   }, [router])
 
   const handleDeleteDraft = useCallback(async (receipt: Receipt) => {
@@ -358,12 +347,8 @@ function ReceiptsPageInternal() {
       {/* Action Bar */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex gap-2">
-          <Button onClick={handleAddReceipt} className="gap-2" disabled={isCreatingReceipt}>
-            {isCreatingReceipt ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
+          <Button onClick={handleAddReceipt} className="gap-2">
+            <Plus className="h-4 w-4" />
             Add Receipt
           </Button>
           <Button onClick={exportToCSV} variant="outline" className="gap-2" disabled={isExporting}>

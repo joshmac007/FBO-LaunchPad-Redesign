@@ -15,7 +15,6 @@ import { useToast } from "@/components/ui/use-toast"
 import { CSRActionButton } from "@/app/components/permission-action-button"
 import Link from "next/link"
 import { type FuelOrderDisplay, getFuelOrder, reviewFuelOrder, updateOrderStatus, getFuelOrderStatuses } from "@/app/services/fuel-order-service"
-import { createDraftReceipt } from "@/app/services/receipt-service"
 
 export default function FuelOrderDetailPage() {
   const router = useRouter()
@@ -25,7 +24,6 @@ export default function FuelOrderDetailPage() {
 
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isCreatingReceipt, setIsCreatingReceipt] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fuelOrder, setFuelOrder] = useState<FuelOrderDisplay | null>(null)
   const [reviewNotes, setReviewNotes] = useState("")
@@ -97,22 +95,11 @@ export default function FuelOrderDetailPage() {
     }
   }
 
-  const handleCreateReceipt = async () => {
+  const handleCreateReceipt = () => {
     if (!fuelOrder) return
 
-    setError(null)
-    setIsCreatingReceipt(true)
-
-    try {
-      const draftReceipt = await createDraftReceipt(fuelOrder.id)
-      // Navigate to the new receipt workspace
-      router.push(`/csr/receipts/${draftReceipt.id}`)
-    } catch (error) {
-      console.error("Error creating receipt:", error)
-      setError(error instanceof Error ? error.message : "Failed to create receipt. Please try again.")
-    } finally {
-      setIsCreatingReceipt(false)
-    }
+    // Navigate to new receipt page with fuel order ID as query parameter
+    router.push(`/csr/receipts/new?fuel_order_id=${fuelOrder.id}`)
   }
 
   const handleStatusUpdate = async () => {
@@ -528,11 +515,11 @@ export default function FuelOrderDetailPage() {
                   <CSRActionButton
                     requiredPermission="create_receipt"
                     onClick={handleCreateReceipt}
-                    disabled={!canCreateReceipt || isCreatingReceipt}
+                    disabled={!canCreateReceipt}
                     title={!canCreateReceipt ? "Order must be completed or reviewed to create a receipt." : "Create a new receipt for this order"}
                   >
                     <Receipt className="mr-2 h-4 w-4" />
-                    {isCreatingReceipt ? "Creating..." : "Create Receipt"}
+                    Create Receipt
                   </CSRActionButton>
                 )}
 

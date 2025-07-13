@@ -866,3 +866,164 @@ class TestRecalculateReceiptTotals:
             assert receipt.total_waivers_amount == Decimal("-50.00")
             assert receipt.tax_amount == Decimal("25.00")
             assert receipt.grand_total_amount == Decimal("650.00")  # 575 + 100 - 50 + 25
+
+
+class TestCreateReceiptWithInitialData:
+    """Test the new create_receipt_with_initial_data method for client-first draft creation."""
+    
+    @pytest.fixture
+    def receipt_service(self):
+        """Fixture to provide a ReceiptService instance."""
+        return ReceiptService()
+    
+    def test_create_receipt_with_initial_data_success(self, receipt_service, app_context):
+        """Test successful creation of receipt with initial data."""
+        # Mock Walk-in Customer
+        walk_in_customer = Customer(
+            id=100,
+            name="Walk-in Customer",
+            email="walk-in@fbolaunchpad.com",
+            is_placeholder=True
+        )
+        
+        initial_data = {
+            "customer_id": walk_in_customer.id,
+            "notes": "First line item added",
+            "line_items": [
+                {
+                    "line_item_type": "FEE",
+                    "description": "Ramp Fee",
+                    "fee_code_applied": "RAMP_FEE",
+                    "quantity": Decimal("1"),
+                    "unit_price": Decimal("25.00"),
+                    "amount": Decimal("25.00")
+                }
+            ]
+        }
+        
+        with patch.object(Customer, 'query') as mock_customer_query:
+            with patch.object(receipt_service, '_generate_receipt_number') as mock_generate_number:
+                with patch('src.extensions.db.session') as mock_session:
+                    # Setup mocks
+                    mock_customer_query.get.return_value = walk_in_customer
+                    mock_generate_number.return_value = "R-20240101-0001"
+                    
+                    # Execute
+                    created_receipt = receipt_service.create_receipt_with_initial_data(
+                        initial_data=initial_data,
+                        user_id=1
+                    )
+                    
+                    # Verify
+                    assert created_receipt.customer_id == walk_in_customer.id
+                    assert created_receipt.receipt_number == "R-20240101-0001"
+                    assert created_receipt.status == ReceiptStatus.GENERATED
+                    assert created_receipt.notes == "First line item added"
+                    assert created_receipt.grand_total_amount == Decimal("25.00")
+                    mock_session.add.assert_called()
+                    mock_session.commit.assert_called_once()
+    
+    def test_create_receipt_with_initial_data_customer_not_found(self, receipt_service, app_context):
+        """Test error when customer doesn't exist."""
+        initial_data = {
+            "customer_id": 999,
+            "line_items": [
+                {
+                    "line_item_type": "FEE",
+                    "description": "Test Fee",
+                    "amount": Decimal("10.00")
+                }
+            ]
+        }
+        
+        with patch.object(Customer, 'query') as mock_customer_query:
+            mock_customer_query.get.return_value = None
+            
+            with pytest.raises(ValueError, match="Customer 999 not found"):
+                receipt_service.create_receipt_with_initial_data(
+                    initial_data=initial_data,
+                    user_id=1
+                )
+    
+    def test_create_receipt_with_initial_data_with_notes_only(self, receipt_service, app_context):
+        """Test successful creation with notes only (no line items)."""
+        walk_in_customer = Customer(id=100, name="Walk-in Customer")
+        
+        initial_data = {
+            "customer_id": walk_in_customer.id,
+            "notes": "Initial receipt creation",
+            "line_items": []
+        }
+        
+        with patch.object(Customer, 'query') as mock_customer_query:
+            with patch.object(receipt_service, '_generate_receipt_number') as mock_generate_number:
+                with patch('src.extensions.db.session') as mock_session:
+                    # Setup mocks
+                    mock_customer_query.get.return_value = walk_in_customer
+                    mock_generate_number.return_value = "R-20240101-0002"
+                    
+                    # Execute
+                    created_receipt = receipt_service.create_receipt_with_initial_data(
+                        initial_data=initial_data,
+                        user_id=1
+                    )
+                    
+                    # Verify
+                    assert created_receipt.customer_id == walk_in_customer.id
+                    assert created_receipt.receipt_number == "R-20240101-0002"
+                    assert created_receipt.status == ReceiptStatus.GENERATED
+                    assert created_receipt.notes == "Initial receipt creation"
+                    assert created_receipt.grand_total_amount == Decimal("0.00")
+                    mock_session.add.assert_called()
+                    mock_session.commit.assert_called_once()
+    
+    def test_create_receipt_with_initial_data_no_meaningful_data(self, receipt_service, app_context):
+        """Test error when no meaningful data provided."""
+        walk_in_customer = Customer(id=100, name="Walk-in Customer")
+        
+        initial_data = {
+            "customer_id": walk_in_customer.id,
+            "notes": "",  # Empty notes
+            "line_items": []  # Empty line items
+        }
+        
+        with patch.object(Customer, 'query') as mock_customer_query:
+            mock_customer_query.get.return_value = walk_in_customer
+            
+            with pytest.raises(ValueError, match="At least one meaningful field must be provided \\(notes, aircraft type, fuel data, or line items\\)"):
+                receipt_service.create_receipt_with_initial_data(
+                    initial_data=initial_data,
+                    user_id=1
+                )
+    
+    def test_create_receipt_with_initial_data_with_aircraft_type_only(self, receipt_service, app_context):
+        """Test successful creation with aircraft type only (no line items or notes)."""
+        walk_in_customer = Customer(id=100, name="Walk-in Customer")
+        
+        initial_data = {
+            "customer_id": walk_in_customer.id,
+            "aircraft_type_at_receipt_time": "Citation Jet",
+            "line_items": []
+        }
+        
+        with patch.object(Customer, 'query') as mock_customer_query:
+            with patch.object(receipt_service, '_generate_receipt_number') as mock_generate_number:
+                with patch('src.extensions.db.session') as mock_session:
+                    # Setup mocks
+                    mock_customer_query.get.return_value = walk_in_customer
+                    mock_generate_number.return_value = "R-20240101-0003"
+                    
+                    # Execute
+                    created_receipt = receipt_service.create_receipt_with_initial_data(
+                        initial_data=initial_data,
+                        user_id=1
+                    )
+                    
+                    # Verify
+                    assert created_receipt.customer_id == walk_in_customer.id
+                    assert created_receipt.receipt_number == "R-20240101-0003"
+                    assert created_receipt.status == ReceiptStatus.GENERATED
+                    assert created_receipt.aircraft_type_at_receipt_time == "Citation Jet"
+                    assert created_receipt.grand_total_amount == Decimal("0.00")
+                    mock_session.add.assert_called()
+                    mock_session.commit.assert_called_once()

@@ -654,6 +654,33 @@ export async function createUnassignedDraftReceipt(): Promise<Receipt> {
   return data.receipt
 }
 
+// Create receipt with initial data (new three-stage workflow)
+export async function createReceiptWithInitialData(initialData: {
+  customer_id: number;
+  notes?: string | null;
+  aircraft_type_at_receipt_time?: string | null;
+  fuel_type_at_receipt_time?: string | null;
+  fuel_quantity_gallons_at_receipt_time?: string | null;
+  fuel_unit_price_at_receipt_time?: string | null;
+  line_items?: Array<{
+    line_item_type: string;
+    description: string;
+    fee_code_applied?: string;
+    quantity: string;
+    unit_price: string;
+    amount: string;
+  }>;
+}): Promise<ExtendedReceipt> {
+  const response = await fetch(`${API_BASE_URL}/receipts`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(initialData)
+  })
+
+  const data = await handleApiResponse<{ receipt: ExtendedReceipt }>(response)
+  return data.receipt
+}
+
 // Update draft receipt
 export async function updateDraftReceipt(receiptId: number, updateData: DraftUpdatePayload): Promise<ExtendedReceipt> {
   const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}/draft`, {

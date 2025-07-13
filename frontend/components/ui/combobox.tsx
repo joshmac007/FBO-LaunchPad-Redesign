@@ -19,50 +19,32 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-interface ComboboxOption {
-  value: string
-  label: string
-}
+const frameworks = [
+  {
+    value: "next.js",
+    label: "Next.js",
+  },
+  {
+    value: "sveltekit",
+    label: "SvelteKit",
+  },
+  {
+    value: "nuxt.js",
+    label: "Nuxt.js",
+  },
+  {
+    value: "remix",
+    label: "Remix",
+  },
+  {
+    value: "astro",
+    label: "Astro",
+  },
+]
 
-interface ComboboxProps {
-  options: ComboboxOption[]
-  value?: string
-  onValueChange: (value: string) => void
-  placeholder?: string
-  searchPlaceholder?: string
-  emptyText?: string
-  allowCustom?: boolean
-  className?: string
-}
-
-export function Combobox({
-  options,
-  value,
-  onValueChange,
-  placeholder = "Select option...",
-  searchPlaceholder = "Search...",
-  emptyText = "No option found.",
-  allowCustom = false,
-  className,
-}: ComboboxProps) {
+export function ComboboxDemo() {
   const [open, setOpen] = React.useState(false)
-  const [searchValue, setSearchValue] = React.useState("")
-
-  const selectedOption = options.find((option) => option.value === value)
-
-  const handleSelect = (currentValue: string) => {
-    onValueChange(currentValue)
-    setOpen(false)
-    setSearchValue("")
-  }
-
-  const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === "Enter" && allowCustom && searchValue && !options.find(opt => opt.label.toLowerCase() === searchValue.toLowerCase())) {
-      onValueChange(searchValue)
-      setOpen(false)
-      setSearchValue("")
-    }
-  }
+  const [value, setValue] = React.useState("")
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -71,43 +53,36 @@ export function Combobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("justify-between", className)}
+          className="w-[200px] justify-between"
         >
-          {selectedOption?.label || (allowCustom && value ? value : placeholder)}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          {value
+            ? frameworks.find((framework) => framework.value === value)?.label
+            : "Select framework..."}
+          <ChevronsUpDown className="opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-        <Command onKeyDown={handleKeyDown}>
-          <CommandInput 
-            placeholder={searchPlaceholder} 
-            value={searchValue}
-            onValueChange={setSearchValue}
-          />
+      <PopoverContent className="w-[200px] p-0">
+        <Command>
+          <CommandInput placeholder="Search framework..." className="h-9" />
           <CommandList>
-            <CommandEmpty>
-              {allowCustom && searchValue ? (
-                <div className="py-2 px-2 text-sm">
-                  Press Enter to add "{searchValue}"
-                </div>
-              ) : (
-                emptyText
-              )}
-            </CommandEmpty>
+            <CommandEmpty>No framework found.</CommandEmpty>
             <CommandGroup>
-              {options.map((option) => (
+              {frameworks.map((framework) => (
                 <CommandItem
-                  key={option.value}
-                  value={option.value}
-                  onSelect={handleSelect}
+                  key={framework.value}
+                  value={framework.value}
+                  onSelect={(currentValue) => {
+                    setValue(currentValue === value ? "" : currentValue)
+                    setOpen(false)
+                  }}
                 >
+                  {framework.label}
                   <Check
                     className={cn(
-                      "mr-2 h-4 w-4",
-                      value === option.value ? "opacity-100" : "opacity-0"
+                      "ml-auto",
+                      value === framework.value ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  {option.label}
                 </CommandItem>
               ))}
             </CommandGroup>

@@ -54,6 +54,44 @@ class UpdateDraftReceiptSchema(Schema):
                 raise ValidationError('Service quantity must be a number')
 
 
+class CreateReceiptWithInitialDataSchema(Schema):
+    """Schema for creating a receipt with initial data in one atomic operation."""
+    customer_id = fields.Integer(required=True, validate=validate.Range(min=1))
+    notes = fields.String(allow_none=True, validate=validate.Length(max=1000))
+    aircraft_type_at_receipt_time = fields.String(allow_none=True, validate=validate.Length(max=50))
+    fuel_type_at_receipt_time = fields.String(allow_none=True, validate=validate.Length(max=20))
+    fuel_quantity_gallons_at_receipt_time = fields.Decimal(allow_none=True, validate=validate.Range(min=0))
+    fuel_unit_price_at_receipt_time = fields.Decimal(allow_none=True, validate=validate.Range(min=0))
+    
+    line_items = fields.List(
+        fields.Dict(keys=fields.Str(), values=fields.Raw()),
+        missing=[]
+    )
+    
+    @validates('line_items')
+    def validate_line_items(self, value):
+        """Validate line items structure when provided."""
+        if not isinstance(value, list):
+            raise ValidationError('Line items must be a list')
+        
+        # If line items are provided, validate their structure
+        for line_item in value:
+            if not isinstance(line_item, dict):
+                raise ValidationError('Each line item must be a dictionary')
+            
+            if 'description' not in line_item:
+                raise ValidationError('Each line item must have a description')
+            
+            # Amount is required
+            if 'amount' not in line_item:
+                raise ValidationError('Each line item must have an amount')
+            
+            try:
+                amount = float(line_item['amount'])
+            except (ValueError, TypeError):
+                raise ValidationError('Line item amount must be a number')
+
+
 class ReceiptLineItemSchema(Schema):
     """Schema for receipt line item response."""
     id = fields.Integer(dump_only=True)
@@ -228,6 +266,7 @@ class ErrorResponseSchema(Schema):
 
 # Schema instances for reuse
 create_draft_receipt_schema = CreateDraftReceiptSchema()
+create_receipt_with_initial_data_schema = CreateReceiptWithInitialDataSchema()
 update_draft_receipt_schema = UpdateDraftReceiptSchema()
 receipt_schema = ReceiptSchema()
 receipt_line_item_schema = ReceiptLineItemSchema()

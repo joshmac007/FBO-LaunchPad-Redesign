@@ -36,7 +36,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import {
   DropdownMenu,
@@ -405,7 +404,7 @@ export default function AircraftTypesTable() {
             <TableRow>
               <TableHead>Type Name</TableHead>
               <TableHead>Classification</TableHead>
-              <TableHead>Base Min Fuel (Waiver)</TableHead>
+              <TableHead>Min Fuel for Waiver</TableHead>
               <TableHead className="w-[100px]">Actions</TableHead>
             </TableRow>
           </TableHeader>

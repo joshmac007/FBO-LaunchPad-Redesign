@@ -16,6 +16,7 @@ from ..services.receipt_service import ReceiptService
 from ..services.admin_fee_config_service import AdminFeeConfigService
 from ..schemas.receipt_schemas import (
     create_draft_receipt_schema,
+    create_receipt_with_initial_data_schema,
     update_draft_receipt_schema,
     receipt_list_query_schema,
     receipt_schema,
@@ -165,6 +166,82 @@ def create_unassigned_draft_receipt():
         current_app.logger.error(f"Unexpected error creating unassigned draft receipt: {str(e)}")
         return jsonify({
             "error": "An unexpected server error occurred during draft creation.",
+            "timestamp": datetime.utcnow().isoformat()
+        }), 500
+
+
+@receipt_bp.route('/api/receipts', methods=['POST'])
+@require_permission_v2('create_receipt')
+def create_receipt_with_initial_data():
+    """
+    Create a receipt with initial data and immediately assign a receipt number.
+    
+    This endpoint creates a receipt and saves its initial content simultaneously,
+    ensuring that no empty, orphaned records are ever created. The creation is atomic,
+    guaranteeing that a receipt is only saved if it has content.
+    
+    Body:
+        customer_id (int): ID of the customer (required)
+        notes (str, optional): Notes for the receipt
+        aircraft_type_at_receipt_time (str, optional): Aircraft type
+        fuel_type_at_receipt_time (str, optional): Fuel type
+        fuel_quantity_gallons_at_receipt_time (decimal, optional): Fuel quantity
+        fuel_unit_price_at_receipt_time (decimal, optional): Fuel price
+        line_items (list): List of initial line items (required, min 1)
+        
+    Returns:
+        201: Receipt created successfully with assigned number
+        400: Validation error or customer not found
+        401: User authentication required
+        500: Internal server error
+    """
+    try:
+        # Validate request data
+        json_data = request.get_json()
+        if not isinstance(json_data, dict):
+            raise ValidationError({'_schema': ['Invalid input type. Expected a JSON object.']})
+        data = create_receipt_with_initial_data_schema.load(json_data)
+        
+        # Get current user ID from auth context
+        user_id = getattr(g.current_user, 'id', None)
+        if user_id is None:
+            current_app.logger.warning("create_receipt_with_initial_data: user_id is None after authentication check.")
+            return jsonify({"error": "User identity could not be determined from the request."}), 401
+        
+        # Create receipt with initial data
+        receipt = receipt_service.create_receipt_with_initial_data(
+            initial_data=dict(data) if isinstance(data, dict) else {},
+            user_id=user_id
+        )
+        
+        # Get the complete receipt with line items for response
+        receipt_with_line_items = receipt_service.get_receipt_by_id(receipt.id)
+        if not receipt_with_line_items:
+            return jsonify({'error': 'Receipt creation failed'}), 500
+
+        receipt_dict = receipt_with_line_items.to_dict()
+        # Ensure line_items is present and iterable
+        line_items = getattr(receipt_with_line_items, 'line_items', []) or []
+        receipt_dict['line_items'] = [item.to_dict() for item in line_items]
+        
+        response_data = {
+            "message": f"Receipt {receipt.receipt_number} created successfully.",
+            "receipt": receipt_dict
+        }
+        return jsonify(response_data), 201
+
+    except ValidationError as e:
+        return jsonify({"error": "Invalid request data", "details": e.messages}), 400
+    except ValueError as e:
+        error_msg = str(e)
+        if 'not found' in error_msg.lower():
+            return jsonify({'error': error_msg}), 404
+        else:
+            return jsonify({'error': error_msg}), 400
+    except Exception as e:
+        current_app.logger.error(f"Unexpected error creating receipt with initial data: {str(e)}")
+        return jsonify({
+            "error": "An unexpected server error occurred during receipt creation.",
             "timestamp": datetime.utcnow().isoformat()
         }), 500
 

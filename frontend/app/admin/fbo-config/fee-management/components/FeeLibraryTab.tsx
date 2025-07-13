@@ -119,8 +119,8 @@ export function FeeLibraryTab() {
         <CardHeader>
           <div className="flex justify-between items-center">
             <div>
-              <CardTitle>Fee Types</CardTitle>
-              <CardDescription>Manage global fee definitions. Classification-specific and aircraft-specific fees are set in the Fee Schedule.</CardDescription>
+              <CardTitle className="mb-2">Fee Types</CardTitle>
+              <CardDescription>Manage global fee definitions.</CardDescription>
             </div>
             <Button onClick={handleCreateNew}>
               <PlusIcon className="h-4 w-4 mr-2" />

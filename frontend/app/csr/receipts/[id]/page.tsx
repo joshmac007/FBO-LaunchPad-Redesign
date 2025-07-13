@@ -1,17 +1,19 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter, useParams } from "next/navigation"
+import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { ArrowLeft, Plane } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import ReceiptWorkspace from "../components/ReceiptWorkspace"
 import ReceiptDetailView from "../../receipts/components/ReceiptDetailView"
 import { getReceiptById, ExtendedReceipt } from "@/app/services/receipt-service"
+import { getFuelOrder, type FuelOrderDisplay } from "@/app/services/fuel-order-service"
 
 export default function ReceiptDetailPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const [user, setUser] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [receipt, setReceipt] = useState<ExtendedReceipt | null>(null)
@@ -19,13 +21,91 @@ export default function ReceiptDetailPage() {
 
   useEffect(() => {
     loadReceipt()
-  }, [params.id])
+  }, [params.id, searchParams])
 
   const loadReceipt = async () => {
     try {
       setIsLoading(true)
       setError(null)
-      const receiptId = parseInt(params.id as string, 10)
+      const id = params.id as string
+      
+      if (id === 'new') {
+        // Check for fuel_order_id query parameter
+        const fuelOrderId = searchParams.get('fuel_order_id')
+        
+        if (fuelOrderId) {
+          // Pre-populate receipt with fuel order data
+          try {
+            const fuelOrder = await getFuelOrder(parseInt(fuelOrderId, 10))
+            
+            // Create default receipt pre-populated with fuel order data
+            const defaultReceipt: ExtendedReceipt = {
+              id: null, // null indicates this is not yet saved
+              receipt_number: null,
+              fuel_order_id: fuelOrder.id,
+              customer_id: fuelOrder.customer?.id || 100, // Use fuel order customer or default to Walk-in
+              customer_name: fuelOrder.customer?.name || 'Walk-in Customer',
+              fuel_order_tail_number: fuelOrder.aircraft?.tail_number || null,
+              aircraft_type_at_receipt_time: fuelOrder.aircraft?.aircraft_type || null,
+              fuel_type_at_receipt_time: fuelOrder.fuel_type || null,
+              fuel_quantity_gallons_at_receipt_time: fuelOrder.gallons_dispensed?.toString() || fuelOrder.quantity || null,
+              fuel_unit_price_at_receipt_time: null, // Will need to be set manually
+              fuel_subtotal: '0.00',
+              total_fees_amount: '0.00',
+              total_waivers_amount: '0.00',
+              tax_amount: '0.00',
+              grand_total_amount: '0.00',
+              status: 'DRAFT',
+              notes: fuelOrder.notes || null,
+              generated_at: null,
+              paid_at: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              created_by_user_id: null,
+              updated_by_user_id: null,
+              line_items: []
+            }
+            setReceipt(defaultReceipt)
+            return
+          } catch (fuelOrderError) {
+            console.error("Error loading fuel order:", fuelOrderError)
+            setError("Failed to load fuel order data")
+            return
+          }
+        }
+        
+        // Create a default client-side receipt for new receipt creation (no fuel order)
+        const defaultReceipt: ExtendedReceipt = {
+          id: null, // null indicates this is not yet saved
+          receipt_number: null,
+          fuel_order_id: null,
+          customer_id: 100, // Default to Walk-in Customer
+          customer_name: 'Walk-in Customer',
+          fuel_order_tail_number: null,
+          aircraft_type_at_receipt_time: null,
+          fuel_type_at_receipt_time: null,
+          fuel_quantity_gallons_at_receipt_time: null,
+          fuel_unit_price_at_receipt_time: null,
+          fuel_subtotal: '0.00',
+          total_fees_amount: '0.00',
+          total_waivers_amount: '0.00',
+          tax_amount: '0.00',
+          grand_total_amount: '0.00',
+          status: 'DRAFT',
+          notes: null,
+          generated_at: null,
+          paid_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          created_by_user_id: null,
+          updated_by_user_id: null,
+          line_items: []
+        }
+        setReceipt(defaultReceipt)
+        return
+      }
+      
+      const receiptId = parseInt(id, 10)
       
       if (isNaN(receiptId)) {
         setError("Invalid receipt ID")
@@ -93,7 +173,7 @@ export default function ReceiptDetailPage() {
 
   const renderContent = () => {
     if (receipt.status === 'DRAFT') {
-      // Render the Receipt Workspace/Edit UI for draft receipts
+      // Render the Receipt Workspace/Edit UI for draft receipts (both new and existing)
       return <ReceiptWorkspace receiptId={receipt.id} />
     } else {
       // Render the Read-Only Detail View for generated, paid, or void receipts
