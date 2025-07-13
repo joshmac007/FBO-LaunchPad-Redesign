@@ -50,6 +50,28 @@ class AircraftService:
                 return fuel_type.id
                 
         return None
+    
+    @staticmethod
+    def _validate_aircraft_type(aircraft_type_name: str) -> bool:
+        """
+        Helper method to validate aircraft type against allowed types.
+        
+        Args:
+            aircraft_type_name: String name of the aircraft type
+            
+        Returns:
+            True if aircraft type is valid, False otherwise
+        """
+        # Check if aircraft type exists in the allowed aircraft types table
+        aircraft_type = AircraftType.query.filter_by(name=aircraft_type_name.strip()).first()
+        if aircraft_type:
+            return True
+            
+        # Try case-insensitive match
+        aircraft_type = AircraftType.query.filter(
+            db.func.lower(AircraftType.name) == aircraft_type_name.strip().lower()
+        ).first()
+        return aircraft_type is not None
 
     @staticmethod
     def create_aircraft(data: Dict[str, Any]) -> Tuple[Optional[Aircraft], str, int]:
@@ -59,6 +81,10 @@ class AircraftService:
             return None, "Missing required field: aircraft_type", 400
         if 'fuel_type' not in data:
             return None, "Missing required field: fuel_type", 400
+        
+        # Validate aircraft type against allowed types
+        if not AircraftService._validate_aircraft_type(data['aircraft_type']):
+            return None, f"Invalid aircraft type: {data['aircraft_type']}. Please contact an administrator to have this aircraft type added.", 400
             
         # Convert fuel_type string to fuel_type_id
         fuel_type_id = AircraftService._get_fuel_type_id(data['fuel_type'])
@@ -122,6 +148,10 @@ class AircraftService:
                 return None, "Missing required field: aircraft_type for aircraft creation", 400, False
             if 'fuel_type' not in data:
                 return None, "Missing required field: fuel_type for aircraft creation", 400, False
+            
+            # Validate aircraft type against allowed types
+            if not AircraftService._validate_aircraft_type(data['aircraft_type'].strip()):
+                return None, f"Invalid aircraft type: {data['aircraft_type']}. Please contact an administrator to have this aircraft type added.", 400, False
             
             # Convert fuel_type string to fuel_type_id
             fuel_type_id = AircraftService._get_fuel_type_id(data['fuel_type'].strip())

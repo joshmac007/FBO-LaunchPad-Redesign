@@ -14,7 +14,8 @@ import {
   getReceipts,
   createUnassignedDraftReceipt,
   type Receipt,
-  type ReceiptListFilters
+  type ReceiptListFilters,
+  deleteDraftReceipt
 } from "@/app/services/receipt-service"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -58,6 +59,7 @@ function ReceiptsPageInternal() {
   // UI states
   const [isExporting, setIsExporting] = useState(false)
   const [isCreatingReceipt, setIsCreatingReceipt] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   // Debounce search input to prevent excessive re-renders
   const { debouncedSearchTerm, isSearching } = useSearchDebounce(searchTerm, 300)
@@ -175,6 +177,20 @@ function ReceiptsPageInternal() {
       setIsCreatingReceipt(false)
     }
   }, [router])
+
+  const handleDeleteDraft = useCallback(async (receipt: Receipt) => {
+    if (receipt.status !== 'DRAFT') return;
+    setDeletingId(receipt.id)
+    try {
+      await deleteDraftReceipt(receipt.id)
+      toast.success('Draft receipt deleted successfully')
+      refetch()
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete draft receipt')
+    } finally {
+      setDeletingId(null)
+    }
+  }, [refetch])
 
   const toggleReceiptSelection = useCallback((receiptId: string) => {
     setSelectedReceipts(prev => 
@@ -478,7 +494,8 @@ function ReceiptsPageInternal() {
                       onToggleSelection={toggleReceiptSelection}
                       onView={handleViewReceipt}
                       onEdit={handleEditReceipt}
-                      onVoid={handleVoidReceipt}
+                      onVoid={receipt.status === 'DRAFT' ? handleDeleteDraft : handleVoidReceipt}
+                      isLoading={deletingId === receipt.id}
                     />
                   ))
                 ) : (

@@ -414,7 +414,12 @@ export default function AircraftTypesTable() {
               <TableRow key={aircraftType.id}>
                 <TableCell className="font-medium">{aircraftType.name}</TableCell>
                 <TableCell>{aircraftType.classification_name || "Unclassified"}</TableCell>
-                <TableCell>{Math.round(aircraftType.base_min_fuel_gallons_for_waiver)}</TableCell>
+                <TableCell>
+                  {aircraftType.base_min_fuel_gallons_for_waiver != null && !isNaN(aircraftType.base_min_fuel_gallons_for_waiver)
+                    ? Math.round(aircraftType.base_min_fuel_gallons_for_waiver)
+                    : 'N/A'
+                  }
+                </TableCell>
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

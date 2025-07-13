@@ -56,6 +56,7 @@ import {
   type AdminCustomerUpdateRequest,
 } from "../../services/customer-service" // Adjusted path
 import { toast } from "sonner" // For notifications
+import { CustomerCreationDialog } from "@/app/components/dialogs/CustomerCreationDialog"
 
 const customerFormSchema = z.object({
   name: z.string().min(1, { message: "Name is required." }),
@@ -225,80 +226,19 @@ export default function CustomerManagementPage() {
     <div className="p-4 md:p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Customer Management</h1>
-          <Dialog 
-            open={isCreateDialogOpen} 
-            onOpenChange={(isOpen) => {
-              setIsCreateDialogOpen(isOpen);
-              if (!isOpen) {
-                form.reset(); // Reset form data
-                setCreateFormError(null); // Clear any form errors
-              }
+        <>
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <UserPlus className="mr-2 h-4 w-4" /> Add Customer
+          </Button>
+          <CustomerCreationDialog
+            open={isCreateDialogOpen}
+            onOpenChange={setIsCreateDialogOpen}
+            onSuccess={async () => {
+              await fetchCustomers()
+              setIsCreateDialogOpen(false)
             }}
-          >
-            <DialogTrigger asChild>
-              {/* Ensure DialogTrigger's child is a valid trigger, e.g., Button */}
-              <Button onClick={() => setIsCreateDialogOpen(true)}>
-                <UserPlus className="mr-2 h-4 w-4" /> Add Customer
-              </Button>
-            </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New Customer</DialogTitle>
-              <DialogDescription>
-                Fill in the details to add a new customer. Click create when you&apos;re done.
-              </DialogDescription>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleCreateCustomerSubmit)} className="grid gap-4 py-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="John Doe" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input type="email" placeholder="john.doe@example.com" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Phone (Optional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="(123) 456-7890" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit">Create Customer</Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+          />
+        </>
       </div>
 
       {isLoading && (

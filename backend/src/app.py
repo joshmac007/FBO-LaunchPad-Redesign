@@ -142,6 +142,7 @@ def create_app(config_name=None):
     from src.routes.admin.performance_monitor_routes import performance_monitor_bp
     from src.routes.enhanced_user_routes import enhanced_user_bp
     from src.routes.receipt_routes import receipt_bp
+    from src.routes.search_routes import search_bp
     
     # Import SocketIO routes to register event handlers
     from src.routes import socketio_routes
@@ -158,6 +159,7 @@ def create_app(config_name=None):
     app.register_blueprint(performance_monitor_bp, strict_slashes=False)
     app.register_blueprint(enhanced_user_bp, url_prefix='/api/admin/users', strict_slashes=False)
     app.register_blueprint(receipt_bp, strict_slashes=False)
+    app.register_blueprint(search_bp, strict_slashes=False)
 
     @app.route('/')
     def root():

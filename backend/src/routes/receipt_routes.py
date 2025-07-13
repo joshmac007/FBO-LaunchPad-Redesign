@@ -599,3 +599,31 @@ def get_available_services():
     except Exception as e:
         current_app.logger.error(f"Error fetching available services: {str(e)}")
         return jsonify({'error': 'Failed to fetch available services'}), 500 
+
+
+@receipt_bp.route('/api/receipts/<int:receipt_id>', methods=['DELETE'])
+@require_permission_v2('manage_receipts')
+def delete_draft_receipt(receipt_id):
+    """
+    Delete a draft receipt by ID.
+    Only receipts in DRAFT status can be deleted.
+    Returns:
+        204: Receipt deleted successfully
+        403: Receipt is not in DRAFT status
+        404: Receipt not found
+        400: Other errors
+    """
+    try:
+        from ..models.receipt import Receipt, ReceiptStatus
+        receipt = Receipt.query.get(receipt_id)
+        if not receipt:
+            return jsonify({'error': f'Receipt {receipt_id} not found'}), 404
+        if receipt.status != ReceiptStatus.DRAFT:
+            return jsonify({'error': 'Only draft receipts can be deleted'}), 403
+        from ..extensions import db
+        db.session.delete(receipt)
+        db.session.commit()
+        return '', 204
+    except Exception as e:
+        current_app.logger.error(f"Error deleting draft receipt {receipt_id}: {str(e)}")
+        return jsonify({'error': f'Failed to delete draft receipt: {str(e)}'}), 400 

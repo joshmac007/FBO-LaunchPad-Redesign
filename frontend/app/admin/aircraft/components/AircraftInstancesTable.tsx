@@ -77,6 +77,7 @@ import {
 } from "../../../services/aircraft-service"
 import { toast } from "sonner"
 import { getFuelTypes, type FuelType } from "../../../services/admin-fee-config-service"
+import { AircraftCreationDialog } from "@/app/components/dialogs/AircraftCreationDialog"
 
 export default function AircraftInstancesTable() {
   const [aircraft, setAircraft] = useState<Aircraft[]>([])
@@ -368,121 +369,20 @@ export default function AircraftInstancesTable() {
               Manage specific aircraft, their fuel types, and customer assignments.
             </CardDescription>
           </div>
-          <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
-            setIsCreateDialogOpen(open)
-            if (!open) resetCreateForm()
-          }}>
-            <DialogTrigger asChild>
-              <Button onClick={() => resetCreateForm()}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Instance
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Aircraft</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                {createFormError && (
-                  <div className="flex items-center gap-2 text-red-600 text-sm">
-                    <AlertCircle className="h-4 w-4" />
-                    {createFormError}
-                  </div>
-                )}
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="tail_number" className="text-right">
-                    Tail Number *
-                  </Label>
-                  <Input
-                    id="tail_number"
-                    value={newAircraftData.tail_number}
-                    onChange={(e) =>
-                      setNewAircraftData({ ...newAircraftData, tail_number: e.target.value })
-                    }
-                    className="col-span-3"
-                    placeholder="e.g., N12345"
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="aircraft_type" className="text-right">
-                    Aircraft Type *
-                  </Label>
-                  <Select
-                    value={newAircraftData.aircraft_type}
-                    onValueChange={(value) =>
-                      setNewAircraftData({ ...newAircraftData, aircraft_type: value })
-                    }
-                  >
-                    <SelectTrigger className="col-span-3">
-                      <SelectValue placeholder="Select aircraft type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {aircraftTypes.map((type) => (
-                        <SelectItem key={type.id} value={type.name}>
-                          {type.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="fuel_type" className="text-right">
-                    Fuel Type *
-                  </Label>
-                  <Select
-                    value={newAircraftData.fuel_type}
-                    onValueChange={(value) =>
-                      setNewAircraftData({ ...newAircraftData, fuel_type: value })
-                    }
-                  >
-                    <SelectTrigger className="col-span-3">
-                      <SelectValue placeholder="Select fuel type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {fuelTypes.map((fuelType) => (
-                        <SelectItem key={fuelType.id} value={fuelType.name}>
-                          {fuelType.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="customer_id" className="text-right">
-                    Customer ID
-                  </Label>
-                  <Input
-                    id="customer_id"
-                    type="number"
-                    value={newAircraftData.customer_id || ""}
-                    onChange={(e) =>
-                      setNewAircraftData({
-                        ...newAircraftData,
-                        customer_id: e.target.value ? parseInt(e.target.value) : undefined,
-                      })
-                    }
-                    className="col-span-3"
-                    placeholder="Optional customer ID"
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleCreateAircraftSubmit} disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    "Create Aircraft"
-                  )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <>
+            <Button onClick={() => setIsCreateDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Instance
+            </Button>
+            <AircraftCreationDialog
+              open={isCreateDialogOpen}
+              onOpenChange={setIsCreateDialogOpen}
+              onSuccess={async () => {
+                await fetchAircraft()
+                setIsCreateDialogOpen(false)
+              }}
+            />
+          </>
         </div>
       </CardHeader>
       <CardContent>

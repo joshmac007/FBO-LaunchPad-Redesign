@@ -666,6 +666,27 @@ export async function updateDraftReceipt(receiptId: number, updateData: DraftUpd
   return data.receipt
 }
 
+/**
+ * Delete a draft receipt by ID (real backend call)
+ * Only allowed for receipts in DRAFT status
+ */
+export async function deleteDraftReceipt(receiptId: number): Promise<boolean> {
+  const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (response.status === 204) {
+    return true;
+  } else if (response.status === 404) {
+    throw new Error('Receipt not found');
+  } else if (response.status === 403) {
+    throw new Error('Only draft receipts can be deleted');
+  } else {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to delete draft receipt');
+  }
+}
+
 // Calculate fees for receipt
 export async function calculateFeesForReceipt(receiptId: number, additionalServices?: Array<{ fee_code: string, quantity: number }>): Promise<ExtendedReceipt> {
   const response = await fetch(`${API_BASE_URL}/receipts/${receiptId}/calculate-fees`, {

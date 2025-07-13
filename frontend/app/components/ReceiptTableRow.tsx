@@ -1,7 +1,7 @@
 "use client"
 
 import React, { memo } from "react"
-import { Eye, Edit, Trash2, MoreHorizontal, Download, Printer, Mail } from "lucide-react"
+import { Eye, Edit, Trash2, MoreHorizontal, Download, Printer, Mail, Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -23,6 +23,7 @@ interface ReceiptTableRowProps {
   onView: (receipt: Receipt) => void
   onEdit: (receipt: Receipt) => void
   onVoid?: (receipt: Receipt) => void
+  isLoading?: boolean
 }
 
 const getStatusBadge = (status: string) => {
@@ -71,6 +72,7 @@ const ReceiptTableRow = memo(({
   onView,
   onEdit,
   onVoid,
+  isLoading,
 }: ReceiptTableRowProps) => {
   const handleDownloadPDF = () => {
     // TODO: Implement PDF download
@@ -111,7 +113,7 @@ const ReceiptTableRow = memo(({
       <TableCell>
         {receipt.customer_name || `Customer ${receipt.customer_id}`}
       </TableCell>
-      <TableCell className="text-right font-medium">
+      <TableCell className="font-medium">
         {formatCurrency(parseFloat(receipt.grand_total_amount))}
       </TableCell>
       <TableCell>{getStatusBadge(receipt.status)}</TableCell>
@@ -136,8 +138,13 @@ const ReceiptTableRow = memo(({
                 <DropdownMenuItem 
                   onClick={() => onVoid?.(receipt)}
                   className="text-red-600"
+                  disabled={isLoading}
                 >
-                  <Trash2 className="mr-2 h-4 w-4" />
+                  {isLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
                   Delete Draft
                 </DropdownMenuItem>
               </>
@@ -191,7 +198,8 @@ const ReceiptTableRow = memo(({
     prevProps.onToggleSelection === nextProps.onToggleSelection &&
     prevProps.onView === nextProps.onView &&
     prevProps.onEdit === nextProps.onEdit &&
-    prevProps.onVoid === nextProps.onVoid
+    prevProps.onVoid === nextProps.onVoid &&
+    prevProps.isLoading === nextProps.isLoading
   )
 })
 

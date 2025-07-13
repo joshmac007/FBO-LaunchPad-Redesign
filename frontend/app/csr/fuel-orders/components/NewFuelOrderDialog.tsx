@@ -29,8 +29,8 @@ import {
   createFuelOrder,
   transformToBackend,
 } from "@/app/services/fuel-order-service"
-import AircraftLookup from "@/app/components/aircraft-lookup"
-import CustomerSelector from "@/app/components/customer-selector"
+import { CustomerSearchInput } from "@/app/components/search/CustomerSearchInput"
+import { AircraftTailSearchInput } from "@/app/components/search/AircraftTailSearchInput"
 
 import Link from "next/link"
 import type { Aircraft } from "@/app/services/aircraft-service"
@@ -144,11 +144,6 @@ export default function NewFuelOrderDialog({ isOpen, onOpenChange, onOrderCreate
     }
   }
 
-  const handleAircraftNotFound = (tailNumber: string) => {
-    setSelectedAircraft(null)
-    form.setValue('aircraft_id', '')
-    setError(`Aircraft "${tailNumber}" not found. Please verify the tail number.`)
-  }
 
   const handleCustomerSelected = (customer: Customer) => {
     setSelectedCustomer(customer)
@@ -156,11 +151,6 @@ export default function NewFuelOrderDialog({ isOpen, onOpenChange, onOrderCreate
     if (error?.includes("customer")) {
       setError(null)
     }
-  }
-  
-  const handleCustomerCleared = () => {
-    setSelectedCustomer(null)
-    form.setValue('customer_id', undefined)
   }
 
   const handleSubmit = async (values: FuelOrderFormData) => {
@@ -218,30 +208,49 @@ export default function NewFuelOrderDialog({ isOpen, onOpenChange, onOrderCreate
           <form onSubmit={form.handleSubmit(handleSubmit)}>
             <div className="grid gap-6 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Aircraft Lookup */}
+                {/* Aircraft Search */}
                 <div className="space-y-2">
-                  <AircraftLookup
-                    onAircraftFound={handleAircraftFound}
-                    onAircraftNotFound={handleAircraftNotFound}
+                  <Label>Aircraft</Label>
+                  <AircraftTailSearchInput
+                    value={selectedAircraft}
+                    onValueChange={(aircraft) => {
+                      if (aircraft) {
+                        handleAircraftFound(aircraft)
+                      } else {
+                        setSelectedAircraft(null)
+                        form.setValue('aircraft_id', '')
+                      }
+                    }}
                   />
-                   {selectedAircraft && (
-                      <div className="text-sm text-muted-foreground p-2 bg-muted rounded-md">
-                          <p><strong>Type:</strong> {selectedAircraft.aircraftType}</p>
-                          <p><strong>Fuel:</strong> {selectedAircraft.fuelType}</p>
-                      </div>
+                  {selectedAircraft && (
+                    <div className="text-sm text-muted-foreground p-2 bg-muted rounded-md">
+                      <p><strong>Type:</strong> {selectedAircraft.aircraftType}</p>
+                      <p><strong>Fuel:</strong> {selectedAircraft.fuelType}</p>
+                    </div>
                   )}
                 </div>
                 
-                {/* Customer Selector */}
+                {/* Customer Search */}
                 <div className="space-y-2">
-                  <CustomerSelector 
-                    onCustomerSelected={handleCustomerSelected}
-                    onCustomerCleared={handleCustomerCleared}
+                  <Label>Customer (Optional)</Label>
+                  <CustomerSearchInput
+                    value={selectedCustomer}
+                    onValueChange={(customer) => {
+                      if (customer) {
+                        handleCustomerSelected(customer)
+                      } else {
+                        setSelectedCustomer(null)
+                        form.setValue('customer_id', undefined)
+                      }
+                    }}
                   />
-                   {selectedCustomer && (
-                      <div className="text-sm text-muted-foreground p-2 bg-muted rounded-md">
-                          <p><strong>Company:</strong> {selectedCustomer.name}</p>
-                      </div>
+                  {selectedCustomer && (
+                    <div className="text-sm text-muted-foreground p-2 bg-muted rounded-md">
+                      <p><strong>Name:</strong> {selectedCustomer.name}</p>
+                      {selectedCustomer.company_name && (
+                        <p><strong>Company:</strong> {selectedCustomer.company_name}</p>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

@@ -1,5 +1,19 @@
 from datetime import datetime
+import enum
 from ..extensions import db
+
+
+class PaymentType(enum.Enum):
+    CREDIT_CARD_ON_FILE = 'Credit Card on File'
+    NET_30_ACCOUNT = 'Net 30 Account'
+    CASH_OR_CHECK = 'Cash or Check'
+    PREPAYMENT_REQUIRED = 'Prepayment Required'
+
+
+class PointOfContactRole(enum.Enum):
+    OWNER = 'Owner'
+    OPERATOR = 'Operator'
+    PILOT = 'Pilot'
 
 
 class Customer(db.Model):
@@ -12,6 +26,13 @@ class Customer(db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     phone = db.Column(db.String(20))
+    
+    # New customer detail fields
+    company_name = db.Column(db.String(100), nullable=True)
+    phone_number = db.Column(db.String(30), nullable=True)
+    address = db.Column(db.Text, nullable=True)
+    payment_type = db.Column(db.Enum(PaymentType, name='paymenttype'), nullable=True)
+    poc_role = db.Column(db.Enum(PointOfContactRole, name='pocrole'), nullable=True)
     
     # Receipt system fields
     is_placeholder = db.Column(db.Boolean, nullable=False, default=False)
@@ -27,6 +48,11 @@ class Customer(db.Model):
             'name': self.name,
             'email': self.email,
             'phone': self.phone,
+            'company_name': self.company_name,
+            'phone_number': self.phone_number,
+            'address': self.address,
+            'payment_type': self.payment_type.value if self.payment_type else None,
+            'poc_role': self.poc_role.value if self.poc_role else None,
             'is_placeholder': self.is_placeholder,
             'is_caa_member': self.is_caa_member,
             'caa_member_id': self.caa_member_id,

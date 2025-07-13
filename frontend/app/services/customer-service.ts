@@ -7,7 +7,16 @@ export interface Customer {
   name: string
   email: string
   phone?: string
+  company_name?: string
+  phone_number?: string
+  address?: string
+  payment_type?: string
+  poc_role?: string
+  is_placeholder?: boolean
+  is_caa_member?: boolean
+  caa_member_id?: string
   created_at?: string
+  updated_at?: string
 }
 
 interface BackendCustomer {
@@ -15,19 +24,38 @@ interface BackendCustomer {
   name: string
   email: string
   phone?: string
+  company_name?: string
+  phone_number?: string
+  address?: string
+  payment_type?: string
+  poc_role?: string
+  is_placeholder?: boolean
+  is_caa_member?: boolean
+  caa_member_id?: string
   created_at?: string
+  updated_at?: string
 }
 
 export interface AdminCustomerCreateRequest {
   name: string
   email: string
   phone?: string
+  company_name?: string
+  phone_number?: string
+  address?: string
+  payment_type?: string
+  poc_role?: string
 }
 
 export interface AdminCustomerUpdateRequest {
   name?: string
   email?: string
   phone?: string
+  company_name?: string
+  phone_number?: string
+  address?: string
+  payment_type?: string
+  poc_role?: string
 }
 
 // Expected response type for list
@@ -54,7 +82,16 @@ function mapBackendToFrontendCustomer(backend: BackendCustomer): Customer {
     name: backend.name,
     email: backend.email,
     phone: backend.phone,
+    company_name: backend.company_name,
+    phone_number: backend.phone_number,
+    address: backend.address,
+    payment_type: backend.payment_type,
+    poc_role: backend.poc_role,
+    is_placeholder: backend.is_placeholder,
+    is_caa_member: backend.is_caa_member,
+    caa_member_id: backend.caa_member_id,
     created_at: backend.created_at,
+    updated_at: backend.updated_at,
   }
 }
 
